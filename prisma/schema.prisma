@@ -1,0 +1,312 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// User roles enum
+enum Role {
+  ADMIN
+  EMPLOYEE
+  ACCOUNT_USER
+}
+
+// Account type enum
+enum AccountType {
+  INDIVIDUAL
+  ORGANIZATION
+  SUBSIDIARY
+}
+
+// NextAuth required models
+model AuthAccount {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// Core application models
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?
+  role          Role      @default(ACCOUNT_USER)
+  accountUserId String?   @unique
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // NextAuth relations
+  authAccounts AuthAccount[]
+  sessions     Session[]
+
+  // Application relations
+  timeEntries          TimeEntry[]
+  createdTickets       Ticket[]           @relation("TicketCreator")
+  assignedTickets      Ticket[]           @relation("TicketAssignee")
+  createdInvoices      Invoice[]
+  accountBillingRates  AccountBillingRate[]
+  accountUser          AccountUser?       @relation(fields: [accountUserId], references: [id])
+  blacklistEntries     Blacklist[]
+}
+
+// Account model (replaces Customer)
+model Account {
+  id          String      @id @default(cuid())
+  name        String
+  accountType AccountType @default(INDIVIDUAL)
+  parentAccountId String?
+  companyName String?
+  address     String?
+  phone       String?
+  customFields Json?      // JSONB for custom fields
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  // Hierarchical relations
+  parentAccount    Account?  @relation("AccountHierarchy", fields: [parentAccountId], references: [id])
+  childAccounts    Account[] @relation("AccountHierarchy")
+
+  // Application relations
+  accountUsers     AccountUser[]
+  tickets          Ticket[]
+  timeEntries      TimeEntry[]      // Direct time entries for account
+  invoices         Invoice[]
+  settings         AccountSettings?
+  billingRates     AccountBillingRate[]
+}
+
+// Account users (can have login or not)
+model AccountUser {
+  id               String    @id @default(cuid())
+  accountId        String
+  userId           String?   @unique
+  email            String    @unique
+  name             String
+  phone            String?
+  isActive         Boolean   @default(true)
+  invitationToken  String?   @unique
+  invitationExpiry DateTime?
+  permissions      Json?     // ABAC permissions
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  account Account @relation(fields: [accountId], references: [id])
+  user    User?
+  createdTickets Ticket[] @relation("AccountUserTicketCreator")
+}
+
+model Ticket {
+  id           String   @id @default(cuid())
+  title        String
+  description  String?
+  status       String   @default("OPEN")
+  priority     String   @default("MEDIUM")
+  customFields Json?    // JSONB for custom fields
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  accountId    String
+  creatorId    String?
+  accountUserCreatorId String?
+  assigneeId   String?
+
+  account      Account      @relation(fields: [accountId], references: [id])
+  creator      User?        @relation("TicketCreator", fields: [creatorId], references: [id])
+  accountUserCreator AccountUser? @relation("AccountUserTicketCreator", fields: [accountUserCreatorId], references: [id])
+  assignee     User?        @relation("TicketAssignee", fields: [assigneeId], references: [id])
+  
+  timeEntries  TimeEntry[]
+  addons       TicketAddon[]
+  invoiceItems InvoiceItem[]
+}
+
+model TimeEntry {
+  id          String    @id @default(cuid())
+  description String?
+  hours       Float
+  date        DateTime  @default(now())
+  noCharge    Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  ticketId    String?   // Made optional to support account-direct entries
+  accountId   String?   // Added for account-direct time entries
+  userId      String
+
+  ticket       Ticket?       @relation(fields: [ticketId], references: [id])
+  account      Account?      @relation(fields: [accountId], references: [id])
+  user         User          @relation(fields: [userId], references: [id])
+  invoiceItems InvoiceItem[]
+}
+
+model TicketAddon {
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+  price       Float
+  quantity    Int     @default(1)
+  ticketId    String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  ticket       Ticket        @relation(fields: [ticketId], references: [id])
+  invoiceItems InvoiceItem[]
+}
+
+model Invoice {
+  id            String   @id @default(cuid())
+  invoiceNumber String   @unique
+  status        String   @default("DRAFT")
+  issueDate     DateTime @default(now())
+  dueDate       DateTime?
+  subtotal      Float    @default(0)
+  tax           Float    @default(0)
+  total         Float    @default(0)
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  accountId     String
+  creatorId     String
+
+  account  Account       @relation(fields: [accountId], references: [id])
+  creator  User          @relation(fields: [creatorId], references: [id])
+  items    InvoiceItem[]
+}
+
+model InvoiceItem {
+  id            String  @id @default(cuid())
+  description   String
+  quantity      Float
+  rate          Float
+  amount        Float
+  invoiceId     String
+  timeEntryId   String?
+  ticketAddonId String?
+  ticketId      String?
+
+  invoice     Invoice      @relation(fields: [invoiceId], references: [id])
+  timeEntry   TimeEntry?   @relation(fields: [timeEntryId], references: [id])
+  ticketAddon TicketAddon? @relation(fields: [ticketAddonId], references: [id])
+  ticket      Ticket?      @relation(fields: [ticketId], references: [id])
+}
+
+model BillingRate {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  rate        Float
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model AccountBillingRate {
+  id        String   @id @default(cuid())
+  rate      Float
+  accountId String
+  userId    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  account Account @relation(fields: [accountId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@unique([accountId, userId])
+}
+
+model SystemSettings {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String?
+  jsonValue   Json?    // JSONB for complex settings
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model AccountSettings {
+  id                 String   @id @default(cuid())
+  accountId          String   @unique
+  canViewTimeEntries Boolean  @default(true)
+  canCreateTickets   Boolean  @default(true)
+  canAddTicketAddons Boolean  @default(false)
+  customFields       Json?    // JSONB for custom field definitions
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  account Account @relation(fields: [accountId], references: [id])
+}
+
+model Permission {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  resource    String
+  action      String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// Account-specific permissions for fine-grained control
+model AccountPermission {
+  id              String   @id @default(cuid())
+  accountUserId   String
+  permissionName  String
+  resource        String
+  action          String
+  scope           String   @default("own") // own, account, subsidiary
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([accountUserId, permissionName])
+}
+
+// Blacklist for managing blocked users/emails
+model Blacklist {
+  id          String   @id @default(cuid())
+  email       String?  @unique
+  ipAddress   String?
+  reason      String
+  blockedBy   String   // User ID who created the blacklist entry
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  blocker User @relation(fields: [blockedBy], references: [id])
+}
