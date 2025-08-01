@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SimpleAccountSelector } from "@/components/selectors/simple-account-selector";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, Building, User, Users } from "lucide-react";
 
@@ -20,6 +21,8 @@ interface ParentAccount {
   id: string;
   name: string;
   accountType: string;
+  parentAccountId?: string | null;
+  companyName?: string;
 }
 
 export function CreateAccountDialog({ open, onOpenChange, onAccountCreated }: CreateAccountDialogProps) {
@@ -45,10 +48,15 @@ export function CreateAccountDialog({ open, onOpenChange, onAccountCreated }: Cr
 
   const fetchParentAccounts = async () => {
     try {
-      const response = await fetch('/api/accounts?accountType=ORGANIZATION&limit=100');
+      // Fetch all accounts that can be parents (organizations and existing subsidiaries)
+      const response = await fetch('/api/accounts/all');
       if (response.ok) {
         const data = await response.json();
-        setParentAccounts(data.accounts || []);
+        // Filter to only show accounts that can be parents
+        const validParents = data.filter((account: ParentAccount) => 
+          account.accountType === 'ORGANIZATION' || account.accountType === 'SUBSIDIARY'
+        );
+        setParentAccounts(validParents);
       }
     } catch (error) {
       console.error('Error fetching parent accounts:', error);
@@ -158,21 +166,18 @@ export function CreateAccountDialog({ open, onOpenChange, onAccountCreated }: Cr
           {formData.accountType === 'SUBSIDIARY' && (
             <div className="space-y-2">
               <Label htmlFor="parentAccount">Parent Organization</Label>
-              <Select value={formData.parentAccountId} onValueChange={(value) => handleInputChange('parentAccountId', value)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select parent organization" />
-                </SelectTrigger>
-                <SelectContent>
-                  {parentAccounts.map((account) => (
-                    <SelectItem key={account.id} value={account.id}>
-                      <div className="flex items-center space-x-2">
-                        <Building className="h-4 w-4" />
-                        <span>{account.name}</span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SimpleAccountSelector
+                accounts={parentAccounts}
+                value={formData.parentAccountId}
+                onValueChange={(value) => handleInputChange('parentAccountId', value)}
+                placeholder="Select parent organization"
+                showIcons={true}
+                showHierarchy={true}
+                filterByType={['ORGANIZATION', 'SUBSIDIARY']}
+              />
+              <div className="text-xs text-muted-foreground">
+                Select the organization or parent subsidiary this account belongs to
+              </div>
             </div>
           )}
 

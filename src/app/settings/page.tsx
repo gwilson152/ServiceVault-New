@@ -22,6 +22,7 @@ import { BillingRatesSection } from "@/components/settings/BillingRatesSection";
 import { TicketFieldsSection } from "@/components/settings/TicketFieldsSection";
 import { AccountSettingsSection } from "@/components/settings/AccountSettingsSection";
 import { LicenseSection } from "@/components/settings/LicenseSection";
+import { DangerZoneSection } from "@/components/settings/DangerZoneSection";
 
 export default function SettingsPage() {
   const { data: session, status } = useSession();
@@ -155,12 +156,13 @@ export default function SettingsPage() {
 
           {/* Settings Tabs */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-            <TabsList className="grid w-full grid-cols-5">
+            <TabsList className="grid w-full grid-cols-6">
               <TabsTrigger value="general">General</TabsTrigger>
               <TabsTrigger value="billing">Billing Rates</TabsTrigger>
               <TabsTrigger value="fields">Ticket Fields</TabsTrigger>
               <TabsTrigger value="accounts">Accounts</TabsTrigger>
               <TabsTrigger value="license">License</TabsTrigger>
+              <TabsTrigger value="danger" className="text-red-600 data-[state=active]:text-red-700">Danger Zone</TabsTrigger>
             </TabsList>
 
             <TabsContent value="general" className="space-y-4">
@@ -241,6 +243,12 @@ export default function SettingsPage() {
                   />
                 </CardContent>
               </Card>
+            </TabsContent>
+
+            <TabsContent value="danger" className="space-y-4">
+              <DangerZoneSection 
+                onSettingsChange={() => setHasUnsavedChanges(false)} // Reset doesn't need unsaved changes tracking
+              />
             </TabsContent>
           </Tabs>
 

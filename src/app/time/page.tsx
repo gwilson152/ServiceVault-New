@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AccountSelector } from "@/components/selectors/account-selector";
 import { Switch } from "@/components/ui/switch";
 import { 
   Clock, 
@@ -27,7 +28,6 @@ import {
   Edit,
   Trash2,
   Building,
-  User,
   FileText
 } from "lucide-react";
 
@@ -52,7 +52,7 @@ export default function TimeTrackingPage() {
   const [noCharge, setNoCharge] = useState(false);
   
   // Data state
-  const [accounts, setAccounts] = useState<Array<{id: string; name: string; accountType: string}>>([]);
+  const [accounts, setAccounts] = useState<Array<{id: string; name: string; accountType: string; parentAccountId?: string | null}>>([]);
 
   // Filter state
   const [filterPeriod, setFilterPeriod] = useState("week");
@@ -499,25 +499,14 @@ export default function TimeTrackingPage() {
                     ) : (
                       <div className="space-y-2">
                         <Label htmlFor="account-select">Account</Label>
-                        <Select value={selectedAccount} onValueChange={setSelectedAccount}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select an account" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {accounts.map(account => (
-                              <SelectItem key={account.id} value={account.id}>
-                                <div className="flex items-center space-x-2">
-                                  {account.accountType === "INDIVIDUAL" ? (
-                                    <User className="h-4 w-4" />
-                                  ) : (
-                                    <Building className="h-4 w-4" />
-                                  )}
-                                  <span>{account.name}</span>
-                                </div>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <AccountSelector
+                          accounts={accounts}
+                          value={selectedAccount}
+                          onValueChange={setSelectedAccount}
+                          placeholder="Select an account"
+                          enableFilters={true}
+                          enableGrouping={true}
+                        />
                       </div>
                     )}
 

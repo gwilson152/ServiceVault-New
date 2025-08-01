@@ -54,7 +54,12 @@ This is a **time management and invoicing system** built with Next.js 15, Prisma
       CustomerSettingsSection.tsx
       LicenseSection.tsx
       GeneralSettingsSection.tsx
-    /ui/                # Shadcn/UI components
+    /selectors/         # Reusable selector components
+      account-selector.tsx        # Account-specific hierarchical selector
+      simple-account-selector.tsx # Simple account dropdown
+    /ui/                # Shadcn/UI components & reusable UI patterns
+      hierarchical-selector.tsx   # Generic hierarchical selector
+    /accounts/          # Account management components
   /lib
     /licensing          # Licensing platform integration
 /prisma
@@ -157,6 +162,20 @@ This is a **time management and invoicing system** built with Next.js 15, Prisma
 - Use Prisma transactions for complex operations
 - Index JSONB fields for custom field performance
 - Document UI patterns for maintainability
+
+### UI Component Guidelines
+
+#### Hierarchical Data Selection
+- **Use `AccountSelector`** for account selection with hierarchy and filtering needs
+- **Use `SimpleAccountSelector`** for basic account dropdowns without advanced features
+- **Use `HierarchicalSelector<T>`** for other hierarchical data types (users, categories, etc.)
+- **Avoid basic `<Select>`** components for hierarchical data - use the specialized selectors
+
+#### Component Architecture
+- **Generic components** in `/components/ui/` for reusable patterns
+- **Specific implementations** in `/components/selectors/` for domain-specific use cases
+- **Backward compatibility** maintained with deprecated wrapper components
+- **TypeScript generics** used for type-safe reusable components
 
 ### Documentation
 
