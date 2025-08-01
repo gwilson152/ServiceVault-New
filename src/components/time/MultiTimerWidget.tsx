@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useTimeTracking } from "./TimeTrackingProvider";
 import { TimerCard } from "./TimerCard";
 
@@ -16,11 +16,20 @@ export function MultiTimerWidget({ onTimeLogged }: MultiTimerWidgetProps = {}) {
     stopTimer,
     formatTime,
     refreshAllActiveTimers,
-    notifyTimerLogged
+    notifyTimerLogged,
+    pendingStopResult,
+    clearPendingStopResult
   } = useTimeTracking();
 
   const [expandedTimerId, setExpandedTimerId] = useState<string | null>(null);
-  const [pendingStopResult, setPendingStopResult] = useState<{ minutes: number; ticketId: string; timerId: string } | null>(null);
+
+  // Auto-expand timer when there's a pending stop result
+  useEffect(() => {
+    if (pendingStopResult) {
+      console.log("🟠 [MultiTimerWidget] Pending stop result detected, expanding timer:", pendingStopResult.timerId);
+      setExpandedTimerId(pendingStopResult.timerId);
+    }
+  }, [pendingStopResult]);
 
   // Don't show widget if no timers are active
   if (!activeTimers || activeTimers.length === 0) {
@@ -36,13 +45,8 @@ export function MultiTimerWidget({ onTimeLogged }: MultiTimerWidgetProps = {}) {
     const result = await stopTimer(timerId);
     console.log("🟠 [MultiTimerWidget] stopTimer result:", result);
     
-    if (result) {
-      console.log("🟠 [MultiTimerWidget] Setting pending stop result and expanding timer");
-      // Store the result to trigger modal in TimerCard
-      setPendingStopResult(result);
-      // Expand the timer that was stopped to show the modal
-      setExpandedTimerId(result.timerId);
-    }
+    // The pending stop result is now handled globally in TimeTrackingProvider
+    // and the useEffect above will auto-expand the timer
     
     // After stopping and potentially logging time, refresh all timers
     await refreshAllActiveTimers();
@@ -81,7 +85,7 @@ export function MultiTimerWidget({ onTimeLogged }: MultiTimerWidgetProps = {}) {
                 formatTime={formatTime}
                 onTimeLogged={handleTimeLogged}
                 pendingStopResult={pendingStopResult?.timerId === timer.id ? pendingStopResult : null}
-                onStopResultConsumed={() => setPendingStopResult(null)}
+                onStopResultConsumed={clearPendingStopResult}
               />
             </div>
           ))}

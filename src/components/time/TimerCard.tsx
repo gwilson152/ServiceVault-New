@@ -191,12 +191,17 @@ export function TimerCard({
   };
 
   const handleCloseModal = () => {
+    console.log("🔴 [TimerCard] Modal closed without logging - refreshing UI state");
     setIsLogModalOpen(false);
     setTimerData(null);
     setDescription("");
     setNoCharge(false);
     setSelectedBillingRate("none");
     setEditableMinutes("");
+    
+    // Refresh the timer state when modal is dismissed without logging
+    // This ensures the UI reflects that the timer has been stopped
+    onTimeLogged?.();
   };
 
   const getCardBorderColor = () => {

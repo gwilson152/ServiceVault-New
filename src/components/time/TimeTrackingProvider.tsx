@@ -51,6 +51,10 @@ interface TimeTrackingContextType {
   registerTimerLoggedCallback: (callback: () => void) => () => void;
   notifyTimerLogged: () => void;
   
+  // Pending stop result for modal display
+  pendingStopResult: { minutes: number; ticketId: string; timerId: string } | null;
+  clearPendingStopResult: () => void;
+  
   // Utility
   formatTime: (seconds: number) => string;
   getTimerForTicket: (ticketId: string) => Timer | null;
@@ -78,6 +82,9 @@ export function TimeTrackingProvider({ children }: TimeTrackingProviderProps) {
   
   // Global timer event callbacks
   const [timerLoggedCallbacks, setTimerLoggedCallbacks] = useState<(() => void)[]>([]);
+  
+  // Pending stop result for modal display
+  const [pendingStopResult, setPendingStopResult] = useState<{ minutes: number; ticketId: string; timerId: string } | null>(null);
 
   // Fetch all active timers from database
   const refreshAllActiveTimers = useCallback(async () => {
@@ -269,6 +276,10 @@ export function TimeTrackingProvider({ children }: TimeTrackingProviderProps) {
         };
 
         console.log("🔵 [TimeTrackingProvider] Prepared result:", result);
+        
+        // Set pending stop result for modal display
+        console.log("🔵 [TimeTrackingProvider] Setting pending stop result for modal display");
+        setPendingStopResult(result);
 
         // Don't refresh active timers immediately for the multi-timer widget
         // The MultiTimerWidget will handle refreshing after successful time logging
@@ -344,6 +355,11 @@ export function TimeTrackingProvider({ children }: TimeTrackingProviderProps) {
     });
   }, [timerLoggedCallbacks]);
 
+  const clearPendingStopResult = useCallback(() => {
+    console.log("🔵 [TimeTrackingProvider] Clearing pending stop result");
+    setPendingStopResult(null);
+  }, []);
+
   const value: TimeTrackingContextType = {
     isTimerRunning,
     timerSeconds,
@@ -363,6 +379,8 @@ export function TimeTrackingProvider({ children }: TimeTrackingProviderProps) {
     refreshAllActiveTimers,
     registerTimerLoggedCallback,
     notifyTimerLogged,
+    pendingStopResult,
+    clearPendingStopResult,
     formatTime,
     getTimerForTicket,
   };
