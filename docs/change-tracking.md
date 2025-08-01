@@ -2,6 +2,288 @@
 
 This document tracks significant changes and refactoring work done to the Service Vault application.
 
+## Enhanced Account User Management with Manual Creation & Invitation Features (2025-08-01)
+
+### Overview
+Comprehensive enhancement of the account user management system to support both invitation-based and manual user creation, with proper RBAC controls, status tracking, and invitation management. This provides administrators with flexible options for creating and managing account users.
+
+### Core Features Implemented
+
+#### Manual User Creation
+- **Two Creation Modes**: Toggle between "Email Invitation" and "Manual Creation" methods
+- **Immediate Account Creation**: Manual mode creates User and AccountUser records instantly
+- **Temporary Password System**: Admin-set passwords with welcome email containing credentials
+- **Role Assignment**: Uses `ACCOUNT_USER` role for created users
+- **Permission Controls**: Requires `users:create-manual` permission for manual creation
+
+#### Enhanced Invitation System
+- **Re-send Invitation Functionality**: New API endpoint to regenerate and resend invitations
+- **Invitation Status Tracking**: Visual indicators for Active, Invited, and Expired users
+- **Expiry Management**: Automatic token regeneration with new expiry dates
+- **Status-Aware UI**: Different actions available based on user invitation status
+
+#### Granular RBAC Permissions
+- **`users:create-manual`**: Permission for manual user creation without invitations
+- **`users:resend-invitation`**: Permission for re-sending invitation emails
+- **Permission Integration**: Enhanced `usePermissions` hook with new permission helpers
+- **Role Template Updates**: Added new permissions to appropriate role templates
+
+#### Account User Status Management
+- **Visual Status Indicators**: Clear badges showing user status (Active, Invited, Expired)
+- **Status Calculation Logic**: Intelligent status determination based on user link and invitation expiry
+- **Contextual Actions**: Different dropdown actions based on user status
+- **Expiry Date Display**: Shows invitation expiry dates with visual warnings
+
+### Technical Implementation
+
+#### Database Schema Updates
+- **No Schema Changes**: Leveraged existing User and AccountUser models effectively
+- **Proper Role Usage**: Uses `ACCOUNT_USER` enum value from existing Role enum
+- **Data Integrity**: Maintains proper foreign key relationships
+
+#### API Endpoints
+```typescript
+// Manual user creation
+POST /api/account-users/create-manual
+{
+  accountId: string;
+  name: string;
+  email: string;
+  phone?: string;
+  temporaryPassword: string;
+  sendWelcomeEmail: boolean;
+  permissions: AccountPermissions;
+}
+
+// Re-send invitation  
+POST /api/account-users/[id]/resend-invitation
+// Generates new token, updates expiry, sends email
+```
+
+#### Enhanced UI Components
+- **CreateAccountUserDialog**: 
+  - Creation mode selection with visual toggles
+  - Context-aware form fields and validation
+  - Dynamic description and button text
+  - Proper permission checks for each mode
+  
+- **Account User List**:
+  - Status badges with icons (Active, Invited, Expired)
+  - Invitation expiry date display
+  - Contextual dropdown menus with status-appropriate actions
+  - Visual online indicators for active users
+
+#### Email Template Integration
+- **ACCOUNT_WELCOME Template**: Professional welcome emails for manual creation
+- **Enhanced Templates Section**: Better categorization and descriptions in settings
+- **Template Usage Indicators**: Clear labeling of which templates are used where
+- **Variable Documentation**: Comprehensive variable lists for template customization
+
+### User Experience Enhancements
+
+#### Intuitive Creation Process
+- **Visual Mode Selection**: Clear cards showing "Email Invitation" vs "Manual Creation"
+- **Context-Aware Interface**: UI adapts based on selected creation mode
+- **Progressive Disclosure**: Advanced options appear only when relevant
+- **Clear Validation**: Helpful error messages for all validation scenarios
+
+#### Enhanced Status Visibility
+- **Color-Coded Status**: Green (Active), Gray (Invited), Red (Expired)
+- **Status Icons**: CheckCircle, Clock, AlertTriangle for visual clarity
+- **Detailed Information**: Expiry dates and status explanations
+- **Action Availability**: Actions only shown when relevant and permitted
+
+#### Professional Email Integration
+- **Welcome Emails**: Professional templates with login credentials
+- **Context-Aware Content**: Email content adapts to creation method
+- **Template Management**: Enhanced email settings with usage explanations
+- **Visual Indicators**: Clear email template categorization
+
+### Security & Business Logic
+
+#### Permission-Based Access Control
+- **Granular Permissions**: Separate permissions for different creation methods
+- **Role Template Integration**: Permissions assigned to appropriate roles
+- **UI Permission Gates**: Actions only visible when user has permission
+- **API Enforcement**: All endpoints validate permissions before execution
+
+#### Data Security
+- **Password Hashing**: Proper bcrypt hashing for temporary passwords
+- **Token Security**: Secure UUID generation for invitation tokens
+- **Permission Validation**: Account context validation throughout
+- **Email Security**: Secure handling of credentials in email templates
+
+#### Business Rule Enforcement
+- **Creation Method Validation**: Proper permission checks for each creation mode
+- **Status Logic**: Intelligent status calculation based on data state
+- **Invitation Management**: Proper token regeneration and expiry handling
+- **Duplicate Prevention**: Cannot invite existing users or create duplicates
+
+### Performance & Architecture
+
+#### Efficient State Management
+- **Permission Caching**: Client-side permission caching to minimize API calls
+- **Targeted Updates**: Only refresh necessary components when data changes
+- **Optimized Queries**: Efficient database queries with proper relationships
+- **Memoized Computations**: React optimization for expensive operations
+
+#### Scalable Architecture
+- **Reusable Components**: Generic dropdown menu component for future use
+- **Permission Framework**: Extensible permission system for new features
+- **Template System**: Flexible email template architecture
+- **API Design**: RESTful endpoints with consistent error handling
+
+#### Component Hierarchy
+```
+CreateAccountUserDialog
+├── Creation Mode Selection (Email vs Manual)
+├── Basic Information Form
+├── Manual Creation Password Field (conditional)
+├── Account Permissions Configuration  
+└── Email Options (context-aware)
+
+Account User List
+├── Status Indicators (badges + icons)
+├── User Information Display
+├── Expiry Date Warnings
+└── Contextual Action Dropdown
+    ├── Re-send Invitation (for invited/expired)
+    ├── Manage Permissions (always available)
+    └── Send Email (future enhancement)
+```
+
+### Files Created/Modified
+
+#### New API Endpoints
+- `src/app/api/account-users/create-manual/route.ts` - Manual user creation endpoint
+- `src/app/api/account-users/[id]/resend-invitation/route.ts` - Re-send invitation endpoint
+
+#### Enhanced Components
+- `src/components/accounts/CreateAccountUserDialog.tsx` - Added manual creation mode
+- `src/app/accounts/[id]/page.tsx` - Enhanced user list with status indicators and actions
+- `src/components/ui/dropdown-menu.tsx` - New dropdown menu component for actions
+
+#### Permission System Updates
+- `src/lib/permissions-registry.ts` - Added new granular permissions
+- `src/lib/permissions.ts` - Updated permission constants
+- `src/hooks/usePermissions.ts` - Added new permission helper functions
+
+#### Email Template Enhancements
+- `src/lib/email/templates.ts` - Added ACCOUNT_WELCOME template
+- `src/components/settings/EmailSettingsSection.tsx` - Enhanced template management UI
+
+### Integration Points
+
+#### Settings Page Integration
+- **Enhanced Email Templates Tab**: 
+  - Clear categorization of template types and usage
+  - Visual indicators for template purposes
+  - Usage documentation for administrators
+  - Template type badges (Manual User Creation, User Invitations)
+
+#### Permission System Integration
+- **Seamless RBAC**: New permissions integrate with existing permission framework
+- **Role Template Updates**: Enhanced Account Manager and Subsidiary Manager roles
+- **UI Permission Gates**: Consistent permission checking throughout interface
+- **API Security**: Comprehensive permission validation in all endpoints
+
+#### Email Service Integration
+- **Template Usage**: ACCOUNT_WELCOME template integrated with email service
+- **Variable Support**: Full support for all template variables
+- **Error Handling**: Graceful handling of email failures with user feedback
+- **Development Mode**: Email logging for development environments
+
+### Testing & Validation
+
+#### Manual Testing Scenarios
+- ✅ Manual user creation with temporary password
+- ✅ Welcome email delivery with login credentials
+- ✅ Invitation-based creation (existing functionality)
+- ✅ Re-send invitation for expired users
+- ✅ Status indicators correctly show user states
+- ✅ Permission-based UI element visibility
+- ✅ Dropdown actions contextual to user status
+- ✅ Form validation for all creation modes
+
+#### Permission Testing
+- ✅ Manual creation requires `users:create-manual` permission
+- ✅ Re-send invitation requires `users:resend-invitation` permission
+- ✅ UI elements hidden when permissions missing
+- ✅ API endpoints reject requests without proper permissions
+- ✅ Role templates include appropriate permissions
+
+#### Email Integration Testing
+- ✅ ACCOUNT_WELCOME template renders correctly
+- ✅ Template variables populated with correct data
+- ✅ Email settings display enhanced template information
+- ✅ Template management shows usage indicators
+- ✅ Email delivery works in both development and production modes
+
+### Impact Assessment
+
+#### Benefits Achieved
+- **Administrative Flexibility**: Two distinct user creation methods for different scenarios
+- **Enhanced User Experience**: Clear status indicators and contextual actions
+- **Professional Communication**: High-quality welcome emails with proper branding
+- **Improved Efficiency**: Re-send invitation functionality reduces administrative overhead
+- **Better Organization**: Clear categorization and management of user states
+
+#### User Experience Improvements
+- **Intuitive Interface**: Clear visual distinction between creation modes
+- **Status Transparency**: Always know the state of account users
+- **Contextual Actions**: Only see relevant actions based on user status
+- **Professional Emails**: Branded welcome messages with clear instructions
+- **Reduced Friction**: Easy re-invitation process for expired invitations
+
+#### Security Enhancements
+- **Granular Permissions**: Fine-grained control over user management operations
+- **Proper Authentication**: Secure password handling and email delivery
+- **Permission Validation**: Comprehensive security checks throughout
+- **Data Integrity**: Proper validation and error handling
+
+#### Technical Benefits
+- **Maintainable Code**: Well-structured components with clear separation of concerns
+- **Extensible Architecture**: Easy to add new user management features
+- **Performance Optimized**: Efficient state management and API usage
+- **Type Safety**: Full TypeScript support throughout implementation
+
+### Future Enhancements Ready
+
+#### Advanced User Management
+- **Bulk User Operations**: Framework ready for bulk user creation/management
+- **User Import**: CSV/Excel import capabilities with validation
+- **Advanced Permissions**: More granular permission scoping
+- **User Analytics**: Tracking user engagement and activity
+
+#### Email Enhancements
+- **Custom Templates**: Visual template editor for customization
+- **Email Scheduling**: Delayed sending and recurring notifications
+- **Email Analytics**: Open rates, click tracking, and engagement metrics
+- **Multi-Language**: Localized email templates
+
+#### Integration Opportunities
+- **Single Sign-On**: SAML/OAuth integration for enterprise environments
+- **Directory Sync**: Active Directory/LDAP user synchronization
+- **Mobile App**: API-ready for mobile user management
+- **Webhook Integration**: Real-time notifications for user events
+
+### Migration Guide
+
+#### For Existing Installations
+1. **Update Dependencies**: Ensure latest email service dependencies installed
+2. **Permission Assignment**: Assign new permissions to appropriate user roles
+3. **Email Configuration**: Verify SMTP settings for welcome email delivery
+4. **Template Review**: Review ACCOUNT_WELCOME template and customize if needed
+5. **User Training**: Train administrators on new user creation options
+
+#### For Developers
+- **New Permission Patterns**: Use granular permissions instead of role checks
+- **Component Reuse**: Leverage dropdown menu component for other contexts
+- **Email Integration**: Use ACCOUNT_WELCOME template for similar workflows
+- **Permission Hooks**: Utilize enhanced permission hooks for UI logic
+
+This comprehensive enhancement provides administrators with flexible, secure, and user-friendly account user management capabilities while maintaining backward compatibility and following established architectural patterns.
+
 ## Enhanced Account-Scoped Role System (2025-01-31)
 
 ### Overview

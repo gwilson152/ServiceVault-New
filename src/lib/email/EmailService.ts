@@ -146,7 +146,12 @@ export class EmailService {
   async sendTemplateEmail(
     templateType: EmailTemplateType,
     emailData: Omit<EmailData, 'subject' | 'htmlBody' | 'textBody'>,
-    variables: Record<string, any> = {}
+    variables: Record<string, any> = {},
+    options: {
+      subject?: string;
+      templateId?: string;
+      [key: string]: any;
+    } = {}
   ): Promise<string> {
     try {
       // Get the template
@@ -156,7 +161,7 @@ export class EmailService {
       }
 
       // Process template variables
-      const processedSubject = this.processTemplate(template.subject, variables);
+      const processedSubject = options.subject || this.processTemplate(template.subject, variables);
       const processedHtmlBody = this.processTemplate(template.htmlBody, variables);
       const processedTextBody = template.textBody 
         ? this.processTemplate(template.textBody, variables)
@@ -164,7 +169,7 @@ export class EmailService {
 
       return await this.queueEmail({
         ...emailData,
-        templateId: template.id,
+        templateId: options.templateId || template.id,
         subject: processedSubject,
         htmlBody: processedHtmlBody,
         textBody: processedTextBody,

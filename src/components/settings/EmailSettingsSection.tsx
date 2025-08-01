@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -25,6 +26,7 @@ import {
   List
 } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
+import { CreateEmailTemplateDialog } from "./CreateEmailTemplateDialog";
 
 interface EmailSettingsSectionProps {
   onSettingsChange: () => void;
@@ -86,6 +88,9 @@ export function EmailSettingsSection({ onSettingsChange }: EmailSettingsSectionP
     failed: 0
   });
   const [testEmail, setTestEmail] = useState("");
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("__basic_test__");
+  const [testVariables, setTestVariables] = useState<Record<string, string>>({});
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
   
   const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
@@ -186,15 +191,102 @@ export function EmailSettingsSection({ onSettingsChange }: EmailSettingsSectionP
     }
   };
 
+  const getTemplateVariables = (templateId: string) => {
+    const template = templates.find(t => t.id === templateId);
+    if (!template) return {};
+    
+    try {
+      const variables = JSON.parse(template.variables);
+      return variables;
+    } catch {
+      return {};
+    }
+  };
+
+  const getDefaultTestVariables = (templateType: string) => {
+    const defaults: Record<string, Record<string, string>> = {
+      'USER_INVITATION': {
+        systemName: 'Service Vault',
+        userName: 'John Test',
+        accountName: 'Test Company',
+        inviterName: 'Admin User',
+        inviterEmail: 'admin@example.com',
+        invitationLink: 'https://app.example.com/accept-invitation?token=test123',
+        expirationDate: 'January 15, 2024'
+      },
+      'ACCOUNT_WELCOME': {
+        systemName: 'Service Vault',
+        userName: 'John Test',
+        accountName: 'Test Company',
+        loginEmail: testEmail || 'test@example.com',
+        temporaryPassword: 'TempPass123!',
+        loginUrl: 'https://app.example.com/portal/login',
+        createdByName: 'Admin User',
+        createdByEmail: 'admin@example.com'
+      },
+      'TICKET_STATUS_CHANGE': {
+        systemName: 'Service Vault',
+        userName: 'John Test',
+        ticketNumber: 'T-001',
+        ticketTitle: 'Test Ticket',
+        oldStatus: 'Open',
+        newStatus: 'In Progress',
+        updatedBy: 'Admin User',
+        updatedAt: 'January 15, 2024 at 10:30 AM',
+        ticketLink: 'https://app.example.com/tickets/123',
+        statusMessage: 'Starting work on this ticket now.'
+      },
+      'INVOICE_GENERATED': {
+        systemName: 'Service Vault',
+        userName: 'John Test',
+        invoiceNumber: 'INV-2024-001',
+        accountName: 'Test Company',
+        invoiceDate: 'January 15, 2024',
+        dueDate: 'February 15, 2024',
+        periodStart: 'January 1, 2024',
+        periodEnd: 'January 31, 2024',
+        totalAmount: '2,450.00',
+        totalHours: '40.5',
+        billableHours: '35.0',
+        timeEntryCount: '12',
+        addonCount: '3',
+        invoiceLink: 'https://app.example.com/invoices/123',
+        downloadLink: 'https://app.example.com/invoices/123/pdf'
+      }
+    };
+    
+    return defaults[templateType] || {};
+  };
+
+  const handleTemplateChange = (templateId: string) => {
+    setSelectedTemplateId(templateId);
+    if (templateId === "__basic_test__") {
+      setTestVariables({});
+    } else {
+      const template = templates.find(t => t.id === templateId);
+      if (template) {
+        const defaultVars = getDefaultTestVariables(template.type);
+        setTestVariables(defaultVars);
+      }
+    }
+  };
+
   const handleTestEmail = async () => {
     if (!testEmail || !canUpdateSettings) return;
     
     setIsTesting(true);
     try {
+      const payload: any = { testEmail };
+      
+      if (selectedTemplateId && selectedTemplateId !== "__basic_test__") {
+        payload.templateId = selectedTemplateId;
+        payload.variables = testVariables;
+      }
+
       const response = await fetch('/api/email/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ testEmail }),
+        body: JSON.stringify(payload),
       });
 
       const data = await response.json();
@@ -212,6 +304,10 @@ export function EmailSettingsSection({ onSettingsChange }: EmailSettingsSectionP
     } finally {
       setIsTesting(false);
     }
+  };
+
+  const handleTemplateCreated = () => {
+    loadTemplates(); // Refresh the templates list
   };
 
   if (isLoading) {
@@ -420,16 +516,47 @@ export function EmailSettingsSection({ onSettingsChange }: EmailSettingsSectionP
             <div>
               <h3 className="text-lg font-medium">Email Templates</h3>
               <p className="text-sm text-muted-foreground">
-                Manage email templates for system notifications
+                Manage email templates for system notifications and user management
               </p>
             </div>
             {canUpdateSettings && (
-              <Button>
+              <Button onClick={() => setShowCreateDialog(true)}>
                 <Plus className="mr-2 h-4 w-4" />
                 New Template
               </Button>
             )}
           </div>
+
+          {/* Template Types Info */}
+          <Card className="border-blue-200 bg-blue-50">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base text-blue-900">Available Template Types</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-3 text-sm">
+                <div className="flex justify-between">
+                  <span className="font-medium text-blue-800">USER_INVITATION</span>
+                  <span className="text-blue-700">Used when inviting users to create their own accounts</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="font-medium text-blue-800">ACCOUNT_WELCOME</span>
+                  <span className="text-blue-700">Used when admins create user accounts manually</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="font-medium text-blue-800">PASSWORD_RESET</span>
+                  <span className="text-blue-700">Used for password reset requests</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="font-medium text-blue-800">TICKET_UPDATE</span>
+                  <span className="text-blue-700">Used for ticket status and update notifications</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="font-medium text-blue-800">INVOICE_GENERATED</span>
+                  <span className="text-blue-700">Used when new invoices are generated</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
           <div className="grid gap-4">
             {templates.map((template) => (
@@ -441,26 +568,35 @@ export function EmailSettingsSection({ onSettingsChange }: EmailSettingsSectionP
                       <CardDescription>
                         Type: {template.type} • {template.isDefault && 'Default • '}
                         Status: {template.status}
+                        {template.type === 'ACCOUNT_WELCOME' && ' • Used for manual user creation'}
                       </CardDescription>
                     </div>
                     <div className="flex items-center space-x-2">
                       {template.isDefault && (
                         <Badge variant="default">Default</Badge>
                       )}
+                      {template.type === 'ACCOUNT_WELCOME' && (
+                        <Badge variant="outline">Manual User Creation</Badge>
+                      )}
+                      {template.type === 'USER_INVITATION' && (
+                        <Badge variant="outline">User Invitations</Badge>
+                      )}
                       <Badge variant={template.status === 'ACTIVE' ? 'default' : 'secondary'}>
                         {template.status}
                       </Badge>
                       {canUpdateSettings && (
                         <>
-                          <Button variant="outline" size="sm">
+                          <Button variant="outline" size="sm" title="Preview Template">
                             <Eye className="h-4 w-4" />
                           </Button>
-                          <Button variant="outline" size="sm">
+                          <Button variant="outline" size="sm" title="Edit Template">
                             <Edit3 className="h-4 w-4" />
                           </Button>
-                          <Button variant="outline" size="sm">
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          {!template.isDefault && (
+                            <Button variant="outline" size="sm" title="Delete Template">
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
                         </>
                       )}
                     </div>
@@ -470,9 +606,29 @@ export function EmailSettingsSection({ onSettingsChange }: EmailSettingsSectionP
                   <p className="text-sm text-muted-foreground mb-2">
                     <strong>Subject:</strong> {template.subject}
                   </p>
+                  {template.variables && Object.keys(template.variables).length > 0 && (
+                    <p className="text-sm text-muted-foreground mb-2">
+                      <strong>Variables:</strong> {Object.keys(template.variables).join(', ')}
+                    </p>
+                  )}
                   <p className="text-sm text-muted-foreground">
                     Created by {template.creator.name} on {new Date(template.createdAt).toLocaleDateString()}
+                    {template.updatedAt !== template.createdAt && (
+                      <span> • Updated {new Date(template.updatedAt).toLocaleDateString()}</span>
+                    )}
                   </p>
+                  {template.type === 'ACCOUNT_WELCOME' && (
+                    <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-800">
+                      This template is used when administrators create user accounts manually. 
+                      It includes login credentials and welcome information.
+                    </div>
+                  )}
+                  {template.type === 'USER_INVITATION' && (
+                    <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded text-xs text-green-800">
+                      This template is used for invitation-based user creation. 
+                      It includes invitation links and setup instructions.
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             ))}
@@ -537,28 +693,79 @@ export function EmailSettingsSection({ onSettingsChange }: EmailSettingsSectionP
             <CardHeader>
               <CardTitle className="text-lg">Test Email Configuration</CardTitle>
               <CardDescription>
-                Send a test email to verify your SMTP settings are working correctly.
+                Send a test email to verify your SMTP settings and email templates are working correctly.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="testEmail">Test Email Address</Label>
-                <Input
-                  id="testEmail"
-                  type="email"
-                  value={testEmail}
-                  onChange={(e) => setTestEmail(e.target.value)}
-                  placeholder="test@example.com"
-                  disabled={!canUpdateSettings}
-                />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="testEmail">Test Email Address</Label>
+                  <Input
+                    id="testEmail"
+                    type="email"
+                    value={testEmail}
+                    onChange={(e) => setTestEmail(e.target.value)}
+                    placeholder="test@example.com"
+                    disabled={!canUpdateSettings}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="templateSelect">Email Template (Optional)</Label>
+                  <Select value={selectedTemplateId} onValueChange={handleTemplateChange} disabled={!canUpdateSettings}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select template to test" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__basic_test__">Basic SMTP Test (No Template)</SelectItem>
+                      {templates.filter(t => t.status === 'ACTIVE').map((template) => (
+                        <SelectItem key={template.id} value={template.id}>
+                          {template.name} ({template.type})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
+
+              {selectedTemplateId && selectedTemplateId !== "__basic_test__" && (
+                <div className="space-y-4 p-4 bg-gray-50 rounded-lg border">
+                  <div className="flex items-center space-x-2">
+                    <Mail className="h-4 w-4 text-blue-600" />
+                    <h4 className="font-medium text-sm">Template Variables</h4>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    These test values will be used to populate the template. You can modify them to test different scenarios.
+                  </p>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-48 overflow-y-auto">
+                    {Object.entries(testVariables).map(([key, value]) => (
+                      <div key={key} className="space-y-1">
+                        <Label htmlFor={`var-${key}`} className="text-xs font-medium text-gray-700">
+                          {key}
+                        </Label>
+                        <Input
+                          id={`var-${key}`}
+                          value={value}
+                          onChange={(e) => setTestVariables(prev => ({ ...prev, [key]: e.target.value }))}
+                          placeholder={`Enter ${key}`}
+                          className="text-sm"
+                          disabled={!canUpdateSettings}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="flex items-center justify-between pt-4 border-t">
                 <div className="flex items-center space-x-2">
                   {testStatus === 'success' && (
                     <>
                       <CheckCircle className="h-4 w-4 text-green-600" />
-                      <span className="text-sm text-green-600">Test email sent successfully</span>
+                      <span className="text-sm text-green-600">
+                        {selectedTemplateId && selectedTemplateId !== "__basic_test__" ? 'Template test email sent successfully' : 'Basic test email sent successfully'}
+                      </span>
                     </>
                   )}
                   {testStatus === 'error' && (
@@ -575,13 +782,19 @@ export function EmailSettingsSection({ onSettingsChange }: EmailSettingsSectionP
                 >
                   {isTesting && <Send className="mr-2 h-4 w-4 animate-spin" />}
                   {!isTesting && <Send className="mr-2 h-4 w-4" />}
-                  {isTesting ? 'Sending...' : 'Send Test Email'}
+                  {isTesting ? 'Sending...' : (selectedTemplateId && selectedTemplateId !== "__basic_test__") ? 'Send Template Test' : 'Send Basic Test'}
                 </Button>
               </div>
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
+
+      <CreateEmailTemplateDialog
+        open={showCreateDialog}
+        onOpenChange={setShowCreateDialog}
+        onTemplateCreated={handleTemplateCreated}
+      />
     </div>
   );
 }
