@@ -7,6 +7,7 @@ export interface PermissionCheck {
   resource: string;
   action: string;
   scope?: "own" | "account" | "subsidiary";
+  accountId?: string; // For account-context aware permission checking
 }
 
 export async function hasPermission(
@@ -19,14 +20,35 @@ export async function hasPermission(
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      include: { accountUser: true }
+      include: { 
+        accountUser: {
+          include: {
+            account: {
+              include: {
+                parentAccount: true,
+                childAccounts: true
+              }
+            },
+            accountUserRoles: {
+              include: {
+                role: true
+              }
+            }
+          }
+        },
+        userRoles: {
+          include: {
+            role: true
+          }
+        }
+      }
     });
 
     if (!user) {
       return false;
     }
 
-    // Check against default role permissions first
+    // 1. Check against default role permissions first (system-level)
     const rolePermissions = getDefaultPermissionsForRole(user.role);
     const hasRolePermission = rolePermissions.some(p => 
       p.resource === permission.resource && p.action === permission.action
@@ -36,8 +58,23 @@ export async function hasPermission(
       return true;
     }
 
-    // Account users can have additional specific permissions
+    // 2. Check system user assigned roles
+    if (user.userRoles && user.userRoles.length > 0) {
+      for (const userRole of user.userRoles) {
+        const rolePermissions = Array.isArray(userRole.role.permissions) 
+          ? userRole.role.permissions 
+          : [];
+        
+        const permissionName = `${permission.resource}:${permission.action}`;
+        if (rolePermissions.includes(permissionName)) {
+          return true;
+        }
+      }
+    }
+
+    // 3. Account users can have additional specific permissions and roles
     if (user.role === "ACCOUNT_USER" && user.accountUser) {
+      // Check direct account permissions (existing system)
       const accountPermission = await prisma.accountPermission.findFirst({
         where: {
           accountUserId: user.accountUser.id,
@@ -47,7 +84,31 @@ export async function hasPermission(
         },
       });
 
-      return !!accountPermission;
+      if (accountPermission) {
+        return true;
+      }
+
+      // Check AccountUser assigned roles with scope-aware logic
+      if (user.accountUser.accountUserRoles && user.accountUser.accountUserRoles.length > 0) {
+        for (const accountUserRole of user.accountUser.accountUserRoles) {
+          const rolePermissions = Array.isArray(accountUserRole.role.permissions) 
+            ? accountUserRole.role.permissions 
+            : [];
+          
+          const permissionName = `${permission.resource}:${permission.action}`;
+          if (rolePermissions.includes(permissionName)) {
+            // Check if the role scope satisfies the permission scope requirement
+            if (await isRoleScopeSufficient(
+              accountUserRole.scope, 
+              permission.scope || "own",
+              user.accountUser.account,
+              permission.accountId
+            )) {
+              return true;
+            }
+          }
+        }
+      }
     }
 
     return false;
@@ -61,6 +122,61 @@ export async function hasPermission(
       return !adminOnlyResources.includes(permission.resource);
     }
     return false;
+  }
+}
+
+// Helper function to check if role scope is sufficient for permission scope
+async function isRoleScopeSufficient(
+  roleScope: string,
+  requiredScope: string,
+  userAccount: any,
+  targetAccountId?: string
+): Promise<boolean> {
+  // If no specific account context is required, check general scope hierarchy
+  if (!targetAccountId) {
+    // Scope hierarchy: "subsidiary" > "account" > "own"
+    if (roleScope === "subsidiary") return true;
+    if (roleScope === "account" && (requiredScope === "account" || requiredScope === "own")) return true;
+    if (roleScope === "own" && requiredScope === "own") return true;
+    return false;
+  }
+
+  // Account-specific context checking
+  switch (roleScope) {
+    case "own":
+      // Can only access own account
+      return userAccount.id === targetAccountId;
+      
+    case "account":
+      // Can access own account
+      return userAccount.id === targetAccountId;
+      
+    case "subsidiary":
+      // Can access own account and all child accounts
+      if (userAccount.id === targetAccountId) return true;
+      
+      // Check if target account is a child (subsidiary) of user's account
+      const targetAccount = await prisma.account.findUnique({
+        where: { id: targetAccountId },
+        include: { parentAccount: true }
+      });
+      
+      if (targetAccount?.parentAccount?.id === userAccount.id) return true;
+      
+      // Recursively check the hierarchy for deeper subsidiaries
+      let currentAccount = targetAccount;
+      while (currentAccount?.parentAccount) {
+        if (currentAccount.parentAccount.id === userAccount.id) return true;
+        currentAccount = await prisma.account.findUnique({
+          where: { id: currentAccount.parentAccount.id },
+          include: { parentAccount: true }
+        });
+      }
+      
+      return false;
+      
+    default:
+      return false;
   }
 }
 

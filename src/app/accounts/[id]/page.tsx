@@ -30,6 +30,7 @@ import {
   TrendingUp
 } from "lucide-react";
 import { CreateAccountUserDialog } from "@/components/accounts/CreateAccountUserDialog";
+import { AccountUserRoleManager } from "@/components/accounts/AccountUserRoleManager";
 import { usePermissions } from "@/hooks/usePermissions";
 
 interface AccountDetails {
@@ -365,9 +366,10 @@ export default function AccountDetailsPage() {
 
           {/* Tabbed Content */}
           <Tabs defaultValue="overview" className="space-y-4">
-            <TabsList className="grid w-full grid-cols-6">
+            <TabsList className="grid w-full grid-cols-7">
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="users">Users</TabsTrigger>
+              <TabsTrigger value="roles">User Roles</TabsTrigger>
               <TabsTrigger value="tickets">Tickets</TabsTrigger>
               <TabsTrigger value="time">Time Tracking</TabsTrigger>
               <TabsTrigger value="invoicing">Invoicing</TabsTrigger>
@@ -507,6 +509,14 @@ export default function AccountDetailsPage() {
                   </div>
                 </CardContent>
               </Card>
+            </TabsContent>
+
+            {/* User Roles Tab */}
+            <TabsContent value="roles" className="space-y-6">
+              <AccountUserRoleManager 
+                accountId={accountId}
+                onRoleAssigned={fetchAccount}
+              />
             </TabsContent>
 
             {/* Tickets Tab */}

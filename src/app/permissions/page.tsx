@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { UserSelector } from "@/components/permissions/UserSelector";
 import { MultiUserSelector } from "@/components/permissions/MultiUserSelector";
+import { AccountUserRoleManager } from "@/components/accounts/AccountUserRoleManager";
 import { PERMISSIONS_REGISTRY, DEFAULT_ROLE_PERMISSIONS } from "@/lib/permissions-registry";
 import { Checkbox } from "@/components/ui/checkbox";
 
@@ -120,6 +121,8 @@ export default function PermissionsPage() {
   const [newRoleDescription, setNewRoleDescription] = useState("");
   const [selectedRolePermissions, setSelectedRolePermissions] = useState<string[]>([]);
   const [roleTemplate, setRoleTemplate] = useState("");
+  const [newRoleApplicableTo, setNewRoleApplicableTo] = useState("system");
+  const [newRoleDefaultScope, setNewRoleDefaultScope] = useState("own");
 
   // Role assignment state
   const [userRoles, setUserRoles] = useState<UserRole[]>([]);
@@ -127,6 +130,10 @@ export default function PermissionsPage() {
   const [selectedRoleForAssignment, setSelectedRoleForAssignment] = useState("");
   const [isAssigningRole, setIsAssigningRole] = useState(false);
   const [bulkAssignmentMode, setBulkAssignmentMode] = useState(false);
+
+  // Account role management state  
+  const [accounts, setAccounts] = useState<any[]>([]);
+  const [selectedAccountForRoles, setSelectedAccountForRoles] = useState("");
 
   // Data state
   const [permissions, setPermissions] = useState<Permission[]>([]);
@@ -193,6 +200,18 @@ export default function PermissionsPage() {
     }
   };
 
+  const fetchAccounts = async () => {
+    try {
+      const response = await fetch("/api/accounts");
+      if (response.ok) {
+        const data = await response.json();
+        setAccounts(data);
+      }
+    } catch (error) {
+      console.error("Error fetching accounts:", error);
+    }
+  };
+
   const fetchAccountUsers = async () => {
     try {
       const response = await fetch("/api/account-users");
@@ -238,7 +257,7 @@ export default function PermissionsPage() {
         router.push("/dashboard");
       } else {
         // Load data
-        Promise.all([fetchPermissions(), fetchAccountUsers(), fetchAccountPermissions(), fetchUserPermissions(), fetchRoles(), fetchUserRoles()]).then(() => {
+        Promise.all([fetchPermissions(), fetchAccountUsers(), fetchAccountPermissions(), fetchUserPermissions(), fetchRoles(), fetchUserRoles(), fetchAccounts()]).then(() => {
           setIsLoading(false);
         });
       }
@@ -473,7 +492,9 @@ export default function PermissionsPage() {
           name: newRoleName.trim(),
           description: newRoleDescription.trim() || null,
           permissions: selectedRolePermissions,
-          isTemplate: true
+          isTemplate: true,
+          applicableTo: newRoleApplicableTo,
+          defaultScope: newRoleDefaultScope
         }),
       });
 
@@ -482,6 +503,8 @@ export default function PermissionsPage() {
         setNewRoleDescription("");
         setSelectedRolePermissions([]);
         setRoleTemplate("");
+        setNewRoleApplicableTo("system");
+        setNewRoleDefaultScope("own");
         await fetchRoles();
       } else {
         const error = await response.json();
@@ -502,6 +525,30 @@ export default function PermissionsPage() {
       const permissionNames = templatePermissions.map(p => `${p.resource}:${p.action}`);
       setSelectedRolePermissions(permissionNames);
       setRoleTemplate(templateName);
+      
+      // Set applicableTo and defaultScope based on template
+      switch (templateName) {
+        case 'ADMIN':
+        case 'EMPLOYEE':
+          setNewRoleApplicableTo('system');
+          setNewRoleDefaultScope('own');
+          break;
+        case 'ACCOUNT_USER':
+        case 'ACCOUNT_VIEWER':
+          setNewRoleApplicableTo('account');
+          setNewRoleDefaultScope('own');
+          break;
+        case 'ACCOUNT_MANAGER':
+          setNewRoleApplicableTo('account');
+          setNewRoleDefaultScope('account');
+          break;
+        case 'SUBSIDIARY_MANAGER':
+          setNewRoleApplicableTo('account');
+          setNewRoleDefaultScope('subsidiary');
+          break;
+        default:
+          break;
+      }
     }
   };
 
@@ -731,10 +778,11 @@ export default function PermissionsPage() {
 
           {/* Main Content Tabs */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-            <TabsList className="grid w-full grid-cols-6">
+            <TabsList className="grid w-full grid-cols-7">
               <TabsTrigger value="system">System Permissions</TabsTrigger>
               <TabsTrigger value="roles">Role Templates</TabsTrigger>
               <TabsTrigger value="assignments">Role Assignments</TabsTrigger>
+              <TabsTrigger value="account-roles">Account Roles</TabsTrigger>
               <TabsTrigger value="users">User Permissions</TabsTrigger>
               <TabsTrigger value="account">Account Permissions</TabsTrigger>
               <TabsTrigger value="create">Create Permission</TabsTrigger>
@@ -833,6 +881,42 @@ export default function PermissionsPage() {
                       />
                     </div>
 
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="role-applicable-to">Applicable To</Label>
+                        <Select value={newRoleApplicableTo} onValueChange={setNewRoleApplicableTo}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="system">System Users Only</SelectItem>
+                            <SelectItem value="account">Account Users Only</SelectItem>
+                            <SelectItem value="both">System & Account Users</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                          Where this role can be applied
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="role-default-scope">Default Scope</Label>
+                        <Select value={newRoleDefaultScope} onValueChange={setNewRoleDefaultScope}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="own">Own Records</SelectItem>
+                            <SelectItem value="account">Account Level</SelectItem>
+                            <SelectItem value="subsidiary">Account + Subsidiaries</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                          Default permission scope when assigned
+                        </p>
+                      </div>
+                    </div>
+
                     <div className="space-y-2">
                       <Label>Quick Templates</Label>
                       <div className="flex flex-wrap gap-2">
@@ -862,6 +946,33 @@ export default function PermissionsPage() {
                           disabled={isCreatingRole}
                         >
                           Account User Template
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={roleTemplate === 'ACCOUNT_MANAGER' ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => handleApplyRoleTemplate('ACCOUNT_MANAGER')}
+                          disabled={isCreatingRole}
+                        >
+                          Account Manager Template
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={roleTemplate === 'SUBSIDIARY_MANAGER' ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => handleApplyRoleTemplate('SUBSIDIARY_MANAGER')}
+                          disabled={isCreatingRole}
+                        >
+                          Subsidiary Manager Template
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={roleTemplate === 'ACCOUNT_VIEWER' ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => handleApplyRoleTemplate('ACCOUNT_VIEWER')}
+                          disabled={isCreatingRole}
+                        >
+                          Account Viewer Template
                         </Button>
                       </div>
                     </div>
@@ -1112,6 +1223,55 @@ export default function PermissionsPage() {
                   </CardContent>
                 </Card>
               </div>
+            </TabsContent>
+
+            {/* Account Roles Tab */}
+            <TabsContent value="account-roles" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Account User Role Management</CardTitle>
+                  <CardDescription>
+                    Manage role assignments for account users with scope-based permissions
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Select Account</Label>
+                    <Select value={selectedAccountForRoles} onValueChange={setSelectedAccountForRoles}>
+                      <SelectTrigger className="w-[300px]">
+                        <SelectValue placeholder="Select account to manage roles" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {accounts && Array.isArray(accounts) ? accounts.map(account => (
+                          <SelectItem key={account.id} value={account.id}>
+                            {account.name} ({account.accountType})
+                          </SelectItem>
+                        )) : null}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {selectedAccountForRoles && (
+                    <AccountUserRoleManager 
+                      accountId={selectedAccountForRoles}
+                      onRoleAssigned={() => {
+                        // Refresh any necessary data
+                        console.log('Role assigned for account:', selectedAccountForRoles);
+                      }}
+                    />
+                  )}
+
+                  {!selectedAccountForRoles && (
+                    <div className="text-center py-8">
+                      <Shield className="mx-auto h-12 w-12 text-muted-foreground" />
+                      <h3 className="mt-2 text-sm font-semibold">Select an Account</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Choose an account to manage user roles and permissions.
+                      </p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </TabsContent>
 
             {/* User Permissions Tab */}

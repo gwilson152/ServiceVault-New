@@ -144,6 +144,7 @@ model AccountUser {
   account Account @relation(fields: [accountId], references: [id])
   user    User?
   createdTickets Ticket[] @relation("AccountUserTicketCreator")
+  accountUserRoles AccountUserRole[]
 }
 
 model Ticket {
@@ -476,16 +477,19 @@ model EmailSettings {
 
 // Role templates for permission management
 model RoleTemplate {
-  id          String   @id @default(cuid())
-  name        String   @unique
-  description String?
-  permissions Json     // Array of permission names (e.g., ["time-entries:view", "tickets:create"])
-  isTemplate  Boolean  @default(true) // Whether this is a reusable template
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id            String   @id @default(cuid())
+  name          String   @unique
+  description   String?
+  permissions   Json     // Array of permission names (e.g., ["time-entries:view", "tickets:create"])
+  isTemplate    Boolean  @default(true) // Whether this is a reusable template
+  applicableTo  String   @default("system") // "system", "account", "both" - where this role can be applied
+  defaultScope  String   @default("own") // "own", "account", "subsidiary" - default scope when assigned
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   // Relations
-  userRoles UserRole[]
+  userRoles        UserRole[]
+  accountUserRoles AccountUserRole[]
 }
 
 // Junction table for User-Role assignments
@@ -501,4 +505,20 @@ model UserRole {
   role RoleTemplate @relation(fields: [roleId], references: [id], onDelete: Cascade)
 
   @@unique([userId, roleId])
+}
+
+// Junction table for AccountUser-Role assignments with scope
+model AccountUserRole {
+  id            String @id @default(cuid())
+  accountUserId String
+  roleId        String
+  scope         String @default("account") // "own", "account", "subsidiary" - permission scope level
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  accountUser AccountUser   @relation(fields: [accountUserId], references: [id], onDelete: Cascade)
+  role        RoleTemplate  @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([accountUserId, roleId])
 }

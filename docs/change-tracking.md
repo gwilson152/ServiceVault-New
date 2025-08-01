@@ -2,6 +2,124 @@
 
 This document tracks significant changes and refactoring work done to the Service Vault application.
 
+## Enhanced Account-Scoped Role System (2025-01-31)
+
+### Overview
+Extended the role management system to support flexible account-scoped roles that can be assigned to AccountUsers (customer users) with granular permission scoping for account and subsidiary access. This enables sophisticated permission hierarchies within customer account structures.
+
+### Core Implementation
+
+#### Database Schema Enhancements
+- **`AccountUserRole` Model**: Junction table for AccountUser-Role assignments with scope information
+- **Enhanced `RoleTemplate` Model**: Added `applicableTo` ("system", "account", "both") and `defaultScope` ("own", "account", "subsidiary") fields
+- **Relations**: Integrated AccountUserRole with existing AccountUser and RoleTemplate models
+- **Backward Compatibility**: Maintained existing system for direct permissions
+
+#### Enhanced Permission System
+- **Account Context Awareness**: Updated `hasPermission()` function to support account-context checking
+- **Scope Hierarchy Logic**: Implemented "subsidiary" > "account" > "own" scope resolution
+- **Account Hierarchy Support**: Recursive permission checking through parent-child account relationships
+- **Role Priority**: System roles → Assigned user roles → AccountUser roles → Direct permissions
+
+#### Account-Scoped Role Templates
+- **Account Manager**: Account-level ticket and user management permissions
+- **Subsidiary Manager**: Account + subsidiary access with user management capabilities
+- **Account Viewer**: Read-only access to account information and tickets
+- **Enhanced Account User**: Existing permissions with role-based consistency
+
+#### API Infrastructure
+- **`/api/account-user-roles`**: Complete CRUD operations for AccountUser role assignments
+  - GET: Retrieve assignments with account filtering
+  - POST: Single and bulk role assignment with account context validation
+  - DELETE: Remove assignments with proper permission checks
+- **Enhanced `/api/roles`**: Updated to support `applicableTo` and `defaultScope` fields
+- **Permission Validation**: Account-aware permission checking throughout APIs
+
+#### User Interface Enhancements
+- **AccountUserRoleManager Component**: Comprehensive role assignment interface
+  - Account user selection with search and filtering
+  - Role assignment with scope configuration
+  - Visual feedback for assignments and scope levels
+  - Bulk assignment capabilities for efficiency
+- **Account Details Integration**: Added "User Roles" tab to account details page
+- **Permissions Page Enhancement**: New "Account Roles" tab with account selection
+- **Enhanced Role Creation**: Added applicableTo and defaultScope fields to role templates
+
+### Technical Features
+
+#### Scope-Aware Permission Resolution
+```typescript
+// Example permission checking with account context
+hasPermission(userId, {
+  resource: 'tickets',
+  action: 'update', 
+  scope: 'account',
+  accountId: 'target-account-id'
+})
+```
+
+#### Account Hierarchy Navigation
+- Recursive permission checking through account parent-child relationships
+- "Subsidiary" scope automatically grants access to child accounts
+- Efficient caching of account hierarchy for performance
+
+#### Role Template System
+- Quick template buttons with intelligent defaults:
+  - Account Manager: `applicableTo: "account"`, `defaultScope: "account"`  
+  - Subsidiary Manager: `applicableTo: "account"`, `defaultScope: "subsidiary"`
+  - Account Viewer: `applicableTo: "account"`, `defaultScope: "own"`
+- Template-based permission assignment with scope awareness
+
+#### Permission Inheritance Model
+1. **System-Level Roles**: Traditional admin/employee roles for system users
+2. **Account-Level Roles**: Customer user roles with account context
+3. **Direct Permissions**: Individual permission assignments (existing system)
+4. **Scope Resolution**: Hierarchical scope checking with account relationships
+
+### Use Cases Enabled
+
+#### Account Manager Scenario  
+- Can view/update tickets for all users in their account
+- Can create tickets on behalf of account users  
+- Can invite and manage other account users
+- Cannot access subsidiary accounts unless explicitly scoped
+- Account-level billing and reporting access
+
+#### Subsidiary Manager Scenario
+- All Account Manager permissions plus subsidiary access
+- Can manage users across subsidiary accounts
+- Can view consolidated reporting across account hierarchy
+- Permissions cascade down the account tree automatically
+- Cross-account user management capabilities
+
+#### Account User with Role-Based Permissions
+- Consistent permission sets through role templates
+- Reduced administrative overhead compared to individual permissions
+- Clear visibility into granted permissions through role assignments
+- Flexible scope adjustment per assignment
+
+### Database Impact
+- Added `AccountUserRole` table with proper foreign key constraints
+- Enhanced `RoleTemplate` with applicability and scope metadata
+- Updated `AccountUser` relations for role assignments
+- Maintained backward compatibility with existing permission tables
+- Optimized queries for account hierarchy traversal
+
+### Security Considerations
+- Account boundary enforcement prevents cross-account access
+- Permission scope validation at API and UI levels
+- Recursive hierarchy checks prevent infinite loops
+- Account context required for sensitive operations
+- Role assignment requires appropriate account permissions
+
+### Performance Optimizations
+- Efficient account hierarchy caching
+- Batch permission checking for bulk operations
+- Optimized database queries with proper indexing
+- Reduced API calls through comprehensive data loading
+
+This enhanced system provides enterprise-grade permission management with account-scoped roles, supporting complex organizational hierarchies while maintaining the simplicity and flexibility of the original role-based system.
+
 ## Role Management System & Bulk Permission Assignment (2025-01-31)
 
 ### Overview

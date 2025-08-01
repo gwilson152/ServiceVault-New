@@ -63,11 +63,29 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, description, permissions, isTemplate } = body;
+    const { name, description, permissions, isTemplate, applicableTo, defaultScope } = body;
 
     if (!name || !Array.isArray(permissions)) {
       return NextResponse.json(
         { error: 'Missing required fields: name, permissions' },
+        { status: 400 }
+      );
+    }
+
+    // Validate applicableTo field
+    const validApplicableTo = ['system', 'account', 'both'];
+    if (applicableTo && !validApplicableTo.includes(applicableTo)) {
+      return NextResponse.json(
+        { error: 'Invalid applicableTo value. Must be "system", "account", or "both"' },
+        { status: 400 }
+      );
+    }
+
+    // Validate defaultScope field
+    const validScopes = ['own', 'account', 'subsidiary'];
+    if (defaultScope && !validScopes.includes(defaultScope)) {
+      return NextResponse.json(
+        { error: 'Invalid defaultScope value. Must be "own", "account", or "subsidiary"' },
         { status: 400 }
       );
     }
@@ -91,6 +109,8 @@ export async function POST(request: NextRequest) {
         description,
         permissions,
         isTemplate: isTemplate || false,
+        applicableTo: applicableTo || 'system',
+        defaultScope: defaultScope || 'own'
       }
     });
 
@@ -191,7 +211,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { id, name, description, permissions, isTemplate } = body;
+    const { id, name, description, permissions, isTemplate, applicableTo, defaultScope } = body;
 
     if (!id) {
       return NextResponse.json(
@@ -231,6 +251,8 @@ export async function PUT(request: NextRequest) {
         ...(description !== undefined && { description }),
         ...(permissions && { permissions }),
         ...(isTemplate !== undefined && { isTemplate }),
+        ...(applicableTo && { applicableTo }),
+        ...(defaultScope && { defaultScope })
       }
     });
 
