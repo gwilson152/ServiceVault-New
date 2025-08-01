@@ -4,23 +4,7 @@ import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-interface Account {
-  id: string;
-  name: string;
-  accountType: string;
-  companyName?: string;
-  parentAccountId?: string | null;
-  parentAccount?: {
-    id: string;
-    name: string;
-    accountType: string;
-  } | null;
-  childAccounts?: {
-    id: string;
-    name: string;
-    accountType: string;
-  }[];
-}
+import type { Account } from "@/components/selectors/account-selector";
 
 interface User {
   id: string;
@@ -38,6 +22,7 @@ interface Ticket {
   accountId: string;
   assigneeId?: string;
   createdAt: string;
+  customFields?: Record<string, unknown>;
   account?: Account;
   assignee?: User;
   totalTimeSpent: number;
@@ -53,7 +38,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { HierarchicalAccountSelector } from "@/components/HierarchicalAccountSelector";
+import { AccountSelector } from "@/components/selectors/account-selector";
+import { TicketDetailModal } from "@/components/tickets/TicketDetailModal";
+import { QuickTimeEntry } from "@/components/time/QuickTimeEntry";
+import { QuickAddonEntry } from "@/components/tickets/QuickAddonEntry";
 import { 
   FileText, 
   Plus, 
@@ -80,6 +68,13 @@ export default function TicketsPage() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [customFields, setCustomFields] = useState<Array<{
+    name: string;
+    label: string;
+    type: string;
+    required?: boolean;
+    options?: string[];
+  }>>([]);
 
   // Form state for creating tickets
   const [title, setTitle] = useState("");
@@ -87,12 +82,17 @@ export default function TicketsPage() {
   const [priority, setPriority] = useState("MEDIUM");
   const [selectedAccount, setSelectedAccount] = useState("");
   const [assignedTo, setAssignedTo] = useState("");
+  const [customFieldValues, setCustomFieldValues] = useState<Record<string, unknown>>({});
   const [isCreating, setIsCreating] = useState(false);
 
   // Filter state
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterAccount, setFilterAccount] = useState("all");
   const [filterPriority, setFilterPriority] = useState("all");
+
+  // Modal state
+  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   // Data fetching functions
   const fetchTickets = async () => {
@@ -131,21 +131,41 @@ export default function TicketsPage() {
     }
   };
 
+  const fetchCustomFields = async () => {
+    try {
+      const response = await fetch("/api/settings?category=SYSTEM");
+      if (response.ok) {
+        const data = await response.json();
+        // Look for ticket custom fields in system settings
+        const ticketFieldsData = data["system.ticketCustomFields"];
+        if (ticketFieldsData && Array.isArray(ticketFieldsData)) {
+          setCustomFields(ticketFieldsData);
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching custom fields:", error);
+    }
+  };
+
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/");
     } else if (status === "authenticated") {
-      // Only employees and admins can access ticket management
+      // Handle different user roles
       const role = session.user?.role;
       if (role === "ACCOUNT_USER") {
-        router.push("/portal");
-      } else if (role !== "EMPLOYEE" && role !== "ADMIN") {
-        router.push("/dashboard");
-      } else {
-        // Load data
-        Promise.all([fetchTickets(), fetchAccounts(), fetchUsers()]).then(() => {
+        // Account users can view tickets but with restricted access
+        Promise.all([fetchTickets(), fetchAccounts(), fetchUsers(), fetchCustomFields()]).then(() => {
           setIsLoading(false);
         });
+      } else if (role === "EMPLOYEE" || role === "ADMIN") {
+        // Employees and admins have full access
+        Promise.all([fetchTickets(), fetchAccounts(), fetchUsers(), fetchCustomFields()]).then(() => {
+          setIsLoading(false);
+        });
+      } else {
+        // Other roles redirect to dashboard
+        router.push("/dashboard");
       }
     }
   }, [status, session, router]);
@@ -158,11 +178,15 @@ export default function TicketsPage() {
     );
   }
 
-  if (!session || session.user?.role === "CUSTOMER") {
+  if (!session) {
     return null;
   }
 
-  const isAdmin = session.user?.role === "ADMIN";
+  const userRole = session.user?.role;
+  const isAdmin = userRole === "ADMIN";
+  const isEmployee = userRole === "EMPLOYEE";
+  const canCreateTickets = isAdmin || isEmployee;
+  const canEditAllTickets = isAdmin || isEmployee;
 
   const handleCreateTicket = async () => {
     if (isCreating) return;
@@ -180,6 +204,7 @@ export default function TicketsPage() {
           priority,
           accountId: selectedAccount,
           assigneeId: assignedTo === "unassigned" ? null : assignedTo,
+          customFields: Object.keys(customFieldValues).length > 0 ? customFieldValues : undefined,
         }),
       });
 
@@ -190,6 +215,7 @@ export default function TicketsPage() {
         setPriority("MEDIUM");
         setSelectedAccount("");
         setAssignedTo("");
+        setCustomFieldValues({});
         setActiveTab("list");
         await fetchTickets();
       } else {
@@ -234,6 +260,20 @@ export default function TicketsPage() {
     }
   };
 
+  const handleViewTicket = (ticket: Ticket) => {
+    setSelectedTicket(ticket);
+    setIsModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setSelectedTicket(null);
+  };
+
+  const handleUpdateTicket = (updatedTicket: Ticket) => {
+    setTickets(prev => prev.map(t => t.id === updatedTicket.id ? updatedTicket : t));
+  };
+
   const filteredTickets = tickets.filter(ticket => {
     if (filterStatus !== "all" && ticket.status !== filterStatus) return false;
     if (filterAccount !== "all" && ticket.accountId !== filterAccount) return false;
@@ -246,6 +286,71 @@ export default function TicketsPage() {
     openTickets: tickets.filter(t => t.status === "OPEN").length,
     inProgressTickets: tickets.filter(t => t.status === "IN_PROGRESS").length,
     resolvedTickets: tickets.filter(t => t.status === "RESOLVED").length
+  };
+
+  const renderCustomFieldValue = (ticket: Ticket, field: { name: string; label: string; type: string; required?: boolean; options?: string[] }) => {
+    const value = ticket.customFields?.[field.name];
+    if (!value) return null;
+    
+    return (
+      <span className="text-sm text-muted-foreground">
+        <strong>{field.label}:</strong> {value}
+      </span>
+    );
+  };
+
+  const renderCustomFieldInput = (field: { name: string; label: string; type: string; required?: boolean; options?: string[] }) => {
+    const value = customFieldValues[field.name] || "";
+    
+    switch (field.type) {
+      case "text":
+        return (
+          <Input
+            value={value}
+            onChange={(e) => setCustomFieldValues(prev => ({
+              ...prev,
+              [field.name]: e.target.value
+            }))}
+            placeholder={field.label}
+            required={field.required}
+          />
+        );
+      case "textarea":
+        return (
+          <Textarea
+            value={value}
+            onChange={(e) => setCustomFieldValues(prev => ({
+              ...prev,
+              [field.name]: e.target.value
+            }))}
+            placeholder={field.label}
+            required={field.required}
+          />
+        );
+      case "select":
+        return (
+          <Select 
+            value={value} 
+            onValueChange={(newValue) => setCustomFieldValues(prev => ({
+              ...prev,
+              [field.name]: newValue
+            }))}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder={`Select ${field.label}`} />
+            </SelectTrigger>
+            <SelectContent>
+              {field.options?.map((option: string) => (
+                <SelectItem key={option} value={option}>
+                  {option}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        );
+      default:
+        return null;
+    }
   };
 
   return (
@@ -351,9 +456,11 @@ export default function TicketsPage() {
 
           {/* Main Content Tabs */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-            <TabsList className="grid w-full grid-cols-2">
+            <TabsList className={`grid w-full ${canCreateTickets ? 'grid-cols-2' : 'grid-cols-1'}`}>
               <TabsTrigger value="list">Ticket List</TabsTrigger>
-              <TabsTrigger value="create">Create Ticket</TabsTrigger>
+              {canCreateTickets && (
+                <TabsTrigger value="create">Create Ticket</TabsTrigger>
+              )}
             </TabsList>
 
             {/* Ticket List Tab */}
@@ -426,10 +533,12 @@ export default function TicketsPage() {
                       <p className="text-muted-foreground text-center mb-4">
                         No tickets match the selected filters.
                       </p>
-                      <Button onClick={() => setActiveTab("create")}>
-                        <Plus className="mr-2 h-4 w-4" />
-                        Create First Ticket
-                      </Button>
+                      {canCreateTickets && (
+                        <Button onClick={() => setActiveTab("create")}>
+                          <Plus className="mr-2 h-4 w-4" />
+                          Create First Ticket
+                        </Button>
+                      )}
                     </CardContent>
                   </Card>
                 ) : (
@@ -472,17 +581,45 @@ export default function TicketsPage() {
                                 </span>
                               )}
                             </div>
+
+                            {/* Custom Fields Display */}
+                            {ticket.customFields && Object.keys(ticket.customFields).length > 0 && (
+                              <div className="flex flex-wrap gap-4">
+                                {customFields.map((field) => (
+                                  renderCustomFieldValue(ticket, field)
+                                )).filter(Boolean)}
+                              </div>
+                            )}
                           </div>
 
                           <div className="flex gap-2">
-                            <Button variant="ghost" size="sm">
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              title="View details"
+                              onClick={() => handleViewTicket(ticket)}
+                            >
                               <Eye className="h-4 w-4" />
                             </Button>
-                            <Button variant="ghost" size="sm">
-                              <Edit className="h-4 w-4" />
-                            </Button>
+                            {canEditAllTickets && (
+                              <>
+                                <QuickTimeEntry
+                                  ticketId={ticket.id}
+                                  ticketTitle={ticket.title}
+                                  onTimeLogged={() => fetchTickets()}
+                                />
+                                <QuickAddonEntry
+                                  ticketId={ticket.id}
+                                  ticketTitle={ticket.title}
+                                  onAddonAdded={() => fetchTickets()}
+                                />
+                                <Button variant="ghost" size="sm" title="Edit ticket">
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                              </>
+                            )}
                             {isAdmin && (
-                              <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700">
+                              <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700" title="Delete ticket">
                                 <Trash2 className="h-4 w-4" />
                               </Button>
                             )}
@@ -496,7 +633,8 @@ export default function TicketsPage() {
             </TabsContent>
 
             {/* Create Ticket Tab */}
-            <TabsContent value="create" className="space-y-4">
+            {canCreateTickets && (
+              <TabsContent value="create" className="space-y-4">
               <Card>
                 <CardHeader>
                   <CardTitle>Create New Ticket</CardTitle>
@@ -532,11 +670,13 @@ export default function TicketsPage() {
 
                     <div className="space-y-2">
                       <Label htmlFor="ticket-account">Account</Label>
-                      <HierarchicalAccountSelector
+                      <AccountSelector
                         accounts={accounts}
                         value={selectedAccount}
                         onValueChange={setSelectedAccount}
                         placeholder="Select an account"
+                        enableFilters={true}
+                        enableGrouping={true}
                       />
                     </div>
 
@@ -569,6 +709,24 @@ export default function TicketsPage() {
                     />
                   </div>
 
+                  {/* Custom Fields */}
+                  {customFields.length > 0 && (
+                    <div className="space-y-4">
+                      <h4 className="text-sm font-medium">Custom Fields</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {customFields.map((field) => (
+                          <div key={field.name} className="space-y-2">
+                            <Label htmlFor={`custom-${field.name}`}>
+                              {field.label}
+                              {field.required && <span className="text-red-500 ml-1">*</span>}
+                            </Label>
+                            {renderCustomFieldInput(field)}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   <Button 
                     onClick={handleCreateTicket}
                     disabled={!title || !description || !selectedAccount || isCreating}
@@ -579,10 +737,23 @@ export default function TicketsPage() {
                   </Button>
                 </CardContent>
               </Card>
-            </TabsContent>
+              </TabsContent>
+            )}
           </Tabs>
         </div>
       </main>
+
+      {/* Ticket Detail Modal */}
+      <TicketDetailModal
+        ticket={selectedTicket}
+        isOpen={isModalOpen}
+        onClose={handleCloseModal}
+        onUpdate={handleUpdateTicket}
+        canEdit={canEditAllTickets}
+        accounts={accounts}
+        users={users}
+        customFields={customFields}
+      />
     </div>
   );
 }

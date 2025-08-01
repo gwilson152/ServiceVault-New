@@ -17,7 +17,7 @@ export async function GET(
     // Check if ticket exists and user has access
     const ticket = await prisma.ticket.findUnique({
       where: { id: params.id },
-      include: { customer: true }
+      include: { account: true }
     });
 
     if (!ticket) {
@@ -25,13 +25,13 @@ export async function GET(
     }
 
     // Role-based access control
-    if (session.user?.role === "CUSTOMER") {
+    if (session.user?.role === "ACCOUNT_USER") {
       const user = await prisma.user.findUnique({
         where: { id: session.user.id },
-        include: { customer: true }
+        include: { accountUser: { include: { account: true } } }
       });
       
-      if (!user?.customer || ticket.customerId !== user.customer.id) {
+      if (!user?.accountUser?.account || ticket.accountId !== user.accountUser.account.id) {
         return NextResponse.json({ error: "Access denied" }, { status: 403 });
       }
     }
@@ -75,7 +75,7 @@ export async function POST(
     // Check if ticket exists and user has access
     const ticket = await prisma.ticket.findUnique({
       where: { id: params.id },
-      include: { customer: true }
+      include: { account: true }
     });
 
     if (!ticket) {
@@ -83,17 +83,17 @@ export async function POST(
     }
 
     // Role-based access control
-    if (session.user?.role === "CUSTOMER") {
+    if (session.user?.role === "ACCOUNT_USER") {
       const user = await prisma.user.findUnique({
         where: { id: session.user.id },
-        include: { customer: true }
+        include: { accountUser: { include: { account: true } } }
       });
       
-      if (!user?.customer || ticket.customerId !== user.customer.id) {
+      if (!user?.accountUser?.account || ticket.accountId !== user.accountUser.account.id) {
         return NextResponse.json({ error: "Access denied" }, { status: 403 });
       }
 
-      // Check if customer is allowed to add addons (this would be configured in permissions)
+      // Check if account user is allowed to add addons (this would be configured in permissions)
       // For now, we'll allow it but this should be permission-controlled
     }
 

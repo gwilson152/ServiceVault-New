@@ -17,16 +17,17 @@ export async function GET(
     const ticket = await prisma.ticket.findUnique({
       where: { id: params.id },
       include: {
-        customer: true,
-        assignedUser: true,
-        createdByUser: true,
+        account: true,
+        assignee: true,
+        creator: true,
+        accountUserCreator: true,
         timeEntries: {
           include: {
             user: true,
           },
           orderBy: { date: "desc" },
         },
-        ticketAddons: true,
+        addons: true,
       },
     });
 
@@ -35,27 +36,27 @@ export async function GET(
     }
 
     // Role-based access control
-    if (session.user?.role === "CUSTOMER") {
+    if (session.user?.role === "ACCOUNT_USER") {
       const user = await prisma.user.findUnique({
         where: { id: session.user.id },
-        include: { customer: true }
+        include: { accountUser: { include: { account: true } } }
       });
       
-      if (!user?.customer || ticket.customerId !== user.customer.id) {
+      if (!user?.accountUser?.account || ticket.accountId !== user.accountUser.account.id) {
         return NextResponse.json({ error: "Access denied" }, { status: 403 });
       }
     }
 
     // Calculate aggregated data
     const totalTimeSpent = ticket.timeEntries.reduce((sum, entry) => sum + entry.hours, 0);
-    const totalAddonCost = ticket.ticketAddons.reduce((sum, addon) => sum + (addon.price * addon.quantity), 0);
+    const totalAddonCost = ticket.addons.reduce((sum, addon) => sum + (addon.price * addon.quantity), 0);
 
     const ticketWithStats = {
       ...ticket,
       totalTimeSpent,
       totalAddonCost,
       timeEntriesCount: ticket.timeEntries.length,
-      addonsCount: ticket.ticketAddons.length,
+      addonsCount: ticket.addons.length,
     };
 
     return NextResponse.json(ticketWithStats);
@@ -68,7 +69,7 @@ export async function GET(
   }
 }
 
-export async function PUT(
+export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
@@ -85,14 +86,15 @@ export async function PUT(
       description, 
       priority, 
       status, 
-      assignedTo, 
+      accountId,
+      assigneeId, 
       customFields 
     } = body;
 
     // Check if ticket exists and user has permission
     const existingTicket = await prisma.ticket.findUnique({
       where: { id: params.id },
-      include: { customer: true }
+      include: { account: true }
     });
 
     if (!existingTicket) {
@@ -100,46 +102,65 @@ export async function PUT(
     }
 
     // Role-based access control
-    if (session.user?.role === "CUSTOMER") {
+    if (session.user?.role === "ACCOUNT_USER") {
       const user = await prisma.user.findUnique({
         where: { id: session.user.id },
-        include: { customer: true }
+        include: { accountUser: { include: { account: true } } }
       });
       
-      if (!user?.customer || existingTicket.customerId !== user.customer.id) {
+      if (!user?.accountUser?.account || existingTicket.accountId !== user.accountUser.account.id) {
         return NextResponse.json({ error: "Access denied" }, { status: 403 });
       }
 
-      // Customers can only update certain fields
-      if (status || assignedTo) {
+      // Account users can only update certain fields
+      if (status || assigneeId || accountId) {
         return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
       }
     }
 
+    // Build update data object
+    const updateData: Record<string, unknown> = {};
+    if (title !== undefined) updateData.title = title;
+    if (description !== undefined) updateData.description = description;
+    if (priority !== undefined) updateData.priority = priority;
+    if (status !== undefined) updateData.status = status;
+    if (accountId !== undefined) updateData.accountId = accountId;
+    if (assigneeId !== undefined) updateData.assigneeId = assigneeId;
+    if (customFields !== undefined) updateData.customFields = customFields;
+
     const ticket = await prisma.ticket.update({
       where: { id: params.id },
       data: {
-        title: title !== undefined ? title : undefined,
-        description: description !== undefined ? description : undefined,
-        priority: priority !== undefined ? priority : undefined,
-        status: status !== undefined ? status : undefined,
-        assignedTo: assignedTo !== undefined ? assignedTo : undefined,
-        customFields: customFields !== undefined ? customFields : undefined,
+        ...updateData,
         updatedAt: new Date(),
       },
       include: {
-        customer: true,
-        assignedUser: true,
+        account: true,
+        assignee: true,
+        creator: true,
+        accountUserCreator: true,
         timeEntries: {
           include: {
             user: true,
           },
         },
-        ticketAddons: true,
+        addons: true,
       },
     });
 
-    return NextResponse.json(ticket);
+    // Calculate aggregated data
+    const totalTimeSpent = ticket.timeEntries.reduce((sum, entry) => sum + entry.hours, 0);
+    const totalAddonCost = ticket.addons.reduce((sum, addon) => sum + (addon.price * addon.quantity), 0);
+
+    const ticketWithStats = {
+      ...ticket,
+      totalTimeSpent,
+      totalAddonCost,
+      timeEntriesCount: ticket.timeEntries.length,
+      addonsCount: ticket.addons.length,
+    };
+
+    return NextResponse.json(ticketWithStats);
   } catch (error) {
     console.error("Error updating ticket:", error);
     return NextResponse.json(

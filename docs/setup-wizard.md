@@ -5,9 +5,8 @@ The Service Vault application includes a comprehensive initial configuration wiz
 ## Overview
 
 The setup wizard is automatically triggered when:
-- No users exist in the database
-- No admin users are found in the system
-- The `system.setupCompleted` setting is not set to `true`
+- **No users exist in the database** (primary condition)
+- This ensures the wizard only appears on completely fresh installations
 
 ## Architecture
 
@@ -33,17 +32,19 @@ The setup wizard is automatically triggered when:
 
 **Setup Status Detection** (`src/app/api/setup/status/route.ts`)
 - `GET /api/setup/status` - Returns setup requirement status
-- Checks for existing admin users and setup completion setting
+- Checks for existing users in the database (any users, not just admins)
 - Returns `SetupStatus` object with `isSetupRequired` boolean
+- Setup required only when no users exist in the database
 
 **Setup Completion** (`src/app/api/setup/complete/route.ts`)  
 - `POST /api/setup/complete` - Completes the initial setup process
 - Validates all setup data using type-safe validation functions
+- Checks for existing users before creating admin account (prevents duplicates)
 - Creates admin user with encrypted password
 - Saves all configuration settings to database
 - Sets default security and feature settings
 - Marks setup as completed
-- Includes cleanup on failure
+- Includes cleanup on failure with user-friendly error messages
 
 **Settings Management** (`src/app/api/settings/route.ts`)
 - `GET /api/settings` - Retrieve settings (with optional category filter)
@@ -94,11 +95,12 @@ The setup wizard is automatically triggered when:
 
 **Email Configuration Step** (`src/components/setup/steps/EmailConfigStep.tsx`)
 - Toggle for enabling email notifications
-- Complete SMTP configuration (host, port, security, credentials)
+- Complete SMTP configuration (host, port, security)
+- **Optional SMTP credentials** (username/password not required for all servers)
 - From address and name settings
 - Connection testing functionality (planned)
-- Common provider examples (Gmail, Outlook, Yahoo)
-- Security recommendations
+- Common provider examples with authentication requirements
+- Support for both authenticated and unauthenticated SMTP servers
 
 **Company Information Step** (`src/components/setup/steps/CompanyInfoStep.tsx`)
 - Company name and address (required)
@@ -185,9 +187,11 @@ model Setting {
 ### Current Security Features
 - Admin password hashing with bcrypt (10 rounds)
 - Admin-only API access for settings and setup
-- Setup completion prevents re-running setup
-- Input validation on all setup data
+- **Duplicate email detection** prevents setup conflicts
+- Setup only available on fresh installations (no users exist)
+- Input validation on all setup data with user-friendly error messages
 - Cleanup of partial data on setup failure
+- Browser-compliant password fields with proper autocomplete attributes
 
 ### Planned Security Enhancements
 - Encryption of sensitive settings (SMTP passwords, API keys)
@@ -199,25 +203,28 @@ model Setting {
 
 1. **User visits login page** (`/`)
 2. **System checks setup status** via `/api/setup/status`
-3. **If setup required**: Redirect to `/setup`
-4. **Setup wizard guides through 6 steps**:
+3. **If no users exist in database**: Redirect to `/setup`
+4. **If users exist**: Show normal login page
+5. **Setup wizard guides through 6 steps**:
    - Welcome and overview
-   - Admin account creation
+   - Admin account creation (with duplicate email detection)
    - System configuration  
-   - Email settings (optional)
+   - Email settings (SMTP credentials optional)
    - Company information
    - Review and confirmation
-5. **Setup completion** via `/api/setup/complete`
-6. **Redirect to login** with success message
-7. **User can sign in** with created admin account
+6. **Setup completion** via `/api/setup/complete`
+7. **Redirect to login** with success message
+8. **User can sign in** with created admin account
 
 ## Error Handling
 
 ### Setup Wizard Errors
 - Form validation errors shown inline with icons
+- **Duplicate email detection** with clear resolution guidance
 - Network errors displayed with retry options
 - Setup completion errors with detailed messages
 - Cleanup of partial data on critical failures
+- User-friendly error messages for all failure scenarios
 
 ### API Error Responses
 - Structured error responses with details

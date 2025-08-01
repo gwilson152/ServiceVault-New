@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-export async function PUT(
+export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string; addonId: string } }
 ) {
@@ -29,7 +29,7 @@ export async function PUT(
       where: { id: params.addonId },
       include: { 
         ticket: { 
-          include: { customer: true } 
+          include: { account: true } 
         } 
       }
     });
@@ -43,13 +43,13 @@ export async function PUT(
     }
 
     // Role-based access control
-    if (session.user?.role === "CUSTOMER") {
+    if (session.user?.role === "ACCOUNT_USER") {
       const user = await prisma.user.findUnique({
         where: { id: session.user.id },
-        include: { customer: true }
+        include: { accountUser: { include: { account: true } } }
       });
       
-      if (!user?.customer || addon.ticket.customerId !== user.customer.id) {
+      if (!user?.accountUser?.account || addon.ticket.accountId !== user.accountUser.account.id) {
         return NextResponse.json({ error: "Access denied" }, { status: 403 });
       }
     }
@@ -90,7 +90,7 @@ export async function DELETE(
       where: { id: params.addonId },
       include: { 
         ticket: { 
-          include: { customer: true } 
+          include: { account: true } 
         } 
       }
     });
@@ -104,13 +104,13 @@ export async function DELETE(
     }
 
     // Role-based access control
-    if (session.user?.role === "CUSTOMER") {
+    if (session.user?.role === "ACCOUNT_USER") {
       const user = await prisma.user.findUnique({
         where: { id: session.user.id },
-        include: { customer: true }
+        include: { accountUser: { include: { account: true } } }
       });
       
-      if (!user?.customer || addon.ticket.customerId !== user.customer.id) {
+      if (!user?.accountUser?.account || addon.ticket.accountId !== user.accountUser.account.id) {
         return NextResponse.json({ error: "Access denied" }, { status: 403 });
       }
     }

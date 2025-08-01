@@ -83,7 +83,33 @@ Settings stored in flexible key-value structure supporting:
 - Setup status detection accuracy
 - Settings CRUD operations verification
 
-This implementation provides a professional, secure first-run experience that properly initializes Service Vault installations with all necessary configuration while maintaining security best practices.
+### Recent Updates and Fixes
+
+#### Setup Detection Logic Refinement
+- **Fixed setup trigger condition**: Setup wizard now only appears when **no users exist** in database
+- Previously checked for admin users and settings; now uses simple user count check
+- Ensures setup wizard only runs on completely fresh installations
+- Updated both `/api/setup/status` endpoint and `settingsService.isSetupRequired()` for consistency
+
+#### SMTP Configuration Improvements  
+- **Made SMTP credentials optional** (username/password not required)
+- Updated validation to support unauthenticated SMTP servers
+- Enhanced UI with clear guidance about when authentication is needed
+- Updated configuration tips to include local/internal server examples
+
+#### Enhanced Error Handling
+- **Duplicate email detection** prevents setup conflicts
+- Added pre-flight check for existing users before account creation
+- User-friendly error messages with actionable resolution guidance
+- Improved form validation with proper browser autocomplete attributes
+
+#### Security and UX Enhancements
+- Fixed infinite re-render issues with proper React memoization
+- Added proper form elements for password fields (browser compliance)
+- Enhanced error handling throughout setup flow
+- Comprehensive input validation with helpful user feedback
+
+This implementation provides a professional, secure first-run experience that properly initializes Service Vault installations with all necessary configuration while maintaining security best practices and handling edge cases gracefully.
 
 ## Customer to Account Refactoring (2025-01-31)
 
