@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { signIn } from "next-auth/react";
+import { signIn, useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { SetupStatus } from "@/types/setup";
 
@@ -14,11 +14,22 @@ export default function LoginPage() {
   const [setupComplete, setSetupComplete] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { data: session, status } = useSession();
+
+  // Redirect to dashboard if user is already authenticated
+  useEffect(() => {
+    if (status === "authenticated" && session) {
+      router.push("/dashboard");
+      return;
+    }
+  }, [session, status, router]);
 
   // Check setup status on component mount
   useEffect(() => {
-    checkSetupStatus();
-  }, []);
+    if (status !== "loading") {
+      checkSetupStatus();
+    }
+  }, [status]);
 
   // Show setup complete message if redirected from setup
   useEffect(() => {
@@ -77,8 +88,8 @@ export default function LoginPage() {
     }
   };
 
-  // Show loading spinner while checking setup status
-  if (isCheckingSetup) {
+  // Show loading spinner while checking session or setup status
+  if (status === "loading" || isCheckingSetup) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
         <div className="text-center">
