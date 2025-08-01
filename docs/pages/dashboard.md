@@ -149,7 +149,7 @@ GET /api/activity/recent
 ```typescript
 interface DashboardStats {
   activeTickets: number;
-  hoursThisWeek: number;
+  timeThisWeek: number; // in minutes
   totalCustomers: number;
   monthlyRevenue: string;
 }

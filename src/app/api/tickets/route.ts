@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { generateTicketNumber } from "@/lib/ticket-number-generator";
 
 export async function GET(request: NextRequest) {
   try {
@@ -65,7 +66,7 @@ export async function GET(request: NextRequest) {
     // Calculate aggregated data for each ticket
     const ticketsWithStats = tickets.map(ticket => ({
       ...ticket,
-      totalTimeSpent: ticket.timeEntries.reduce((sum, entry) => sum + entry.hours, 0),
+      totalTimeSpent: ticket.timeEntries.reduce((sum, entry) => sum + entry.minutes, 0),
       totalAddonCost: ticket.addons.reduce((sum, addon) => sum + (addon.price * addon.quantity), 0),
       timeEntriesCount: ticket.timeEntries.length,
       addonsCount: ticket.addons.length,
@@ -136,6 +137,19 @@ export async function POST(request: NextRequest) {
 
     // Start transaction
     const result = await prisma.$transaction(async (tx) => {
+      // Get account name for ticket number generation
+      const account = await tx.account.findUnique({
+        where: { id: finalAccountId },
+        select: { name: true }
+      });
+
+      if (!account) {
+        throw new Error("Account not found");
+      }
+
+      // Generate ticket number
+      const ticketNumber = await generateTicketNumber(account.name);
+
       // Create ticket
       const ticket = await tx.ticket.create({
         data: {
@@ -143,6 +157,7 @@ export async function POST(request: NextRequest) {
           description,
           priority: priority || "MEDIUM",
           status: "OPEN",
+          ticketNumber,
           accountId: finalAccountId,
           assigneeId: assigneeId || null,
           creatorId: creatorId,

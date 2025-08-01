@@ -183,15 +183,15 @@ export const SETTING_DEFINITIONS: Record<string, SettingDefinition> = {
     key: 'email.smtpUser',
     type: 'string',
     category: SettingsCategory.EMAIL,
-    required: true,
-    description: 'SMTP authentication username'
+    required: false,
+    description: 'SMTP authentication username (optional for some servers)'
   },
   'email.smtpPassword': {
     key: 'email.smtpPassword',
     type: 'encrypted',
     category: SettingsCategory.EMAIL,
-    required: true,
-    description: 'SMTP authentication password',
+    required: false,
+    description: 'SMTP authentication password (optional for some servers)',
     encrypted: true
   },
   'email.fromAddress': {

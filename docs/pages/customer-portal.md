@@ -132,7 +132,7 @@ interface CustomerTicket {
   updatedAt: string;    // Last modification
   assignee: string;     // Assigned staff member
   category: string;     // Ticket category
-  timeSpent: number;    // Hours logged
+  timeSpent: number;    // Minutes logged
   comments: number;     // Comment count
 }
 ```
@@ -192,7 +192,7 @@ PUT /api/portal/profile
 interface PortalStats {
   openTickets: number;
   totalTickets: number;
-  hoursLogged: number;
+  timeLogged: number; // in minutes
   lastActivity: string;
 }
 

@@ -86,6 +86,12 @@ export async function GET(request: NextRequest) {
           },
           account: {
             select: { id: true, name: true }
+          },
+          billingRate: {
+            select: { id: true, name: true, rate: true }
+          },
+          approver: {
+            select: { id: true, name: true, email: true }
           }
         }
       }),
@@ -124,11 +130,22 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { ticketId, accountId, hours, description, date, noCharge } = body;
+    const { ticketId, accountId, minutes, hours, description, date, time, noCharge, billingRateId } = body;
+
+    // Handle backward compatibility: if hours is provided, convert to minutes
+    let timeInMinutes: number;
+    if (minutes !== undefined) {
+      timeInMinutes = parseInt(minutes.toString());
+    } else if (hours !== undefined) {
+      // Convert hours to minutes for backward compatibility
+      timeInMinutes = Math.round(parseFloat(hours.toString()) * 60);
+    } else {
+      return NextResponse.json({ error: "Either minutes or hours must be provided" }, { status: 400 });
+    }
 
     // Validation
-    if (!hours || hours <= 0) {
-      return NextResponse.json({ error: "Hours must be greater than 0" }, { status: 400 });
+    if (!timeInMinutes || timeInMinutes <= 0) {
+      return NextResponse.json({ error: "Time must be greater than 0 minutes" }, { status: 400 });
     }
 
     if (!description || description.trim().length === 0) {
@@ -156,7 +173,7 @@ export async function POST(request: NextRequest) {
       // Check access permissions
       if (session.user.role === 'EMPLOYEE') {
         // Employees can only log time on tickets assigned to them or in general
-        const hasAccess = ticket.assignedToId === session.user.id || !ticket.assignedToId;
+        const hasAccess = ticket.assigneeId === session.user.id || !ticket.assigneeId;
         if (!hasAccess) {
           return NextResponse.json({ error: "Access denied to this ticket" }, { status: 403 });
         }
@@ -180,16 +197,34 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Get billing rate details if provided
+    let billingRateName = null;
+    let billingRateValue = null;
+    
+    if (billingRateId) {
+      const billingRate = await prisma.billingRate.findUnique({
+        where: { id: billingRateId }
+      });
+      
+      if (billingRate) {
+        billingRateName = billingRate.name;
+        billingRateValue = billingRate.rate;
+      }
+    }
+
     // Create time entry
     const timeEntry = await prisma.timeEntry.create({
       data: {
         ticketId: ticketId || null,
         accountId: accountId || null,
         userId: session.user.id,
-        hours: parseFloat(hours.toString()),
+        minutes: timeInMinutes,
         description: description.trim(),
-        date: date ? new Date(date) : new Date(),
-        noCharge: Boolean(noCharge)
+        date: date && time ? new Date(`${date}T${time}:00`) : date ? new Date(date) : new Date(),
+        noCharge: Boolean(noCharge),
+        billingRateId: billingRateId || null,
+        billingRateName,
+        billingRateValue
       },
       include: {
         user: {
@@ -206,6 +241,12 @@ export async function POST(request: NextRequest) {
         },
         account: {
           select: { id: true, name: true }
+        },
+        billingRate: {
+          select: { id: true, name: true, rate: true }
+        },
+        approver: {
+          select: { id: true, name: true, email: true }
         }
       }
     });

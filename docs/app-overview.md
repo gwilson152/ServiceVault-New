@@ -26,17 +26,17 @@ The app is a self-hosted time management and invoicing system for internal busin
     - Automatic conversion to manual entry when stopped.
     - Second-by-second updates with large timer display.
   - **Manual Time Entry**:
-    - Form: Shadcn/UI `<Form>`, `<Select>` for ticket, `<Input>` for hours (decimal), date picker, `<Textarea>` for description.
-    - Validation: Ensure ticket exists, hours are valid, description provided.
+    - Form: Shadcn/UI `<Form>`, `<Select>` for ticket, `<Input>` for minutes (integer), date picker, `<Textarea>` for description.
+    - Validation: Ensure ticket exists, minutes are valid, description provided.
     - No-charge toggle for non-billable entries.
     - Store in `TimeEntries` with proper billing rate application.
   - **Time Entry Management**:
     - Comprehensive list of all time entries with filtering.
     - Filter by period (today, week, month, all time) and specific tickets.
     - Edit and delete functionality for existing entries.
-    - Summary statistics showing total hours, billable hours, and revenue.
+    - Summary statistics showing total time, billable time, and revenue.
   - **Statistics Dashboard**:
-    - Real-time metrics: today's hours, weekly hours, monthly hours, billable hours.
+    - Real-time metrics: today's time, weekly time, monthly time, billable time.
     - Color-coded cards with icons for quick visual reference.
 - **Permissions**: Admins and employees can access; customers cannot.
 - **UI**: Three-tab interface with responsive design and comprehensive documentation.

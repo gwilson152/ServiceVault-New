@@ -165,7 +165,6 @@ export async function POST(request: Request) {
       console.log("🧹 Cleaning up partial setup data...");
       
       // Delete any admin users created during this request
-      const setupData: SetupData = await request.json();
       if (setupData.adminAccount?.email) {
         await prisma.user.deleteMany({
           where: { 

@@ -12,11 +12,11 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { customerId, startDate, endDate, includeUnbilledOnly = true } = body;
+    const { accountId, startDate, endDate, includeUnbilledOnly = true } = body;
 
-    if (!customerId) {
+    if (!accountId) {
       return NextResponse.json(
-        { error: "Customer ID is required" },
+        { error: "Account ID is required" },
         { status: 400 }
       );
     }
@@ -30,10 +30,11 @@ export async function POST(request: NextRequest) {
       dateFilter.lte = new Date(endDate);
     }
 
-    // Get unbilled time entries
+    // Get unbilled time entries (only approved entries)
     const timeEntryWhere: Record<string, unknown> = {
-      ticket: { customerId },
+      ticket: { accountId },
       noCharge: false,
+      isApproved: true, // Only include approved time entries
     };
 
     if (includeUnbilledOnly) {
@@ -55,7 +56,7 @@ export async function POST(request: NextRequest) {
 
     // Get unbilled ticket addons
     const addonWhere: Record<string, unknown> = {
-      ticket: { customerId },
+      ticket: { accountId },
     };
 
     if (includeUnbilledOnly) {
@@ -83,7 +84,7 @@ export async function POST(request: NextRequest) {
 
     // Calculate totals
     const timeTotal = timeEntries.reduce((sum, entry) => {
-      return sum + (entry.hours * entry.billingRate);
+      return sum + ((entry.minutes / 60) * entry.billingRate);
     }, 0);
 
     const addonTotal = ticketAddons.reduce((sum, addon) => {
@@ -109,29 +110,45 @@ export async function POST(request: NextRequest) {
       const invoice = await tx.invoice.create({
         data: {
           invoiceNumber,
-          customerId,
-          description: `Generated invoice ${periodDesc}`,
+          accountId,
+          notes: `Generated invoice ${periodDesc}`,
           subtotal,
-          taxAmount,
+          tax: taxAmount,
           total,
           status: "DRAFT",
-          createdBy: session.user.id,
+          creatorId: session.user.id,
         },
       });
 
-      // Connect time entries
+      // Create invoice items from time entries
       if (timeEntries.length > 0) {
-        await tx.timeEntry.updateMany({
-          where: { id: { in: timeEntries.map(e => e.id) } },
-          data: { invoiceId: invoice.id },
+        const timeEntryItems = timeEntries.map(entry => ({
+          invoiceId: invoice.id,
+          timeEntryId: entry.id,
+          description: entry.description || 'Time entry',
+          quantity: entry.minutes / 60,
+          rate: entry.billingRateValue || 0,
+          amount: (entry.minutes / 60) * (entry.billingRateValue || 0),
+        }));
+
+        await tx.invoiceItem.createMany({
+          data: timeEntryItems,
         });
       }
 
-      // Connect ticket addons
+      // Create invoice items from ticket addons
       if (ticketAddons.length > 0) {
-        await tx.ticketAddon.updateMany({
-          where: { id: { in: ticketAddons.map(a => a.id) } },
-          data: { invoiceId: invoice.id },
+        const addonItems = ticketAddons.map(addon => ({
+          invoiceId: invoice.id,
+          ticketAddonId: addon.id,
+          description: addon.name,
+          quantity: addon.quantity,
+          rate: addon.price,
+          amount: addon.quantity * addon.price,
+        }));
+
+        await tx.invoiceItem.createMany({
+          data: addonItems,
         });
       }
 
@@ -142,16 +159,20 @@ export async function POST(request: NextRequest) {
     const invoice = await prisma.invoice.findUnique({
       where: { id: result.id },
       include: {
-        customer: true,
-        timeEntries: {
+        account: true,
+        items: {
           include: {
-            ticket: true,
-            user: true,
-          },
-        },
-        ticketAddons: {
-          include: {
-            ticket: true,
+            timeEntry: {
+              include: {
+                ticket: true,
+                user: true,
+              },
+            },
+            ticketAddon: {
+              include: {
+                ticket: true,
+              },
+            },
           },
         },
       },

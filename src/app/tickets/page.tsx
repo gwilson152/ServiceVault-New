@@ -15,6 +15,7 @@ interface User {
 
 interface Ticket {
   id: string;
+  ticketNumber: string;
   title: string;
   description: string;
   status: string;
@@ -57,6 +58,7 @@ import {
   Trash2,
   Eye
 } from "lucide-react";
+import { formatMinutes } from "@/lib/time-utils";
 
 export default function TicketsPage() {
   const { data: session, status } = useSession();
@@ -549,7 +551,7 @@ export default function TicketsPage() {
                           <div className="flex-1 space-y-3">
                             <div className="flex items-center gap-2">
                               {getStatusIcon(ticket.status)}
-                              <span className="font-medium text-lg">{ticket.id}</span>
+                              <span className="font-medium text-lg">{ticket.ticketNumber}</span>
                               <Badge variant={getStatusColor(ticket.status)}>
                                 {ticket.status}
                               </Badge>
@@ -572,7 +574,7 @@ export default function TicketsPage() {
                             <div className="flex items-center gap-4 text-sm">
                               <span className="flex items-center gap-1">
                                 <Clock className="h-3 w-3" />
-                                {ticket.totalTimeSpent}h ({ticket.timeEntriesCount} entries)
+                                {formatMinutes(ticket.totalTimeSpent)} ({ticket.timeEntriesCount} entries)
                               </span>
                               {ticket.totalAddonCost > 0 && (
                                 <span className="flex items-center gap-1">

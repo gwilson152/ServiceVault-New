@@ -83,7 +83,7 @@ export async function GET(
     const totals = await prisma.timeEntry.aggregate({
       where,
       _sum: {
-        hours: true,
+        minutes: true,
       },
     });
 
@@ -93,7 +93,7 @@ export async function GET(
         noCharge: false,
       },
       _sum: {
-        hours: true,
+        minutes: true,
       },
     });
 
@@ -106,9 +106,9 @@ export async function GET(
         pages: Math.ceil(total / limit),
       },
       totals: {
-        totalHours: totals._sum.hours || 0,
-        billableHours: billableTotals._sum.hours || 0,
-        nonBillableHours: (totals._sum.hours || 0) - (billableTotals._sum.hours || 0),
+        totalMinutes: totals._sum.minutes || 0,
+        billableMinutes: billableTotals._sum.minutes || 0,
+        nonBillableMinutes: (totals._sum.minutes || 0) - (billableTotals._sum.minutes || 0),
       }
     });
 
@@ -136,16 +136,16 @@ export async function POST(
     const body = await request.json();
     const { 
       description, 
-      hours, 
+      minutes, 
       date, 
       noCharge, 
       ticketId, 
       userId 
     } = body;
 
-    if (!description || !hours || !userId) {
+    if (!description || !minutes || !userId) {
       return NextResponse.json(
-        { error: 'Missing required fields: description, hours, userId' },
+        { error: 'Missing required fields: description, minutes, userId' },
         { status: 400 }
       );
     }
@@ -193,7 +193,7 @@ export async function POST(
     const timeEntry = await prisma.timeEntry.create({
       data: {
         description,
-        hours: parseFloat(hours),
+        minutes: parseInt(minutes),
         date: date ? new Date(date) : new Date(),
         noCharge: noCharge || false,
         ticketId: ticketId || null,

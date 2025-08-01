@@ -59,11 +59,12 @@ The Service Vault application uses SQLite as the primary database with Prisma as
 #### TimeEntry
 - **Purpose**: Track time spent on tickets
 - **Key Fields**:
-  - `hours` (decimal for precise tracking)
+  - `minutes` (integer for precise tracking, stored in minutes)
   - `description` (work performed)
   - `noCharge` (exclude from billing)
   - `date` (when work was performed)
 - **Relations**: Belongs to Ticket and User
+- **Note**: Time is stored in minutes for better precision and user experience
 
 ### Billing & Invoicing
 

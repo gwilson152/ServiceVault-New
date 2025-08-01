@@ -13,6 +13,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AccountSelector } from "@/components/selectors/account-selector";
 import { Switch } from "@/components/ui/switch";
+import { useTimeTracking } from "@/components/time/TimeTrackingProvider";
+import { formatMinutes } from "@/lib/time-utils";
 import { 
   Clock, 
   Plus, 
@@ -37,22 +39,33 @@ export default function TimeTrackingPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("track");
   
-  // Timer state
-  const [isTimerRunning, setIsTimerRunning] = useState(false);
-  const [timerSeconds, setTimerSeconds] = useState(0);
-  const [currentTicket, setCurrentTicket] = useState<string>("");
+  // Use TimeTrackingProvider instead of local timer state
+  const { 
+    isTimerRunning, 
+    timerSeconds, 
+    currentTicketId, 
+    currentTicketTitle,
+    activeTimer,
+    startTimer: startTimerProvider,
+    pauseTimer,
+    resumeTimer,
+    stopTimer: stopTimerProvider,
+    formatTime
+  } = useTimeTracking();
   
   // Form state
   const [entryType, setEntryType] = useState<"ticket" | "account">("ticket");
   const [selectedTicket, setSelectedTicket] = useState<string>("");
   const [selectedAccount, setSelectedAccount] = useState<string>("");
-  const [hours, setHours] = useState("");
+  const [minutes, setMinutes] = useState("");
   const [description, setDescription] = useState("");
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [noCharge, setNoCharge] = useState(false);
+  const [selectedBillingRate, setSelectedBillingRate] = useState<string>("none");
   
   // Data state
   const [accounts, setAccounts] = useState<Array<{id: string; name: string; accountType: string; parentAccountId?: string | null}>>([]);
+  const [billingRates, setBillingRates] = useState<Array<{id: string; name: string; rate: number; description?: string}>>([]);
 
   // Filter state
   const [filterPeriod, setFilterPeriod] = useState("week");
@@ -70,6 +83,18 @@ export default function TimeTrackingPage() {
     }
   };
 
+  const fetchBillingRates = async () => {
+    try {
+      const response = await fetch('/api/billing/rates');
+      if (response.ok) {
+        const data = await response.json();
+        setBillingRates(data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching billing rates:', error);
+    }
+  };
+
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/");
@@ -81,20 +106,12 @@ export default function TimeTrackingPage() {
       } else {
         setIsLoading(false);
         fetchAccounts();
+        fetchBillingRates();
       }
     }
   }, [status, session, router]);
 
-  // Timer effect
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (isTimerRunning) {
-      interval = setInterval(() => {
-        setTimerSeconds(prev => prev + 1);
-      }, 1000);
-    }
-    return () => clearInterval(interval);
-  }, [isTimerRunning]);
+  // Timer functions are now handled by TimeTrackingProvider
 
   if (status === "loading" || isLoading) {
     return (
@@ -154,34 +171,30 @@ export default function TimeTrackingPage() {
     },
   ];
 
-  const formatTime = (seconds: number) => {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
 
-  const handleStartTimer = () => {
-    if (currentTicket) {
-      setIsTimerRunning(true);
+  const handleStartTimer = async () => {
+    if (selectedTicket) {
+      const ticketTitle = mockTickets.find(t => t.id === selectedTicket)?.title || "Unknown Ticket";
+      try {
+        await startTimerProvider(selectedTicket, ticketTitle);
+      } catch (error) {
+        console.error('Failed to start timer:', error);
+      }
     }
   };
 
-  const handlePauseTimer = () => {
-    setIsTimerRunning(false);
-  };
-
-  const handleStopTimer = () => {
-    setIsTimerRunning(false);
-    if (timerSeconds > 0 && currentTicket) {
-      // Convert seconds to hours and populate manual entry form
-      const timerHours = (timerSeconds / 3600).toFixed(2);
-      setSelectedTicket(currentTicket);
-      setHours(timerHours);
-      setActiveTab("manual");
+  const handleStopTimer = async () => {
+    try {
+      const result = await stopTimerProvider();
+      if (result && result.minutes > 0) {
+        // Populate manual entry form with stopped timer data
+        setSelectedTicket(result.ticketId);
+        setMinutes(result.minutes.toString());
+        setActiveTab("manual");
+      }
+    } catch (error) {
+      console.error('Failed to stop timer:', error);
     }
-    setTimerSeconds(0);
-    setCurrentTicket("");
   };
 
   const handleSubmitTimeEntry = async () => {
@@ -189,10 +202,11 @@ export default function TimeTrackingPage() {
       const payload = {
         ticketId: entryType === "ticket" ? selectedTicket : null,
         accountId: entryType === "account" ? selectedAccount : null,
-        hours: parseFloat(hours),
+        minutes: parseInt(minutes),
         description,
         date,
-        noCharge
+        noCharge,
+        billingRateId: selectedBillingRate === "none" ? null : selectedBillingRate
       };
 
       const response = await fetch('/api/time-entries', {
@@ -207,10 +221,11 @@ export default function TimeTrackingPage() {
         // Reset form
         setSelectedTicket("");
         setSelectedAccount("");
-        setHours("");
+        setMinutes("");
         setDescription("");
         setDate(new Date().toISOString().split('T')[0]);
         setNoCharge(false);
+        setSelectedBillingRate("none");
         
         // Show success message (you could add a toast here)
         console.log("Time entry created successfully");
@@ -361,9 +376,9 @@ export default function TimeTrackingPage() {
                     <div className="text-6xl font-mono font-bold mb-4">
                       {formatTime(timerSeconds)}
                     </div>
-                    {currentTicket && (
+                    {currentTicketId && (
                       <div className="text-sm text-muted-foreground mb-4">
-                        Tracking time for: <strong>{currentTicket}</strong>
+                        Tracking time for: <strong>{currentTicketTitle}</strong>
                       </div>
                     )}
                   </div>
@@ -372,7 +387,7 @@ export default function TimeTrackingPage() {
                   {!isTimerRunning && (
                     <div className="space-y-2">
                       <Label htmlFor="timer-ticket">Select Ticket</Label>
-                      <Select value={currentTicket} onValueChange={setCurrentTicket}>
+                      <Select value={selectedTicket} onValueChange={setSelectedTicket}>
                         <SelectTrigger>
                           <SelectValue placeholder="Choose a ticket to track time on" />
                         </SelectTrigger>
@@ -392,7 +407,7 @@ export default function TimeTrackingPage() {
                     {!isTimerRunning ? (
                       <Button 
                         onClick={handleStartTimer} 
-                        disabled={!currentTicket}
+                        disabled={!selectedTicket}
                         size="lg"
                         className="min-w-[120px]"
                       >
@@ -402,7 +417,7 @@ export default function TimeTrackingPage() {
                     ) : (
                       <>
                         <Button 
-                          onClick={handlePauseTimer}
+                          onClick={pauseTimer}
                           variant="outline"
                           size="lg"
                           className="min-w-[120px]"
@@ -511,15 +526,16 @@ export default function TimeTrackingPage() {
                     )}
 
                     <div className="space-y-2">
-                      <Label htmlFor="hours-input">Hours</Label>
+                      <Label htmlFor="minutes-input">Minutes</Label>
                       <Input
-                        id="hours-input"
+                        id="minutes-input"
                         type="number"
-                        step="0.25"
+                        step="15"
                         min="0"
-                        value={hours}
-                        onChange={(e) => setHours(e.target.value)}
-                        placeholder="2.5"
+                        max="1440"
+                        value={minutes}
+                        onChange={(e) => setMinutes(e.target.value)}
+                        placeholder="120"
                       />
                     </div>
 
@@ -531,6 +547,28 @@ export default function TimeTrackingPage() {
                         value={date}
                         onChange={(e) => setDate(e.target.value)}
                       />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="billing-rate">Billing Rate</Label>
+                      <Select value={selectedBillingRate} onValueChange={setSelectedBillingRate}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select billing rate (optional)" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">No billing rate</SelectItem>
+                          {billingRates.map(rate => (
+                            <SelectItem key={rate.id} value={rate.id}>
+                              {rate.name} - ${rate.rate}/hr
+                              {rate.description && (
+                                <span className="text-muted-foreground ml-1">
+                                  ({rate.description})
+                                </span>
+                              )}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
 
                     <div className="flex items-center space-x-2">
@@ -557,7 +595,7 @@ export default function TimeTrackingPage() {
                   <Button 
                     onClick={handleSubmitTimeEntry}
                     disabled={
-                      !hours || 
+                      !minutes || 
                       !description || 
                       (entryType === "ticket" && !selectedTicket) || 
                       (entryType === "account" && !selectedAccount)

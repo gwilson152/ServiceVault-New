@@ -99,9 +99,9 @@ export async function GET(
       },
       timeEntries: {
         total: account.timeEntries.length,
-        totalHours: account.timeEntries.reduce((sum, te) => sum + te.hours, 0),
-        billableHours: account.timeEntries.filter(te => !te.noCharge).reduce((sum, te) => sum + te.hours, 0),
-        nonBillableHours: account.timeEntries.filter(te => te.noCharge).reduce((sum, te) => sum + te.hours, 0),
+        totalMinutes: account.timeEntries.reduce((sum, te) => sum + te.minutes, 0),
+        billableMinutes: account.timeEntries.filter(te => !te.noCharge).reduce((sum, te) => sum + te.minutes, 0),
+        nonBillableMinutes: account.timeEntries.filter(te => te.noCharge).reduce((sum, te) => sum + te.minutes, 0),
       },
       invoices: {
         total: account.invoices.length,

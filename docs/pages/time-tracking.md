@@ -36,23 +36,23 @@ if (role !== "EMPLOYEE" && role !== "ADMIN") {
 #### Statistics Dashboard
 Four key metric cards showing time tracking overview:
 
-1. **Today's Hours**
-   - Total hours logged today
+1. **Today's Time**
+   - Total time logged today (displayed as hours/minutes)
    - Icon: Clock (Blue)
    - Real-time updates
 
 2. **This Week**
-   - Weekly hour totals
+   - Weekly time totals
    - Icon: Calendar (Green)
    - Week-to-date tracking
 
 3. **This Month**
-   - Monthly hour accumulation
+   - Monthly time accumulation
    - Icon: Timer (Purple)
    - Month-to-date totals
 
-4. **Billable Hours**
-   - Billable hours this week
+4. **Billable Time**
+   - Billable time this week
    - Icon: DollarSign (Yellow)
    - Revenue-focused tracking
 
@@ -93,7 +93,7 @@ const [currentTicket, setCurrentTicket] = useState<string>("");
 
 ### Features
 - **Ticket Selection**: Dropdown with ticket ID, title, and customer
-- **Hours Input**: Decimal hour input with 0.25 increments
+- **Minutes Input**: Integer minute input with 15-minute increments
 - **Date Selection**: Calendar date picker for entry date
 - **Description Field**: Multi-line text area for work description
 - **No Charge Toggle**: Option to mark entries as non-billable
@@ -103,7 +103,7 @@ const [currentTicket, setCurrentTicket] = useState<string>("");
 ```typescript
 interface TimeEntryForm {
   ticketId: string;      // Selected ticket
-  hours: number;         // Hours worked (decimal)
+  minutes: number;       // Minutes worked (integer)
   description: string;   // Work description
   date: string;         // Entry date (YYYY-MM-DD)
   noCharge: boolean;    // Billable flag
@@ -111,8 +111,8 @@ interface TimeEntryForm {
 ```
 
 ### Validation Rules
-- **Required Fields**: Ticket, hours, and description
-- **Hour Limits**: Minimum 0, step 0.25 for quarter-hour tracking
+- **Required Fields**: Ticket, minutes, and description
+- **Time Limits**: Minimum 0, step 15 for quarter-hour tracking, max 1440 (24 hours)
 - **Date Constraints**: Cannot be future dated
 - **Description Length**: Minimum meaningful description required
 
@@ -138,13 +138,13 @@ Each time entry displays:
 - **Title & Customer**: Ticket title and customer name
 - **No Charge Badge**: Visual indicator for non-billable entries
 - **Description**: Work performed details
-- **Metadata**: Date, user, hours, and billing amount
+- **Metadata**: Date, user, time duration, and billing amount
 - **Actions**: Edit and delete buttons
 
 ### Summary Statistics
-- **Total Hours**: Sum of all filtered entries
-- **Billable Hours**: Excluding no-charge entries
-- **Billable Amount**: Hours × billing rate calculation
+- **Total Time**: Sum of all filtered entries (displayed as hours/minutes)
+- **Billable Time**: Excluding no-charge entries
+- **Billable Amount**: Time (converted to hours) × billing rate calculation
 - **Entry Count**: Number of matching entries
 
 ## Data Structures
@@ -157,7 +157,7 @@ interface TimeEntry {
   ticketTitle: string;  // Ticket title for display
   customer: string;     // Customer name
   description: string;  // Work description
-  hours: number;        // Hours worked (decimal)
+  minutes: number;      // Minutes worked (integer)
   date: string;         // Entry date
   user: string;         // User who logged time
   noCharge: boolean;    // Billable flag
@@ -168,10 +168,10 @@ interface TimeEntry {
 ### Statistics Model
 ```typescript
 interface TimeStats {
-  todayHours: number;    // Hours logged today
-  weekHours: number;     // Hours this week
-  monthHours: number;    // Hours this month
-  billableHours: number; // Billable hours this week
+  todayMinutes: number;    // Minutes logged today
+  weekMinutes: number;     // Minutes this week
+  monthMinutes: number;    // Minutes this month
+  billableMinutes: number; // Billable minutes this week
 }
 ```
 

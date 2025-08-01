@@ -10,7 +10,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { 
   Clock, 
   Plus, 
-  Play 
+  Play,
+  Square
 } from "lucide-react";
 import { useTimeTracking } from "./TimeTrackingProvider";
 
@@ -21,20 +22,39 @@ interface QuickTimeEntryProps {
 }
 
 export function QuickTimeEntry({ ticketId, ticketTitle, onTimeLogged }: QuickTimeEntryProps) {
-  const { startTimer, isTimerRunning, currentTicketId } = useTimeTracking();
+  const { startTimer, stopTimer, getTimerForTicket } = useTimeTracking();
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isLogging, setIsLogging] = useState(false);
   
   // Form state
-  const [hours, setHours] = useState("");
+  const [minutes, setMinutes] = useState("");
   const [description, setDescription] = useState("");
   const [noCharge, setNoCharge] = useState(false);
+  const [workDate, setWorkDate] = useState(new Date().toISOString().split('T')[0]);
+  const [workTime, setWorkTime] = useState(new Date().toTimeString().slice(0, 5));
 
-  const isCurrentTicket = currentTicketId === ticketId;
+  const activeTimer = getTimerForTicket(ticketId);
+  const hasActiveTimer = !!activeTimer;
 
-  const handleStartTimer = () => {
-    startTimer(ticketId, ticketTitle);
+  const handleStartTimer = async () => {
+    try {
+      await startTimer(ticketId, ticketTitle);
+      onTimeLogged?.(); // Refresh to show updated timer state
+    } catch (error) {
+      console.error('Failed to start timer:', error);
+    }
+  };
+
+  const handleStopTimer = async () => {
+    try {
+      const result = await stopTimer();
+      if (result) {
+        onTimeLogged?.(); // Refresh to show updated timer state
+      }
+    } catch (error) {
+      console.error('Failed to stop timer:', error);
+    }
   };
 
   const handleQuickTimeEntry = () => {
@@ -42,7 +62,7 @@ export function QuickTimeEntry({ ticketId, ticketTitle, onTimeLogged }: QuickTim
   };
 
   const handleLogTime = async () => {
-    if (!hours || !description.trim()) return;
+    if (!minutes || !description.trim()) return;
 
     setIsLogging(true);
     try {
@@ -53,18 +73,21 @@ export function QuickTimeEntry({ ticketId, ticketTitle, onTimeLogged }: QuickTim
         },
         body: JSON.stringify({
           ticketId,
-          hours: parseFloat(hours),
+          minutes: parseInt(minutes),
           description: description.trim(),
-          date: new Date().toISOString().split('T')[0],
+          date: workDate,
+          time: workTime,
           noCharge
         }),
       });
 
       if (response.ok) {
         // Reset form and close modal
-        setHours("");
+        setMinutes("");
         setDescription("");
         setNoCharge(false);
+        setWorkDate(new Date().toISOString().split('T')[0]);
+        setWorkTime(new Date().toTimeString().slice(0, 5));
         setIsModalOpen(false);
         onTimeLogged?.();
       } else {
@@ -82,9 +105,11 @@ export function QuickTimeEntry({ ticketId, ticketTitle, onTimeLogged }: QuickTim
 
   const handleCloseModal = () => {
     setIsModalOpen(false);
-    setHours("");
+    setMinutes("");
     setDescription("");
     setNoCharge(false);
+    setWorkDate(new Date().toISOString().split('T')[0]);
+    setWorkTime(new Date().toTimeString().slice(0, 5));
   };
 
   return (
@@ -93,12 +118,12 @@ export function QuickTimeEntry({ ticketId, ticketTitle, onTimeLogged }: QuickTim
         <Button
           variant="ghost"
           size="sm"
-          onClick={handleStartTimer}
-          disabled={isTimerRunning && !isCurrentTicket}
-          title={isCurrentTicket ? "Timer active" : "Start timer"}
-          className={isCurrentTicket ? "text-green-600" : ""}
+          onClick={hasActiveTimer ? handleStopTimer : handleStartTimer}
+          disabled={false}
+          title={hasActiveTimer ? "Stop timer and log time" : "Start timer"}
+          className={hasActiveTimer ? "text-red-600 hover:text-red-700" : "text-green-600 hover:text-green-700"}
         >
-          <Play className="h-4 w-4" />
+          {hasActiveTimer ? <Square className="h-4 w-4" /> : <Play className="h-4 w-4" />}
         </Button>
         <Button
           variant="ghost"
@@ -114,27 +139,57 @@ export function QuickTimeEntry({ ticketId, ticketTitle, onTimeLogged }: QuickTim
       <Dialog open={isModalOpen} onOpenChange={handleCloseModal}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Log Time Entry</DialogTitle>
+            <DialogTitle>Log Time Entry with Date & Time</DialogTitle>
           </DialogHeader>
           
           <div className="space-y-4">
             <div className="text-sm text-muted-foreground">
-              <strong>Ticket:</strong> {ticketId} - {ticketTitle}
+              <strong>Ticket:</strong> {ticketTitle}
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="quick-hours">Hours *</Label>
+              <Label htmlFor="quick-minutes">Minutes *</Label>
               <Input
-                id="quick-hours"
+                id="quick-minutes"
                 type="number"
-                step="0.25"
+                step="15"
                 min="0"
-                max="24"
-                value={hours}
-                onChange={(e) => setHours(e.target.value)}
-                placeholder="2.5"
+                max="1440"
+                value={minutes}
+                onChange={(e) => setMinutes(e.target.value)}
+                placeholder="120"
                 required
               />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="work-date">Date *</Label>
+                <Input
+                  id="work-date"
+                  type="date"
+                  value={workDate}
+                  onChange={(e) => setWorkDate(e.target.value)}
+                  max={new Date().toISOString().split('T')[0]}
+                  required
+                />
+                <div className="text-xs text-muted-foreground">
+                  When was this work performed?
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="work-time">Start Time *</Label>
+                <Input
+                  id="work-time"
+                  type="time"
+                  value={workTime}
+                  onChange={(e) => setWorkTime(e.target.value)}
+                  required
+                />
+                <div className="text-xs text-muted-foreground">
+                  What time did you start working?
+                </div>
+              </div>
             </div>
 
             <div className="space-y-2">
@@ -169,7 +224,7 @@ export function QuickTimeEntry({ ticketId, ticketTitle, onTimeLogged }: QuickTim
               </Button>
               <Button
                 onClick={handleLogTime}
-                disabled={!hours || !description.trim() || isLogging}
+                disabled={!minutes || !description.trim() || isLogging}
                 className="flex-1"
               >
                 <Plus className="h-4 w-4 mr-1" />

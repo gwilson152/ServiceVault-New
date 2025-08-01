@@ -28,7 +28,7 @@ This is a **time management and invoicing system** built with Next.js 15, Prisma
 
 ## Development Commands
 
-- `npm run dev` - Start development server
+- `npm run dev` - Start development server - Do not attempt to launch. This will be done manually, and the server is generally running with HMR already.
 - `npm run build` - Build for production
 - `npm run start` - Start production server
 - `npm run lint` - Run ESLint
@@ -74,11 +74,12 @@ This is a **time management and invoicing system** built with Next.js 15, Prisma
 - `Users` - Admin, employee, and customer accounts with role-based access
 - `Customers` - Customer information with custom fields (JSONB)
 - `Tickets` - Support tickets with customizable fields and time tracking
-- `TimeEntries` - Time tracking against tickets with no-charge option
+- `TimeEntries` - Time tracking against tickets with no-charge option and billing rate integration
 - `TicketAddons` - Parts/additions with price and quantity for billing
 - `Invoices` - Generated invoices for internal records
-- `BillingRates` - System-wide billing rates
+- `BillingRates` - System-wide billing rates with time entry snapshots
 - `CustomerBillingRates` - Customer-specific rate overrides
+- `Timer` - Persistent cross-device timer state for real-time time tracking
 
 **Settings Tables:**
 
@@ -130,7 +131,17 @@ This is a **time management and invoicing system** built with Next.js 15, Prisma
 - Role-based access (ADMIN/EMPLOYEE/CUSTOMER)
 - Granular permissions in `Permissions` table
 - Customer time visibility controlled by settings
+- ABAC (Attribute-Based Access Control) for time entry editing
+- Enhanced permission checks for time tracking operations
 - License tier may restrict certain features
+
+### Timer System
+
+- Persistent database-backed timers for cross-device synchronization
+- One active timer per user per ticket constraint
+- Real-time timer state with pause/resume functionality
+- Global timer widget with stop-and-log workflow
+- Automatic timer state recovery across browser sessions
 
 ### Licensing Integration
 
@@ -166,12 +177,14 @@ This is a **time management and invoicing system** built with Next.js 15, Prisma
 ### UI Component Guidelines
 
 #### Hierarchical Data Selection
+
 - **Use `AccountSelector`** for account selection with hierarchy and filtering needs
 - **Use `SimpleAccountSelector`** for basic account dropdowns without advanced features
 - **Use `HierarchicalSelector<T>`** for other hierarchical data types (users, categories, etc.)
 - **Avoid basic `<Select>`** components for hierarchical data - use the specialized selectors
 
 #### Component Architecture
+
 - **Generic components** in `/components/ui/` for reusable patterns
 - **Specific implementations** in `/components/selectors/` for domain-specific use cases
 - **Backward compatibility** maintained with deprecated wrapper components

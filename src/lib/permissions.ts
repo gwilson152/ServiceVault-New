@@ -137,6 +137,8 @@ export const PERMISSIONS = {
     CREATE: { resource: "time-entries", action: "create" },
     UPDATE: { resource: "time-entries", action: "update" },
     DELETE: { resource: "time-entries", action: "delete" },
+    APPROVE: { resource: "time-entries", action: "approve" },
+    REJECT: { resource: "time-entries", action: "reject" },
   },
   ACCOUNTS: {
     VIEW: { resource: "accounts", action: "view" },

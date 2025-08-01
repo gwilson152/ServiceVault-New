@@ -28,6 +28,7 @@ import {
   Calendar,
   FileText
 } from "lucide-react";
+import { formatMinutes } from "@/lib/time-utils";
 
 interface User {
   id: string;
@@ -46,7 +47,7 @@ interface Account {
 interface TimeEntry {
   id: string;
   description: string;
-  hours: number;
+  minutes: number;
   date: string;
   noCharge: boolean;
   user: User;
@@ -64,6 +65,7 @@ interface TicketAddon {
 
 interface Ticket {
   id: string;
+  ticketNumber: string;
   title: string;
   description: string;
   status: string;
@@ -171,7 +173,7 @@ export function TicketDetailModal({
       setEditStatus(ticket.status);
       setEditPriority(ticket.priority);
       setEditAccountId(ticket.accountId);
-      setEditAssigneeId(ticket.assigneeId || "");
+      setEditAssigneeId(ticket.assigneeId || "unassigned");
       setEditCustomFields(ticket.customFields || {});
       setIsEditing(false);
     }
@@ -201,7 +203,7 @@ export function TicketDetailModal({
           status: editStatus,
           priority: editPriority,
           accountId: editAccountId,
-          assigneeId: editAssigneeId || null,
+          assigneeId: editAssigneeId === "unassigned" ? null : editAssigneeId,
           customFields: editCustomFields,
         }),
       });
@@ -323,7 +325,7 @@ export function TicketDetailModal({
             <div className="flex items-center gap-3">
               {getStatusIcon(ticket.status)}
               <DialogTitle className="text-xl">
-                {ticket.id}
+                {ticket.ticketNumber}
               </DialogTitle>
               <Badge variant={getStatusColor(ticket.status)}>
                 {ticket.status}
@@ -511,7 +513,7 @@ export function TicketDetailModal({
                           <SelectValue placeholder="Select assignee" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">Unassigned</SelectItem>
+                          <SelectItem value="unassigned">Unassigned</SelectItem>
                           {users.map(user => (
                             <SelectItem key={user.id} value={user.id}>
                               {user.name} ({user.email})
@@ -591,7 +593,7 @@ export function TicketDetailModal({
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div className="text-center">
                     <div className="text-2xl font-bold text-blue-600">
-                      {ticket.totalTimeSpent}h
+                      {formatMinutes(ticket.totalTimeSpent)}
                     </div>
                     <div className="text-sm text-muted-foreground">Total Time</div>
                   </div>
@@ -652,7 +654,7 @@ export function TicketDetailModal({
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-2">
-                            <span className="font-medium">{entry.hours}h</span>
+                            <span className="font-medium">{formatMinutes(entry.minutes)}</span>
                             <Badge variant={entry.noCharge ? "secondary" : "default"}>
                               {entry.noCharge ? "No Charge" : "Billable"}
                             </Badge>

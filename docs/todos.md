@@ -50,7 +50,7 @@
   - Implemented real-time timer functionality with start/pause/stop controls
   - Built manual time entry form with ticket selection and validation
   - Added time entries list with filtering by period and ticket
-  - Created statistics dashboard showing daily, weekly, monthly, and billable hours
+  - Created statistics dashboard showing daily, weekly, monthly, and billable time
   - Integrated with dashboard navigation and role-based access control
   - Complete documentation in /docs/pages/time-tracking.md
 - ✅ **Billing System** - Completed comprehensive billing and invoicing system

@@ -85,6 +85,8 @@ model User {
   accountBillingRates  AccountBillingRate[]
   accountUser          AccountUser?       @relation(fields: [accountUserId], references: [id])
   blacklistEntries     Blacklist[]
+  timers               Timer[]
+  approvedTimeEntries  TimeEntry[]        @relation("TimeEntryApprover")
 }
 
 // Account model (replaces Customer)
@@ -135,6 +137,7 @@ model AccountUser {
 
 model Ticket {
   id           String   @id @default(cuid())
+  ticketNumber String   @unique // User-friendly ticket number (e.g., ACME-2024-001)
   title        String
   description  String?
   status       String   @default("OPEN")
@@ -155,23 +158,32 @@ model Ticket {
   timeEntries  TimeEntry[]
   addons       TicketAddon[]
   invoiceItems InvoiceItem[]
+  timers       Timer[]
 }
 
 model TimeEntry {
-  id          String    @id @default(cuid())
-  description String?
-  hours       Float
-  date        DateTime  @default(now())
-  noCharge    Boolean   @default(false)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  ticketId    String?   // Made optional to support account-direct entries
-  accountId   String?   // Added for account-direct time entries
-  userId      String
+  id               String    @id @default(cuid())
+  description      String?
+  minutes          Int       // Changed from hours (Float) to minutes (Int)
+  date             DateTime  @default(now())
+  noCharge         Boolean   @default(false)
+  billingRateId    String?   // Reference to billing rate used
+  billingRateName  String?   // Snapshot of rate name at time of entry
+  billingRateValue Float?    // Snapshot of rate value at time of entry
+  isApproved       Boolean   @default(false)  // Approval status for invoicing
+  approvedBy       String?   // User ID who approved the entry
+  approvedAt       DateTime? // When the entry was approved
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  ticketId         String?   // Made optional to support account-direct entries
+  accountId        String?   // Added for account-direct time entries
+  userId           String
 
   ticket       Ticket?       @relation(fields: [ticketId], references: [id])
   account      Account?      @relation(fields: [accountId], references: [id])
   user         User          @relation(fields: [userId], references: [id])
+  billingRate  BillingRate?  @relation(fields: [billingRateId], references: [id])
+  approver     User?         @relation("TimeEntryApprover", fields: [approvedBy], references: [id])
   invoiceItems InvoiceItem[]
 }
 
@@ -234,6 +246,8 @@ model BillingRate {
   isDefault   Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  
+  timeEntries TimeEntry[]
 }
 
 model AccountBillingRate {
@@ -295,6 +309,23 @@ model AccountPermission {
   updatedAt       DateTime @updatedAt
 
   @@unique([accountUserId, permissionName])
+}
+
+// Timer model for persistent cross-device time tracking
+model Timer {
+  id        String    @id @default(cuid())
+  userId    String
+  ticketId  String
+  startTime DateTime  @default(now())
+  pausedTime Int      @default(0) // Accumulated paused seconds
+  isRunning Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id])
+  ticket Ticket @relation(fields: [ticketId], references: [id])
+
+  @@unique([userId, ticketId]) // One timer per ticket per user
 }
 
 // Blacklist for managing blocked users/emails

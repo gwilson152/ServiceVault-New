@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
     const billingRate = await prisma.billingRate.create({
       data: {
         name,
-        hourlyRate: parseFloat(hourlyRate),
+        rate: parseFloat(hourlyRate),
         description: description || null,
       },
     });

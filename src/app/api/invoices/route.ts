@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
 
       // Calculate totals
       const timeTotal = timeEntries.reduce((sum, entry) => {
-        return sum + (entry.hours * entry.billingRate);
+        return sum + ((entry.minutes / 60) * entry.billingRate);
       }, 0);
 
       const addonTotal = ticketAddons.reduce((sum, addon) => {

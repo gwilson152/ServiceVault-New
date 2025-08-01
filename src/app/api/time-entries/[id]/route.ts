@@ -2,6 +2,34 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { hasPermission, PERMISSIONS } from "@/lib/permissions";
+
+// ABAC permission check for time entry editing
+async function checkTimeEntryEditPermission(user: { id: string; role: string }, timeEntry: { userId: string }): Promise<boolean> {
+  // Admin can edit all time entries
+  if (user.role === 'ADMIN') {
+    return true;
+  }
+
+  // Creator can always edit their own time entries
+  if (timeEntry.userId === user.id) {
+    return true;
+  }
+
+  // For employees, check if they have management permissions for the account
+  if (user.role === 'EMPLOYEE') {
+    // Could add additional business logic here for managers editing subordinate entries
+    // For now, employees can only edit their own entries
+    return false;
+  }
+
+  // Account users have no edit permissions for time entries
+  if (user.role === 'ACCOUNT_USER') {
+    return false;
+  }
+
+  return false;
+}
 
 export async function GET(
   request: NextRequest,
@@ -32,6 +60,12 @@ export async function GET(
         },
         account: {
           select: { id: true, name: true }
+        },
+        billingRate: {
+          select: { id: true, name: true, rate: true }
+        },
+        approver: {
+          select: { id: true, name: true, email: true }
         }
       }
     });
@@ -100,17 +134,71 @@ export async function PUT(
       return NextResponse.json({ error: "Time entry not found" }, { status: 404 });
     }
 
-    // Check permissions - only the creator or admin can edit
-    if (session.user.role !== 'ADMIN' && existingEntry.userId !== session.user.id) {
+    // Enhanced ABAC permissions for time entry editing
+    const canEdit = await checkTimeEntryEditPermission(session.user, existingEntry);
+    if (!canEdit) {
       return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }
 
     const body = await request.json();
-    const { ticketId, accountId, hours, description, date, noCharge } = body;
+    const { ticketId, accountId, minutes, hours, description, date, time, noCharge, billingRateId, action } = body;
 
-    // Validation
-    if (hours !== undefined && (hours <= 0)) {
-      return NextResponse.json({ error: "Hours must be greater than 0" }, { status: 400 });
+    // Handle approval actions
+    if (action === 'approve' || action === 'reject') {
+      // Check approval permissions
+      const canApprove = await hasPermission(session.user.id, PERMISSIONS.TIME_ENTRIES.APPROVE);
+      if (!canApprove) {
+        return NextResponse.json({ error: "Access denied - approval permission required" }, { status: 403 });
+      }
+
+      const approvalData: Record<string, unknown> = {
+        isApproved: action === 'approve',
+        approvedBy: session.user.id,
+        approvedAt: new Date()
+      };
+
+      const timeEntry = await prisma.timeEntry.update({
+        where: { id },
+        data: approvalData,
+        include: {
+          user: {
+            select: { id: true, name: true, email: true }
+          },
+          ticket: {
+            select: { 
+              id: true, 
+              title: true,
+              account: {
+                select: { id: true, name: true }
+              }
+            }
+          },
+          account: {
+            select: { id: true, name: true }
+          },
+          billingRate: {
+            select: { id: true, name: true, rate: true }
+          },
+          approver: {
+            select: { id: true, name: true, email: true }
+          }
+        }
+      });
+
+      return NextResponse.json(timeEntry);
+    }
+
+    // Validation for regular updates
+    // Handle backward compatibility: convert hours to minutes if provided
+    let timeInMinutes: number | undefined;
+    if (minutes !== undefined) {
+      timeInMinutes = parseInt(minutes.toString());
+    } else if (hours !== undefined) {
+      timeInMinutes = Math.round(parseFloat(hours.toString()) * 60);
+    }
+    
+    if (timeInMinutes !== undefined && timeInMinutes <= 0) {
+      return NextResponse.json({ error: "Time must be greater than 0 minutes" }, { status: 400 });
     }
 
     if (description !== undefined && description.trim().length === 0) {
@@ -150,10 +238,34 @@ export async function PUT(
     const updateData: Record<string, unknown> = {};
     if (ticketId !== undefined) updateData.ticketId = ticketId;
     if (accountId !== undefined) updateData.accountId = accountId;
-    if (hours !== undefined) updateData.hours = parseFloat(hours.toString());
+    if (timeInMinutes !== undefined) updateData.minutes = timeInMinutes;
     if (description !== undefined) updateData.description = description.trim();
-    if (date !== undefined) updateData.date = new Date(date);
+    if (date !== undefined) {
+      updateData.date = date && time ? new Date(`${date}T${time}:00`) : new Date(date);
+    }
     if (noCharge !== undefined) updateData.noCharge = Boolean(noCharge);
+
+    // Get billing rate details if being updated
+    if (billingRateId !== undefined) {
+      if (billingRateId) {
+        const billingRate = await prisma.billingRate.findUnique({
+          where: { id: billingRateId }
+        });
+        
+        if (billingRate) {
+          updateData.billingRateId = billingRateId;
+          updateData.billingRateName = billingRate.name;
+          updateData.billingRateValue = billingRate.rate;
+        } else {
+          return NextResponse.json({ error: "Billing rate not found" }, { status: 404 });
+        }
+      } else {
+        // Clear billing rate
+        updateData.billingRateId = null;
+        updateData.billingRateName = null;
+        updateData.billingRateValue = null;
+      }
+    }
 
     const timeEntry = await prisma.timeEntry.update({
       where: { id },
@@ -173,6 +285,12 @@ export async function PUT(
         },
         account: {
           select: { id: true, name: true }
+        },
+        billingRate: {
+          select: { id: true, name: true, rate: true }
+        },
+        approver: {
+          select: { id: true, name: true, email: true }
         }
       }
     });
@@ -208,8 +326,9 @@ export async function DELETE(
       return NextResponse.json({ error: "Time entry not found" }, { status: 404 });
     }
 
-    // Check permissions - only the creator or admin can delete
-    if (session.user.role !== 'ADMIN' && existingEntry.userId !== session.user.id) {
+    // Enhanced ABAC permissions for time entry deletion
+    const canDelete = await checkTimeEntryEditPermission(session.user, existingEntry);
+    if (!canDelete) {
       return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }
 

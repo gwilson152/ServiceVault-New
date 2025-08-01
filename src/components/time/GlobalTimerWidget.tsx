@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useTimeTracking } from "./TimeTrackingProvider";
 import { 
   Clock, 
@@ -24,9 +25,12 @@ export function GlobalTimerWidget() {
     timerSeconds,
     currentTicketId,
     currentTicketTitle,
+    activeTimer,
     pauseTimer,
+    resumeTimer,
     stopTimer,
     formatTime,
+    refreshActiveTimer: _refreshActiveTimer
   } = useTimeTracking();
 
   const [isMinimized, setIsMinimized] = useState(false);
@@ -36,18 +40,42 @@ export function GlobalTimerWidget() {
   // Time entry form state
   const [description, setDescription] = useState("");
   const [noCharge, setNoCharge] = useState(false);
-  const [timerData, setTimerData] = useState<{ hours: number; ticketId: string } | null>(null);
+  const [selectedBillingRate, setSelectedBillingRate] = useState<string>("none");
+  const [billingRates, setBillingRates] = useState<Array<{id: string; name: string; rate: number; description?: string}>>([]);
+  const [timerData, setTimerData] = useState<{ minutes: number; ticketId: string; timerId: string } | null>(null);
+
+  // Fetch billing rates when component mounts
+  useEffect(() => {
+    const fetchBillingRates = async () => {
+      try {
+        const response = await fetch('/api/billing/rates');
+        if (response.ok) {
+          const data = await response.json();
+          setBillingRates(data || []);
+        }
+      } catch (error) {
+        console.error('Error fetching billing rates:', error);
+      }
+    };
+
+    fetchBillingRates();
+  }, []);
 
   // Don't show widget if no timer is active
-  if (!currentTicketId) {
+  if (!currentTicketId || !activeTimer) {
     return null;
   }
 
-  const handleStopTimer = () => {
-    const result = stopTimer();
-    if (result) {
-      setTimerData(result);
-      setIsLogModalOpen(true);
+  const handleStopTimer = async () => {
+    try {
+      const result = await stopTimer();
+      if (result) {
+        setTimerData(result);
+        setIsLogModalOpen(true);
+      }
+    } catch (error) {
+      console.error("Error stopping timer:", error);
+      alert("Failed to stop timer");
     }
   };
 
@@ -63,10 +91,11 @@ export function GlobalTimerWidget() {
         },
         body: JSON.stringify({
           ticketId: timerData.ticketId,
-          hours: timerData.hours,
+          minutes: timerData.minutes,
           description: description.trim(),
           date: new Date().toISOString().split('T')[0],
-          noCharge
+          noCharge,
+          billingRateId: selectedBillingRate === "none" ? null : selectedBillingRate
         }),
       });
 
@@ -74,6 +103,7 @@ export function GlobalTimerWidget() {
         // Reset form and close modal
         setDescription("");
         setNoCharge(false);
+        setSelectedBillingRate("none");
         setTimerData(null);
         setIsLogModalOpen(false);
       } else {
@@ -94,6 +124,7 @@ export function GlobalTimerWidget() {
     setTimerData(null);
     setDescription("");
     setNoCharge(false);
+    setSelectedBillingRate("none");
   };
 
   if (isMinimized) {
@@ -162,12 +193,8 @@ export function GlobalTimerWidget() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => {
-                      // Resume timer - this would need to be implemented
-                      // For now, we'll treat paused as stopped
-                    }}
+                    onClick={resumeTimer}
                     className="flex-1"
-                    disabled
                   >
                     <Play className="h-4 w-4 mr-1" />
                     Resume
@@ -198,7 +225,7 @@ export function GlobalTimerWidget() {
           <div className="space-y-4">
             <div className="text-center p-4 bg-blue-50 dark:bg-blue-950/50 rounded-lg">
               <div className="text-2xl font-bold text-blue-600">
-                {timerData ? (timerData.hours).toFixed(2) : '0.00'}h
+                {timerData ? `${timerData.minutes}m` : '0m'}
               </div>
               <div className="text-sm text-muted-foreground">
                 Time tracked for {currentTicketTitle}
@@ -218,6 +245,28 @@ export function GlobalTimerWidget() {
                 rows={3}
                 required
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="billing-rate">Billing Rate</Label>
+              <Select value={selectedBillingRate} onValueChange={setSelectedBillingRate}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select billing rate (optional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No billing rate</SelectItem>
+                  {billingRates.map(rate => (
+                    <SelectItem key={rate.id} value={rate.id}>
+                      {rate.name} - ${rate.rate}/hr
+                      {rate.description && (
+                        <span className="text-muted-foreground ml-1">
+                          ({rate.description})
+                        </span>
+                      )}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="flex items-center space-x-2">

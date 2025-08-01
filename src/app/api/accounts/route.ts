@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
           select: { id: true, status: true }
         },
         timeEntries: {
-          select: { id: true, hours: true, noCharge: true }
+          select: { id: true, minutes: true, noCharge: true }
         },
         childAccounts: {
           select: { id: true, name: true, accountType: true }
@@ -75,8 +75,8 @@ export async function GET(request: NextRequest) {
     const accountsWithStats = accounts.map(account => {
       const activeUsers = account.accountUsers.filter(au => au.user !== null).length;
       const pendingInvitations = account.accountUsers.filter(au => au.user === null).length;
-      const totalHours = account.timeEntries.reduce((sum, te) => sum + te.hours, 0);
-      const billableHours = account.timeEntries.filter(te => !te.noCharge).reduce((sum, te) => sum + te.hours, 0);
+      const totalMinutes = account.timeEntries.reduce((sum, te) => sum + te.minutes, 0);
+      const billableMinutes = account.timeEntries.filter(te => !te.noCharge).reduce((sum, te) => sum + te.minutes, 0);
 
       return {
         ...account,
@@ -87,8 +87,8 @@ export async function GET(request: NextRequest) {
           totalTickets: account._count.tickets,
           totalTimeEntries: account._count.timeEntries,
           totalInvoices: account._count.invoices,
-          totalHours,
-          billableHours,
+          totalMinutes,
+          billableMinutes,
         }
       };
     });

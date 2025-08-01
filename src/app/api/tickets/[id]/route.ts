@@ -48,7 +48,7 @@ export async function GET(
     }
 
     // Calculate aggregated data
-    const totalTimeSpent = ticket.timeEntries.reduce((sum, entry) => sum + entry.hours, 0);
+    const totalTimeSpent = ticket.timeEntries.reduce((sum, entry) => sum + entry.minutes, 0);
     const totalAddonCost = ticket.addons.reduce((sum, addon) => sum + (addon.price * addon.quantity), 0);
 
     const ticketWithStats = {
@@ -149,7 +149,7 @@ export async function PATCH(
     });
 
     // Calculate aggregated data
-    const totalTimeSpent = ticket.timeEntries.reduce((sum, entry) => sum + entry.hours, 0);
+    const totalTimeSpent = ticket.timeEntries.reduce((sum, entry) => sum + entry.minutes, 0);
     const totalAddonCost = ticket.addons.reduce((sum, addon) => sum + (addon.price * addon.quantity), 0);
 
     const ticketWithStats = {
