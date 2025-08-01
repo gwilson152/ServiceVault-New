@@ -11,6 +11,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuTrigger 
+} from "@/components/ui/dropdown-menu";
+import { 
   Users, 
   LogOut, 
   ArrowLeft,
@@ -26,8 +32,11 @@ import {
   FileText,
   DollarSign,
   Settings,
-  Calendar,
-  TrendingUp
+  MoreVertical,
+  RefreshCw,
+  AlertTriangle,
+  CheckCircle,
+  Clock4
 } from "lucide-react";
 import { CreateAccountUserDialog } from "@/components/accounts/CreateAccountUserDialog";
 import { AccountUserRoleManager } from "@/components/accounts/AccountUserRoleManager";
@@ -99,7 +108,63 @@ export default function AccountDetailsPage() {
   });
   const [isCreateUserDialogOpen, setIsCreateUserDialogOpen] = useState(false);
   
-  const { canCreateUsers } = usePermissions();
+  const { canCreateUsers, canResendInvitations } = usePermissions();
+
+  const handleResendInvitation = async (accountUserId: string, userName: string) => {
+    if (!confirm(`Are you sure you want to resend the invitation to ${userName}?`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/account-users/${accountUserId}/resend-invitation`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        await response.json();
+        alert(`Invitation sent successfully to ${userName}`);
+        fetchAccount(); // Refresh account data
+      } else {
+        const error = await response.json();
+        alert(`Failed to send invitation: ${error.error}`);
+      }
+    } catch (error) {
+      console.error('Error resending invitation:', error);
+      alert('Failed to send invitation. Please try again.');
+    }
+  };
+
+  const getUserStatus = (accountUser: AccountDetails['accountUsers'][0]) => {
+    if (accountUser.user) {
+      return 'active';
+    }
+    
+    if (accountUser.invitationExpiry) {
+      const now = new Date();
+      const expiry = new Date(accountUser.invitationExpiry);
+      if (expiry < now) {
+        return 'expired';
+      }
+    }
+    
+    return 'invited';
+  };
+
+  const getUserStatusBadge = (status: string) => {
+    switch (status) {
+      case 'active':
+        return <Badge variant="outline" className="text-green-600 border-green-600"><CheckCircle className="h-3 w-3 mr-1" />Active</Badge>;
+      case 'invited':
+        return <Badge variant="secondary"><Clock4 className="h-3 w-3 mr-1" />Invited</Badge>;
+      case 'expired':
+        return <Badge variant="destructive"><AlertTriangle className="h-3 w-3 mr-1" />Expired</Badge>;
+      default:
+        return <Badge variant="outline">{status}</Badge>;
+    }
+  };
 
   const fetchAccount = async () => {
     try {
@@ -478,27 +543,65 @@ export default function AccountDetailsPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {account.accountUsers.map((accountUser) => (
-                      <div key={accountUser.id} className="flex items-center justify-between p-4 border rounded-lg">
-                        <div className="flex items-center space-x-4">
-                          <User className="h-8 w-8 p-2 bg-muted rounded-full" />
-                          <div>
-                            <p className="font-medium">{accountUser.name}</p>
-                            <p className="text-sm text-muted-foreground">{accountUser.email}</p>
+                    {account.accountUsers.map((accountUser) => {
+                      const status = getUserStatus(accountUser);
+                      return (
+                        <div key={accountUser.id} className="flex items-center justify-between p-4 border rounded-lg">
+                          <div className="flex items-center space-x-4">
+                            <div className="relative">
+                              <User className="h-8 w-8 p-2 bg-muted rounded-full" />
+                              {status === 'active' && (
+                                <div className="absolute -bottom-1 -right-1 h-3 w-3 bg-green-500 rounded-full border-2 border-white"></div>
+                              )}
+                            </div>
+                            <div>
+                              <div className="flex items-center space-x-2">
+                                <p className="font-medium">{accountUser.name}</p>
+                                {getUserStatusBadge(status)}
+                              </div>
+                              <p className="text-sm text-muted-foreground">{accountUser.email}</p>
+                              {status === 'expired' && accountUser.invitationExpiry && (
+                                <p className="text-xs text-red-600">
+                                  Invitation expired on {new Date(accountUser.invitationExpiry).toLocaleDateString()}
+                                </p>
+                              )}
+                              {status === 'invited' && accountUser.invitationExpiry && (
+                                <p className="text-xs text-muted-foreground">
+                                  Invitation expires on {new Date(accountUser.invitationExpiry).toLocaleDateString()}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="sm">
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                {(status === 'invited' || status === 'expired') && canResendInvitations && (
+                                  <DropdownMenuItem 
+                                    onClick={() => handleResendInvitation(accountUser.id, accountUser.name)}
+                                  >
+                                    <RefreshCw className="h-4 w-4 mr-2" />
+                                    Resend Invitation
+                                  </DropdownMenuItem>
+                                )}
+                                <DropdownMenuItem>
+                                  <Settings className="h-4 w-4 mr-2" />
+                                  Manage Permissions
+                                </DropdownMenuItem>
+                                <DropdownMenuItem>
+                                  <Mail className="h-4 w-4 mr-2" />
+                                  Send Email
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           </div>
                         </div>
-                        <div className="flex items-center space-x-2">
-                          {accountUser.user ? (
-                            <Badge variant="outline">Active</Badge>
-                          ) : (
-                            <Badge variant="secondary">Invited</Badge>
-                          )}
-                          <Button variant="ghost" size="sm">
-                            <Settings className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                     {account.accountUsers.length === 0 && (
                       <div className="text-center py-8">
                         <Users className="mx-auto h-12 w-12 text-muted-foreground" />

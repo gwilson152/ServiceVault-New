@@ -289,6 +289,8 @@ export const PERMISSIONS = {
     DELETE: { resource: "users", action: "delete" },
     INVITE: { resource: "users", action: "invite" },
     MANAGE: { resource: "users", action: "manage" },
+    CREATE_MANUAL: { resource: "users", action: "create-manual" },
+    RESEND_INVITATION: { resource: "users", action: "resend-invitation" },
   },
   EMAIL: {
     SEND: { resource: "email", action: "send" },

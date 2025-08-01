@@ -340,6 +340,89 @@ Download PDF: {{downloadLink}}
       { name: 'invoiceLink', description: 'Link to view the invoice', example: 'https://app.example.com/invoices/123', required: true },
       { name: 'downloadLink', description: 'Link to download PDF', example: 'https://app.example.com/invoices/123/pdf', required: true }
     ]
+  },
+  {
+    name: 'User Welcome',
+    type: 'ACCOUNT_WELCOME',
+    subject: 'Welcome to {{systemName}} - Your account is ready!',
+    htmlBody: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="text-align: center; margin-bottom: 30px;">
+          <h1 style="color: #333; margin-bottom: 10px;">{{systemName}}</h1>
+          <p style="color: #666; font-size: 16px;">Time Management & Invoicing System</p>
+        </div>
+        
+        <div style="background: #f8f9fa; padding: 30px; border-radius: 8px; margin-bottom: 30px;">
+          <h2 style="color: #333; margin-top: 0;">Welcome to the team!</h2>
+          <p style="font-size: 16px; line-height: 1.6; color: #555;">
+            Hi {{userName}},
+          </p>
+          <p style="font-size: 16px; line-height: 1.6; color: #555;">
+            Your account has been created for <strong>{{accountName}}</strong> on {{systemName}}. 
+            You can now log in and start using the system to view tickets, track time, and collaborate with your team.
+          </p>
+          <p style="font-size: 16px; line-height: 1.6; color: #555;">
+            <strong>Account created by:</strong> {{createdByName}} ({{createdByEmail}})
+          </p>
+        </div>
+
+        <div style="background: #e7f3ff; padding: 20px; border-radius: 8px; margin-bottom: 30px;">
+          <h3 style="color: #333; margin-top: 0;">Your Login Details</h3>
+          <p style="font-size: 14px; line-height: 1.6; color: #555; margin-bottom: 10px;">
+            <strong>Email:</strong> {{loginEmail}}
+          </p>
+          <p style="font-size: 14px; line-height: 1.6; color: #555; margin-bottom: 10px;">
+            <strong>Temporary Password:</strong> {{temporaryPassword}}
+          </p>
+          <p style="font-size: 12px; color: #888; font-style: italic;">
+            You will be required to change this password when you first log in.
+          </p>
+        </div>
+        
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="{{loginUrl}}" 
+             style="background: #28a745; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
+            Login Now
+          </a>
+        </div>
+        
+        <div style="border-top: 1px solid #eee; padding-top: 20px; margin-top: 30px;">
+          <p style="font-size: 12px; color: #888; text-align: center;">
+            If you have any questions, please contact your administrator or reply to this email.
+          </p>
+        </div>
+      </div>
+    `,
+    textBody: `
+Welcome to {{systemName}} - Your account is ready!
+
+Hi {{userName}},
+
+Your account has been created for {{accountName}} on {{systemName}}. 
+You can now log in and start using the system to view tickets, track time, and collaborate with your team.
+
+Account created by: {{createdByName}} ({{createdByEmail}})
+
+Your Login Details:
+- Email: {{loginEmail}}
+- Temporary Password: {{temporaryPassword}}
+
+Note: You will be required to change this password when you first log in.
+
+Login here: {{loginUrl}}
+
+If you have any questions, please contact your administrator or reply to this email.
+    `,
+    variables: [
+      { name: 'systemName', description: 'Name of the system', example: 'ServiceVault', required: true },
+      { name: 'userName', description: 'Name of the new user', example: 'John Doe', required: true },
+      { name: 'accountName', description: 'Name of the account', example: 'Acme Corp', required: true },
+      { name: 'loginEmail', description: 'Email address for login', example: 'john@example.com', required: true },
+      { name: 'temporaryPassword', description: 'Temporary password for first login', example: 'TempPass123!', required: true },
+      { name: 'loginUrl', description: 'URL to login page', example: 'https://app.example.com/portal/login', required: true },
+      { name: 'createdByName', description: 'Name of the administrator who created the account', example: 'Admin User', required: true },
+      { name: 'createdByEmail', description: 'Email of the administrator', example: 'admin@example.com', required: true }
+    ]
   }
 ];
 

@@ -135,6 +135,8 @@ export function usePermissions() {
   const canCreateUsers = () => hasPermission(PERMISSIONS.USERS.CREATE);
   const canInviteUsers = () => hasPermission(PERMISSIONS.USERS.INVITE);
   const canManageUsers = () => hasPermission(PERMISSIONS.USERS.MANAGE);
+  const canCreateUsersManually = () => hasPermission(PERMISSIONS.USERS.CREATE_MANUAL);
+  const canResendInvitations = () => hasPermission(PERMISSIONS.USERS.RESEND_INVITATION);
 
   // Clear cache when session changes
   useEffect(() => {
@@ -163,6 +165,8 @@ export function usePermissions() {
     canCreateUsers,
     canInviteUsers,
     canManageUsers,
+    canCreateUsersManually,
+    canResendInvitations,
   };
 }
 

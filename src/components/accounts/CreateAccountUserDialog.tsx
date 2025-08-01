@@ -15,7 +15,7 @@ import {
   DialogTitle 
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AlertCircle, CheckCircle, Mail, User, Phone, FileText } from "lucide-react";
+import { AlertCircle, CheckCircle, Mail, User, Phone, FileText, UserPlus, Settings } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 
 interface CreateAccountUserDialogProps {
@@ -30,7 +30,9 @@ interface UserFormData {
   name: string;
   email: string;
   phone: string;
+  creationMode: 'invitation' | 'manual';
   sendInvitation: boolean;
+  temporaryPassword: string;
   permissions: {
     canViewOwnTickets: boolean;
     canViewAccountTickets: boolean;
@@ -57,7 +59,9 @@ export function CreateAccountUserDialog({
     name: "",
     email: "",
     phone: "",
+    creationMode: "invitation",
     sendInvitation: true,
+    temporaryPassword: "",
     permissions: defaultPermissions
   });
   
@@ -65,14 +69,16 @@ export function CreateAccountUserDialog({
   const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState("");
   
-  const { canCreateUsers, canInviteUsers } = usePermissions();
+  const { canCreateUsers, canInviteUsers, canCreateUsersManually } = usePermissions();
 
   const resetForm = () => {
     setFormData({
       name: "",
       email: "",
       phone: "",
+      creationMode: "invitation",
       sendInvitation: true,
+      temporaryPassword: "",
       permissions: defaultPermissions
     });
     setSubmitStatus('idle');
@@ -98,6 +104,15 @@ export function CreateAccountUserDialog({
     if (!emailRegex.test(formData.email)) {
       return "Please enter a valid email address";
     }
+
+    // Validate manual creation fields
+    if (formData.creationMode === 'manual' && !formData.temporaryPassword.trim()) {
+      return "Temporary password is required for manual creation";
+    }
+
+    if (formData.creationMode === 'manual' && formData.temporaryPassword.length < 6) {
+      return "Temporary password must be at least 6 characters";
+    }
     
     return null;
   };
@@ -115,19 +130,30 @@ export function CreateAccountUserDialog({
     setErrorMessage("");
 
     try {
-      const response = await fetch('/api/account-users/invite', {
+      const apiEndpoint = formData.creationMode === 'manual' 
+        ? '/api/account-users/create-manual'
+        : '/api/account-users/invite';
+
+      const requestBody = {
+        accountId,
+        name: formData.name.trim(),
+        email: formData.email.trim(),
+        phone: formData.phone.trim() || null,
+        permissions: formData.permissions,
+        ...(formData.creationMode === 'manual' ? {
+          temporaryPassword: formData.temporaryPassword,
+          sendWelcomeEmail: formData.sendInvitation
+        } : {
+          sendInvitation: formData.sendInvitation
+        })
+      };
+
+      const response = await fetch(apiEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          accountId,
-          name: formData.name.trim(),
-          email: formData.email.trim(),
-          phone: formData.phone.trim() || null,
-          permissions: formData.permissions,
-          sendInvitation: formData.sendInvitation
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       const data = await response.json();
@@ -170,11 +196,63 @@ export function CreateAccountUserDialog({
             <span>Create Account User</span>
           </DialogTitle>
           <DialogDescription>
-            Add a new user to <strong>{accountName}</strong>. They will receive an invitation to access the account.
+            Add a new user to <strong>{accountName}</strong>. 
+            {formData.creationMode === 'manual' 
+              ? ' The account will be created immediately with login credentials.'
+              : ' They will receive an invitation to access the account.'
+            }
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-6">
+          {/* Creation Mode Selection */}
+          <div className="space-y-4">
+            <div>
+              <Label className="text-base font-medium">User Creation Method</Label>
+              <p className="text-sm text-muted-foreground">
+                Choose how to create this user account
+              </p>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div 
+                className={`p-4 border rounded-lg cursor-pointer transition-colors ${
+                  formData.creationMode === 'invitation' 
+                    ? 'border-blue-500 bg-blue-50' 
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+                onClick={() => setFormData(prev => ({ ...prev, creationMode: 'invitation' }))}
+              >
+                <div className="flex items-center space-x-3">
+                  <Mail className="h-5 w-5 text-blue-600" />
+                  <div>
+                    <div className="font-medium">Email Invitation</div>
+                    <div className="text-xs text-muted-foreground">User sets up their own account</div>
+                  </div>
+                </div>
+              </div>
+              
+              {canCreateUsersManually && (
+                <div 
+                  className={`p-4 border rounded-lg cursor-pointer transition-colors ${
+                    formData.creationMode === 'manual' 
+                      ? 'border-green-500 bg-green-50' 
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                  onClick={() => setFormData(prev => ({ ...prev, creationMode: 'manual' }))}
+                >
+                  <div className="flex items-center space-x-3">
+                    <UserPlus className="h-5 w-5 text-green-600" />
+                    <div>
+                      <div className="font-medium">Manual Creation</div>
+                      <div className="text-xs text-muted-foreground">Create account immediately</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Basic Information */}
           <div className="space-y-4">
             <div className="space-y-2">
@@ -214,6 +292,24 @@ export function CreateAccountUserDialog({
                 disabled={isSubmitting}
               />
             </div>
+
+            {/* Manual Creation Password Field */}
+            {formData.creationMode === 'manual' && (
+              <div className="space-y-2">
+                <Label htmlFor="temporaryPassword">Temporary Password *</Label>
+                <Input
+                  id="temporaryPassword"
+                  type="password"
+                  value={formData.temporaryPassword}
+                  onChange={(e) => setFormData(prev => ({ ...prev, temporaryPassword: e.target.value }))}
+                  placeholder="Enter temporary password"
+                  disabled={isSubmitting}
+                />
+                <p className="text-xs text-muted-foreground">
+                  User will be required to change this password on first login
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Permissions */}
@@ -296,16 +392,19 @@ export function CreateAccountUserDialog({
             </div>
           </div>
 
-          {/* Invitation Options */}
+          {/* Email Options */}
           {canInviteUsers && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <Label htmlFor="sendInvitation" className="text-sm font-normal">
-                    Send Invitation Email
+                    {formData.creationMode === 'manual' ? 'Send Welcome Email' : 'Send Invitation Email'}
                   </Label>
                   <div className="text-xs text-muted-foreground">
-                    Automatically send an invitation email to the user
+                    {formData.creationMode === 'manual' 
+                      ? 'Send welcome email with login credentials'
+                      : 'Automatically send an invitation email to the user'
+                    }
                   </div>
                 </div>
                 <div className="flex items-center space-x-2">
@@ -326,9 +425,14 @@ export function CreateAccountUserDialog({
                   <div className="flex items-start space-x-2">
                     <Mail className="h-4 w-4 text-blue-600 mt-0.5" />
                     <div className="text-sm">
-                      <p className="text-blue-800 font-medium">Invitation Email</p>
+                      <p className="text-blue-800 font-medium">
+                        {formData.creationMode === 'manual' ? 'Welcome Email' : 'Invitation Email'}
+                      </p>
                       <p className="text-blue-700 mt-1">
-                        The user will receive an email with instructions to set up their account and access the system.
+                        {formData.creationMode === 'manual' 
+                          ? 'The user will receive an email with their login credentials and welcome information.'
+                          : 'The user will receive an email with instructions to set up their account and access the system.'
+                        }
                       </p>
                     </div>
                   </div>
@@ -362,9 +466,14 @@ export function CreateAccountUserDialog({
           </Button>
           <Button 
             onClick={handleSubmit} 
-            disabled={isSubmitting || !canCreateUsers}
+            disabled={isSubmitting || !canCreateUsers || (formData.creationMode === 'manual' && !canCreateUsersManually)}
           >
-            {isSubmitting ? 'Creating...' : 'Create User'}
+            {isSubmitting 
+              ? 'Creating...' 
+              : formData.creationMode === 'manual' 
+                ? 'Create Account' 
+                : 'Send Invitation'
+            }
           </Button>
         </DialogFooter>
       </DialogContent>

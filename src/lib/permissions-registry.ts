@@ -155,6 +155,16 @@ export const PERMISSIONS_REGISTRY = {
       resource: "users",
       action: "manage",
       description: "Manage user status and permissions"
+    },
+    CREATE_MANUAL: {
+      resource: "users",
+      action: "create-manual",
+      description: "Create users manually without invitation process"
+    },
+    RESEND_INVITATION: {
+      resource: "users",
+      action: "resend-invitation",
+      description: "Re-send invitation emails to pending users"
     }
   },
   EMAIL: {
@@ -296,6 +306,8 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     PERMISSIONS_REGISTRY.USERS.VIEW,
     PERMISSIONS_REGISTRY.USERS.CREATE,
     PERMISSIONS_REGISTRY.USERS.INVITE,
+    PERMISSIONS_REGISTRY.USERS.CREATE_MANUAL,
+    PERMISSIONS_REGISTRY.USERS.RESEND_INVITATION,
     PERMISSIONS_REGISTRY.TIME_ENTRIES.VIEW,
     PERMISSIONS_REGISTRY.BILLING.VIEW
   ],
@@ -311,6 +323,8 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     PERMISSIONS_REGISTRY.USERS.CREATE,
     PERMISSIONS_REGISTRY.USERS.INVITE,
     PERMISSIONS_REGISTRY.USERS.MANAGE,
+    PERMISSIONS_REGISTRY.USERS.CREATE_MANUAL,
+    PERMISSIONS_REGISTRY.USERS.RESEND_INVITATION,
     PERMISSIONS_REGISTRY.TIME_ENTRIES.VIEW,
     PERMISSIONS_REGISTRY.BILLING.VIEW,
     PERMISSIONS_REGISTRY.REPORTS.VIEW
