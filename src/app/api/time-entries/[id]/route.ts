@@ -66,6 +66,13 @@ export async function GET(
         },
         approver: {
           select: { id: true, name: true, email: true }
+        },
+        invoiceItems: {
+          include: {
+            invoice: {
+              select: { id: true, invoiceNumber: true, status: true }
+            }
+          }
         }
       }
     });
@@ -127,11 +134,30 @@ export async function PUT(
     const { id } = await params;
 
     const existingEntry = await prisma.timeEntry.findUnique({
-      where: { id }
+      where: { id },
+      include: {
+        invoiceItems: {
+          include: {
+            invoice: {
+              select: { id: true, invoiceNumber: true, status: true }
+            }
+          }
+        }
+      }
     });
 
     if (!existingEntry) {
       return NextResponse.json({ error: "Time entry not found" }, { status: 404 });
+    }
+
+    // Check if time entry is associated with any invoice (draft or finalized)
+    const isInvoiced = existingEntry.invoiceItems && existingEntry.invoiceItems.length > 0;
+    if (isInvoiced) {
+      const invoice = existingEntry.invoiceItems[0]?.invoice;
+      const invoiceNumber = invoice?.invoiceNumber || invoice?.id || 'unknown';
+      return NextResponse.json({ 
+        error: `Cannot modify time entry - already included in invoice #${invoiceNumber}` 
+      }, { status: 403 });
     }
 
     // Enhanced ABAC permissions for time entry editing
@@ -151,11 +177,32 @@ export async function PUT(
         return NextResponse.json({ error: "Access denied - approval permission required" }, { status: 403 });
       }
 
+      // Additional check: cannot unapprove entries that are already invoiced
+      if (action === 'reject' && isInvoiced) {
+        const invoice = existingEntry.invoiceItems[0]?.invoice;
+        const invoiceNumber = invoice?.invoiceNumber || invoice?.id || 'unknown';
+        return NextResponse.json({ 
+          error: `Cannot unapprove time entry - already included in invoice #${invoiceNumber}` 
+        }, { status: 403 });
+      }
+
       const approvalData: Record<string, unknown> = {
         isApproved: action === 'approve',
         approvedBy: session.user.id,
         approvedAt: new Date()
       };
+
+      // Rate locking: When approving, lock the current billing rate values
+      if (action === 'approve' && existingEntry.billingRateId && !existingEntry.billingRateName) {
+        const billingRate = await prisma.billingRate.findUnique({
+          where: { id: existingEntry.billingRateId }
+        });
+        
+        if (billingRate) {
+          approvalData.billingRateName = billingRate.name;
+          approvalData.billingRateValue = billingRate.rate;
+        }
+      }
 
       const timeEntry = await prisma.timeEntry.update({
         where: { id },
@@ -291,6 +338,13 @@ export async function PUT(
         },
         approver: {
           select: { id: true, name: true, email: true }
+        },
+        invoiceItems: {
+          include: {
+            invoice: {
+              select: { id: true, invoiceNumber: true, status: true }
+            }
+          }
         }
       }
     });
@@ -319,11 +373,30 @@ export async function DELETE(
     const { id } = await params;
 
     const existingEntry = await prisma.timeEntry.findUnique({
-      where: { id }
+      where: { id },
+      include: {
+        invoiceItems: {
+          include: {
+            invoice: {
+              select: { id: true, invoiceNumber: true, status: true }
+            }
+          }
+        }
+      }
     });
 
     if (!existingEntry) {
       return NextResponse.json({ error: "Time entry not found" }, { status: 404 });
+    }
+
+    // Check if time entry is associated with any invoice (cannot delete if invoiced)
+    const isInvoiced = existingEntry.invoiceItems && existingEntry.invoiceItems.length > 0;
+    if (isInvoiced) {
+      const invoice = existingEntry.invoiceItems[0]?.invoice;
+      const invoiceNumber = invoice?.invoiceNumber || invoice?.id || 'unknown';
+      return NextResponse.json({ 
+        error: `Cannot delete time entry - already included in invoice #${invoiceNumber}` 
+      }, { status: 403 });
     }
 
     // Enhanced ABAC permissions for time entry deletion

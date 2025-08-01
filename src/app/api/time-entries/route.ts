@@ -92,6 +92,13 @@ export async function GET(request: NextRequest) {
           },
           approver: {
             select: { id: true, name: true, email: true }
+          },
+          invoiceItems: {
+            include: {
+              invoice: {
+                select: { id: true, invoiceNumber: true, status: true }
+              }
+            }
           }
         }
       }),

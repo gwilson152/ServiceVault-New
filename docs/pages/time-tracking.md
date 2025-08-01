@@ -2,22 +2,34 @@
 
 ## Overview
 
-The Time Tracking system (`/time`) provides comprehensive time management functionality for employees and administrators. It features real-time timer functionality, manual time entry, detailed reporting, and filtering capabilities. The system integrates with the ticket system and billing rates for accurate project tracking and invoicing.
+The Time Tracking system (`/time`) provides comprehensive time management functionality with granular permission-based access control. It features manual time entry, comprehensive entry management, approval workflows, and detailed reporting capabilities. The system integrates with the ticket system and billing rates for accurate project tracking and invoicing.
 
 ## Authentication & Authorization
 
+### ABAC Permission System
+The time tracking system uses Attribute-Based Access Control (ABAC) instead of simple role-based checks, providing granular permission control:
+
+- **TIME_ENTRIES.VIEW** - View time entries
+- **TIME_ENTRIES.CREATE** - Create new time entries  
+- **TIME_ENTRIES.UPDATE** - Edit existing time entries
+- **TIME_ENTRIES.DELETE** - Delete time entries
+- **TIME_ENTRIES.APPROVE** - Approve time entries for invoicing
+- **BILLING.VIEW** - View billing rates and revenue information
+- **REPORTS.VIEW** - Access reporting features
+
 ### Access Control
-- **Employee & Admin Access**: Only users with `EMPLOYEE` or `ADMIN` roles can access time tracking
+- **Permission-Based Access**: Users need `TIME_ENTRIES.VIEW` permission to access time tracking
 - **Route Protection**: Automatic redirect for unauthorized users to dashboard
 - **Session Validation**: Continuous authentication state monitoring
 
-### Role-Based Features
-- **Employees**: Can track time on assigned tickets and view their own entries
-- **Admins**: Can view and manage all time entries across the system
+### Permission-Based Features
+- **Entry Management**: Users can edit/delete their own entries (if not approved/invoiced)
+- **Approval Workflow**: Only users with `TIME_ENTRIES.APPROVE` can approve entries
+- **Billing Information**: Only visible to users with `BILLING.VIEW` permission
 
 ```typescript
-const role = session.user?.role;
-if (role !== "EMPLOYEE" && role !== "ADMIN") {
+const hasAccess = await canViewTimeEntries();
+if (!hasAccess) {
   router.push("/dashboard");
 }
 ```
@@ -58,34 +70,37 @@ Four key metric cards showing time tracking overview:
 
 ### Tabbed Interface
 
-## 1. Timer Tab - Real-Time Tracking
+## 1. Time Entries Tab - Entry Management (Default)
 
-**Interactive Timer for Live Time Tracking**
+**Comprehensive Time Entry List and Management Interface**
 
 ### Features
-- **Large Timer Display**: 6-digit HH:MM:SS format with monospace font
-- **Ticket Selection**: Dropdown to select active ticket for tracking
-- **Timer Controls**: Start, Pause, Stop & Log functionality
-- **Real-Time Updates**: Second-by-second timer increments
-- **Automatic Entry Creation**: Convert timer to manual entry on stop
+- **Advanced Filtering**: Period and ticket-based filters with real-time updates
+- **Approval Wizard**: Step-by-step workflow for approving pending entries
+- **Entry Cards**: Detailed information display with visual status indicators
+- **Permission-Based Actions**: Edit/delete functionality based on user permissions
+- **Invoice Protection**: Visual indicators for locked entries
+- **Summary Statistics**: Aggregated totals and billing information
 
-### Timer Workflow
-1. **Select Ticket**: Choose from available tickets dropdown
-2. **Start Timer**: Begin real-time tracking
-3. **Pause/Resume**: Pause and resume as needed
-4. **Stop & Log**: Stop timer and create time entry
+### Filter Options
+- **Dynamic Periods**: Today, This Week, This Month, All Time
+- **Ticket Filtering**: All Tickets or specific ticket selection
+- **Real-time Updates**: Filters apply immediately with result counts
 
-### State Management
-```typescript
-const [isTimerRunning, setIsTimerRunning] = useState(false);
-const [timerSeconds, setTimerSeconds] = useState(0);
-const [currentTicket, setCurrentTicket] = useState<string>("");
-```
+### Entry Management
+Each time entry displays:
+- **Visual Status Indicators**: Approved, Pending, Locked badges
+- **Invoice Information**: Shows invoice number if entry is invoiced
+- **Lock Status**: Clear indication of why entries cannot be edited
+- **Permission-Based Actions**: Edit/delete buttons only visible when allowed
 
-### Timer Logic
-- **Interval Updates**: 1-second intervals using useEffect and setInterval
-- **Persistence**: Timer state maintained during session
-- **Integration**: Automatic transition to manual entry form on stop
+### Approval Workflow
+- **Approval Wizard Button**: Only visible to users with `TIME_ENTRIES.APPROVE` permission
+- **Step-by-Step Review**: Navigate through pending entries one by one
+- **Skip Functionality**: Skip entries that aren't ready for approval
+- **Inline Editing**: Edit entries directly within the approval wizard
+- **Bulk Operations**: Approve multiple entries at once
+- **Rate Locking**: Billing rates are locked when entries are approved
 
 ## 2. Manual Entry Tab - Manual Time Logging
 

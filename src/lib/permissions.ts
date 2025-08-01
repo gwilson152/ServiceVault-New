@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { ensurePermissionExists, getDefaultPermissionsForRole, PERMISSIONS_REGISTRY } from "./permissions-registry";
 
 export interface PermissionCheck {
   resource: string;
@@ -13,6 +14,9 @@ export async function hasPermission(
   permission: PermissionCheck
 ): Promise<boolean> {
   try {
+    // Auto-seed permission if it doesn't exist
+    await ensurePermissionExists(permission);
+
     const user = await prisma.user.findUnique({
       where: { id: userId },
       include: { accountUser: true }
@@ -22,21 +26,17 @@ export async function hasPermission(
       return false;
     }
 
-    // Admins have all permissions
-    if (user.role === "ADMIN") {
+    // Check against default role permissions first
+    const rolePermissions = getDefaultPermissionsForRole(user.role);
+    const hasRolePermission = rolePermissions.some(p => 
+      p.resource === permission.resource && p.action === permission.action
+    );
+
+    if (hasRolePermission) {
       return true;
     }
 
-    // Employees have most permissions but not admin-only ones
-    if (user.role === "EMPLOYEE") {
-      const adminOnlyResources = ["permissions", "users", "system-settings"];
-      if (adminOnlyResources.includes(permission.resource)) {
-        return false;
-      }
-      return true;
-    }
-
-    // Account users need specific permissions
+    // Account users can have additional specific permissions
     if (user.role === "ACCOUNT_USER" && user.accountUser) {
       const accountPermission = await prisma.accountPermission.findFirst({
         where: {
@@ -53,6 +53,13 @@ export async function hasPermission(
     return false;
   } catch (error) {
     console.error("Error checking permission:", error);
+    // Fallback to role-based check for backward compatibility
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (user?.role === "ADMIN") return true;
+    if (user?.role === "EMPLOYEE") {
+      const adminOnlyResources = ["system", "users", "permissions"];
+      return !adminOnlyResources.includes(permission.resource);
+    }
     return false;
   }
 }

@@ -723,6 +723,230 @@ const unregister = registerTimerLoggedCallback(() => {
 - **Mobile App Support**: API-ready for mobile timer applications
 - **Advanced Features**: Timer goals, reminders, and productivity metrics
 
+## ABAC Time Entry Management System Implementation (2025-08-01)
+
+### Overview
+Complete implementation of a comprehensive time entry management system with ABAC (Attribute-Based Access Control) permissions, invoice protection, approval workflows, and a global action bar system. This replaces crude role-based checks with granular permission-based access control.
+
+### Core Features Implemented
+
+#### ABAC Permission System
+- **Granular Permissions**: Replaced `role === 'ADMIN'` checks with specific permissions
+- **Permission Hierarchy**: TIME_ENTRIES.VIEW, CREATE, UPDATE, DELETE, APPROVE + BILLING.VIEW
+- **Client-Side Hooks**: `usePermissions()` and `useTimeEntryPermissions()` for UI components
+- **API Protection**: All endpoints use `hasPermission()` instead of role checks
+- **Permission Caching**: Client-side permission caching to minimize API calls
+
+#### Invoice Protection & Rate Locking
+- **Invoice Association Checks**: Time entries linked to invoices become permanently locked
+- **Rate Locking on Approval**: Billing rate values are saved when entries are approved
+- **Visual Indicators**: Clear lock icons and status messages for protected entries
+- **API Enforcement**: Comprehensive protection at database level
+
+#### Time Entry Management
+- **Edit Dialog**: Full-featured editing with permission validation and invoice protection
+- **Approval Wizard**: Step-by-step workflow with skip functionality and inline editing
+- **Permission-Based UI**: Actions only visible when user has appropriate permissions
+- **Real-Time Updates**: Changes reflected immediately across all components
+
+#### Global Action Bar System
+- **ActionBarProvider**: React Context for managing global page actions
+- **Dynamic Actions**: Pages can add/remove actions that appear in the app header
+- **Permission-Aware**: Actions conditionally shown based on user permissions
+- **Responsive Design**: Actions adapt to screen size with tooltips
+
+### Technical Implementation
+
+#### New Components Created
+- **`usePermissions` Hook** (`src/hooks/usePermissions.ts`)
+  - Client-side ABAC permission checking with caching
+  - Specialized `useTimeEntryPermissions` for context-aware checks
+  - Batch permission checking for performance
+
+- **TimeEntryEditDialog** (`src/components/time/TimeEntryEditDialog.tsx`)
+  - Full CRUD functionality with ABAC validation
+  - Invoice protection and lock status display
+  - Field-level permissions (billing rates, etc.)
+  - Real-time permission checks
+
+- **TimeEntryApprovalWizard** (`src/components/time/TimeEntryApprovalWizard.tsx`)
+  - Step-by-step approval workflow
+  - Skip functionality for incomplete entries
+  - Inline editing with permission validation
+  - Bulk approval operations
+  - Rate locking on approval
+
+- **ActionBarProvider** (`src/components/providers/ActionBarProvider.tsx`)
+  - Global action management with React Context
+  - Dynamic action registration and cleanup
+  - Type-safe action definitions
+
+- **ActionBar & TimeEntryCard** Components
+  - Reusable UI components with permission integration
+  - Visual status indicators and lock information
+
+#### API Enhancements
+- **Invoice Association Checks**: All time entry endpoints check for invoice relationships
+- **Rate Locking**: Approval actions save billing rate snapshots
+- **Permission Validation**: Comprehensive ABAC checks throughout
+- **Error Messages**: Clear feedback about why operations are blocked
+
+#### UI/UX Improvements
+- **Tab Reordering**: Time Entries tab is now default, appears first
+- **Permission-Based Display**: UI elements only show when user has access
+- **Visual Status Indicators**: Clear badges for approved, locked, invoiced entries
+- **Global Actions**: Approval wizard moved to header action bar
+
+### Database & API Changes
+
+#### Enhanced API Endpoints
+```typescript
+// Enhanced with invoice protection
+PUT /api/time-entries/[id]     // Invoice association blocks modifications
+DELETE /api/time-entries/[id]  // Cannot delete invoiced entries
+GET /api/time-entries          // Includes invoice information
+
+// New permission checking endpoints
+POST /api/permissions/check       // Single permission check
+POST /api/permissions/check-batch // Batch permission checking
+```
+
+#### Database Schema Considerations
+- Time entries include `invoiceItems` relationship for protection checks
+- Billing rate snapshots (`billingRateName`, `billingRateValue`) for rate locking
+- Approval tracking (`isApproved`, `approvedBy`, `approvedAt`) for workflow
+
+### Security Enhancements
+
+#### Permission Architecture
+```typescript
+// ABAC Permission Structure
+const PERMISSIONS = {
+  TIME_ENTRIES: {
+    VIEW: { resource: "time-entries", action: "view" },
+    CREATE: { resource: "time-entries", action: "create" },
+    UPDATE: { resource: "time-entries", action: "update" },
+    DELETE: { resource: "time-entries", action: "delete" },
+    APPROVE: { resource: "time-entries", action: "approve" }
+  },
+  BILLING: {
+    VIEW: { resource: "billing", action: "view" }
+  }
+};
+```
+
+#### Business Rule Enforcement
+- **Invoice Protection**: Once invoiced, entries become permanently locked
+- **Ownership Rules**: Users can edit their own unapproved entries
+- **Approval Workflow**: Only approved entries can be invoiced
+- **Rate Preservation**: Approved entries maintain original billing rates
+
+### User Experience Improvements
+
+#### Permission-Based Interface
+- **Conditional Rendering**: UI elements only appear when user has permissions
+- **Clear Feedback**: Informative messages about why actions are blocked
+- **Visual Hierarchy**: Different colors and icons for different entry states
+
+#### Workflow Optimization
+- **Streamlined Approval**: Step-by-step wizard with progress tracking
+- **Bulk Operations**: Approve multiple entries efficiently
+- **Skip Functionality**: Handle entries that aren't ready for approval
+
+#### Responsive Action Bar
+- **Context-Aware**: Actions change based on current page
+- **Mobile Friendly**: Labels hide on small screens, tooltips provide context
+- **Permission Aware**: Actions only show when user has access
+
+### Documentation Created
+
+#### Component Documentation
+- **ActionBar System Guide** (`docs/components/action-bar.md`)
+  - Complete usage guide with examples
+  - API reference and best practices
+  - Integration patterns for different page types
+
+#### Updated Time Tracking Docs
+- **Enhanced Documentation** (`docs/pages/time-tracking.md`)
+  - ABAC permission system explanation
+  - New approval workflow documentation
+  - Updated architecture and component descriptions
+
+### Performance Optimizations
+
+#### Permission Caching
+- **Client-Side Caching**: Avoid repeated permission API calls
+- **Batch Checking**: Check multiple permissions in single request
+- **React Optimization**: Proper memoization and dependency management
+
+#### State Management
+- **Efficient Updates**: Targeted re-renders for permission changes
+- **Action Cleanup**: Automatic action removal on page unmount
+- **Real-Time Sync**: Changes reflected across all components
+
+### Files Created/Modified
+
+#### New Files
+- `src/hooks/usePermissions.ts` - ABAC permission hooks
+- `src/components/time/TimeEntryEditDialog.tsx` - Entry editing interface
+- `src/components/time/TimeEntryApprovalWizard.tsx` - Approval workflow
+- `src/components/time/TimeEntryCard.tsx` - Reusable entry display
+- `src/components/providers/ActionBarProvider.tsx` - Global action management
+- `src/components/ui/ActionBar.tsx` - Action bar UI component
+- `src/components/ui/tooltip.tsx` - Tooltip component for actions
+- `src/app/api/permissions/check/route.ts` - Permission checking API
+- `src/app/api/permissions/check-batch/route.ts` - Batch permission API
+- `docs/components/action-bar.md` - ActionBar documentation
+
+#### Modified Files
+- `src/app/time/page.tsx` - Complete ABAC refactoring, action bar integration
+- `src/app/api/time-entries/[id]/route.ts` - Invoice protection, rate locking
+- `src/app/api/time-entries/route.ts` - Enhanced with invoice information
+- `src/app/providers.tsx` - Added ActionBarProvider to app context
+- `docs/pages/time-tracking.md` - Updated with ABAC and new features
+
+### Testing & Validation
+
+#### Manual Testing Scenarios
+- ✅ Permission-based page access (only users with TIME_ENTRIES.VIEW)
+- ✅ Entry editing blocked for invoiced entries with clear messaging
+- ✅ Approval wizard only visible to users with APPROVE permission
+- ✅ Rate locking preserves billing amounts on approval
+- ✅ Action bar shows contextual actions based on permissions
+- ✅ Visual indicators clearly show entry status (approved, locked, invoiced)
+
+#### Business Rule Validation
+- ✅ Invoice protection prevents all modifications to invoiced entries
+- ✅ Users can only edit their own unapproved entries
+- ✅ Billing rate values locked when entries are approved
+- ✅ Permission checks consistent between UI and API
+- ✅ Action bar actions only appear for authorized users
+
+### Impact Assessment
+
+#### Benefits Achieved
+- **Enhanced Security**: Granular permission control instead of crude role checks
+- **Data Integrity**: Invoice protection prevents billing inconsistencies
+- **Improved UX**: Clear status indicators and contextual actions
+- **Maintainability**: Centralized permission logic and reusable components
+- **Flexibility**: Easy to add new permissions or modify access patterns
+
+#### Breaking Changes
+- Time page now requires TIME_ENTRIES.VIEW permission (not just ADMIN/EMPLOYEE role)
+- API endpoints enforce invoice protection (previously might have allowed changes)
+- Billing information now requires BILLING.VIEW permission
+
+#### Performance Impact
+- **Positive**: Permission caching reduces API calls
+- **Minimal**: Additional permission checks have negligible overhead
+- **Improved**: More targeted re-renders with proper React optimization
+
+### Future Enhancements Ready
+- **WebSocket Integration**: Real-time permission updates across sessions
+- **Advanced Approval Workflows**: Multi-step approval with routing
+- **Audit Trail**: Comprehensive logging of permission-based actions
+- **Mobile App Support**: API-ready for mobile time tracking applications
+
 ---
 
 *Last updated: 2025-08-01*
