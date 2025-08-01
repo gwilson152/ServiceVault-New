@@ -194,3 +194,4 @@ This is a **time management and invoicing system** built with Next.js 15, Prisma
 
 - Create page-specific docs if appropriate in /docs/pages/{pageName.md}
 - Create/update/refactor /docs/change-tracking.md as changes are implemented
+- **Timer System**: Comprehensive documentation at `/docs/timer-system.md` covering usage, API, and integration patterns
