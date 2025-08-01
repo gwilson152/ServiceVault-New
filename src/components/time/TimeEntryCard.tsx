@@ -39,38 +39,53 @@ export function TimeEntryCard({ entry, showBillingAmount = false, onEdit, onDele
   
   const [canEditEntry, setCanEditEntry] = useState(false);
   const [canDeleteEntry, setCanDeleteEntry] = useState(false);
-  const [entryIsLocked, setEntryIsLocked] = useState(false);
-  const [lockReason, setLockReason] = useState<string | null>(null);
+  const [permissionsLoaded, setPermissionsLoaded] = useState(false);
+
+  // Memoize lock status and reason since they're synchronous
+  const entryIsLocked = useMemo(() => isLocked(), [entry.invoiceItems]);
+  const lockReason = useMemo(() => getLockReason(), [entry.invoiceItems]);
 
   useEffect(() => {
+    let isMounted = true;
+    
     const checkPermissions = async () => {
-      const [editPermission, deletePermission, locked, reason] = await Promise.all([
-        canEdit(),
-        canDelete(),
-        Promise.resolve(isLocked()),
-        Promise.resolve(getLockReason())
-      ]);
-      
-      setCanEditEntry(editPermission);
-      setCanDeleteEntry(deletePermission);
-      setEntryIsLocked(locked);
-      setLockReason(reason);
+      try {
+        const [editPermission, deletePermission] = await Promise.all([
+          canEdit(),
+          canDelete()
+        ]);
+        
+        if (isMounted) {
+          setCanEditEntry(editPermission);
+          setCanDeleteEntry(deletePermission);
+          setPermissionsLoaded(true);
+        }
+      } catch (error) {
+        console.error('Error checking permissions for entry', entry.id, error);
+        if (isMounted) {
+          setPermissionsLoaded(true);
+        }
+      }
     };
     
     checkPermissions();
-  }, [entry, canEdit, canDelete, isLocked, getLockReason]);
+    
+    return () => {
+      isMounted = false;
+    };
+  }, [entry.id, entry.userId, entry.isApproved, entry.invoiceItems, canEdit, canDelete]);
 
-  const handleEdit = () => {
+  const handleEdit = useMemo(() => () => {
     if (canEditEntry && onEdit) {
       onEdit(entry);
     }
-  };
+  }, [canEditEntry, onEdit, entry]);
 
-  const handleDelete = () => {
+  const handleDelete = useMemo(() => () => {
     if (canDeleteEntry && onDelete) {
       onDelete(entry.id);
     }
-  };
+  }, [canDeleteEntry, onDelete, entry.id]);
 
   return (
     <Card key={entry.id}>

@@ -263,21 +263,21 @@ export function TimeEntryEditDialog({ timeEntry, open, onOpenChange, onSuccess }
           </DialogTitle>
           <DialogDescription>
             {entryIsLocked ? (
-              <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <span className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
                 <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
-                <div>
-                  <p className="text-red-700 font-medium">Entry Locked</p>
-                  <p className="text-red-600 text-sm">{lockReason}</p>
-                </div>
-              </div>
+                <span>
+                  <span className="text-red-700 font-medium block">Entry Locked</span>
+                  <span className="text-red-600 text-sm">{lockReason}</span>
+                </span>
+              </span>
             ) : !canEditEntry ? (
-              <div className="flex items-start gap-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <span className="flex items-start gap-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
                 <AlertTriangle className="h-4 w-4 text-yellow-500 mt-0.5 flex-shrink-0" />
-                <div>
-                  <p className="text-yellow-700 font-medium">Cannot Edit</p>
-                  <p className="text-yellow-600 text-sm">You do not have permission to edit this time entry.</p>
-                </div>
-              </div>
+                <span>
+                  <span className="text-yellow-700 font-medium block">Cannot Edit</span>
+                  <span className="text-yellow-600 text-sm">You do not have permission to edit this time entry.</span>
+                </span>
+              </span>
             ) : (
               "Modify the time entry details below. All fields marked with * are required."
             )}
