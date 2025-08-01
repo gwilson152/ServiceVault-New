@@ -11,6 +11,7 @@ import {
   Clock, 
   Plus, 
   Play,
+  Pause,
   Square
 } from "lucide-react";
 import { useTimeTracking } from "./TimeTrackingProvider";
@@ -22,7 +23,7 @@ interface QuickTimeEntryProps {
 }
 
 export function QuickTimeEntry({ ticketId, ticketTitle, onTimeLogged }: QuickTimeEntryProps) {
-  const { startTimer, stopTimer, getTimerForTicket } = useTimeTracking();
+  const { startTimer, stopTimer, pauseTimer, resumeTimer, getTimerForTicket } = useTimeTracking();
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isLogging, setIsLogging] = useState(false);
@@ -35,7 +36,15 @@ export function QuickTimeEntry({ ticketId, ticketTitle, onTimeLogged }: QuickTim
   const [workTime, setWorkTime] = useState(new Date().toTimeString().slice(0, 5));
 
   const activeTimer = getTimerForTicket(ticketId);
-  const hasActiveTimer = !!activeTimer;
+  
+  // Determine timer state for this ticket
+  const getTimerState = (): 'none' | 'running' | 'paused' => {
+    if (!activeTimer) return 'none';
+    return activeTimer.isRunning ? 'running' : 'paused';
+  };
+  
+  const timerState = getTimerState();
+  console.log("🟡 [QuickTimeEntry] Timer state for ticket", ticketId, "is:", timerState, "activeTimer:", activeTimer);
 
   const handleStartTimer = async () => {
     try {
@@ -43,6 +52,30 @@ export function QuickTimeEntry({ ticketId, ticketTitle, onTimeLogged }: QuickTim
       onTimeLogged?.(); // Refresh to show updated timer state
     } catch (error) {
       console.error('Failed to start timer:', error);
+    }
+  };
+
+  const handlePauseTimer = async () => {
+    console.log("🟡 [QuickTimeEntry] handlePauseTimer called for ticket:", ticketId);
+    if (!activeTimer) return;
+    
+    try {
+      await pauseTimer(activeTimer.id);
+      onTimeLogged?.(); // Refresh to show updated timer state
+    } catch (error) {
+      console.error('🟡 [QuickTimeEntry] Failed to pause timer:', error);
+    }
+  };
+
+  const handleResumeTimer = async () => {
+    console.log("🟡 [QuickTimeEntry] handleResumeTimer called for ticket:", ticketId);
+    if (!activeTimer) return;
+    
+    try {
+      await resumeTimer(activeTimer.id);
+      onTimeLogged?.(); // Refresh to show updated timer state
+    } catch (error) {
+      console.error('🟡 [QuickTimeEntry] Failed to resume timer:', error);
     }
   };
 
@@ -119,16 +152,66 @@ export function QuickTimeEntry({ ticketId, ticketTitle, onTimeLogged }: QuickTim
   return (
     <>
       <div className="flex gap-1">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={hasActiveTimer ? handleStopTimer : handleStartTimer}
-          disabled={false}
-          title={hasActiveTimer ? "Stop timer and log time" : "Start timer"}
-          className={hasActiveTimer ? "text-red-600 hover:text-red-700" : "text-green-600 hover:text-green-700"}
-        >
-          {hasActiveTimer ? <Square className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-        </Button>
+        {/* Timer control buttons based on state */}
+        {timerState === 'none' && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleStartTimer}
+            title="Start timer"
+            className="text-green-600 hover:text-green-700"
+          >
+            <Play className="h-4 w-4" />
+          </Button>
+        )}
+        
+        {timerState === 'running' && (
+          <>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handlePauseTimer}
+              title="Pause timer"
+              className="text-yellow-600 hover:text-yellow-700"
+            >
+              <Pause className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleStopTimer}
+              title="Stop timer and log time"
+              className="text-red-600 hover:text-red-700"
+            >
+              <Square className="h-4 w-4" />
+            </Button>
+          </>
+        )}
+        
+        {timerState === 'paused' && (
+          <>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleResumeTimer}
+              title="Resume timer"
+              className="text-green-600 hover:text-green-700"
+            >
+              <Play className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleStopTimer}
+              title="Stop timer and log time"
+              className="text-red-600 hover:text-red-700"
+            >
+              <Square className="h-4 w-4" />
+            </Button>
+          </>
+        )}
+        
+        {/* Quick time entry button - always available */}
         <Button
           variant="ghost"
           size="sm"
