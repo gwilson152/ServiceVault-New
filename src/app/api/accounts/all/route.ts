@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { hasPermission } from "@/lib/permissions";
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,8 +12,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Only employees and admins can fetch all accounts
-    if (session.user?.role === "ACCOUNT_USER") {
+    // Check permission to view accounts
+    const canViewAccounts = await hasPermission(session.user.id, { resource: "accounts", action: "view" });
+    if (!canViewAccounts) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

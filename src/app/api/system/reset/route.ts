@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { PrismaClient } from "@prisma/client";
 import { exec } from "child_process";
 import { promisify } from "util";
+import { hasPermission } from "@/lib/permissions";
 
 const execAsync = promisify(exec);
 const prisma = new PrismaClient();
@@ -17,9 +18,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Only ADMIN users can perform database reset
-    if (session.user.role !== "ADMIN") {
-      return NextResponse.json({ error: "Forbidden - Admin access required" }, { status: 403 });
+    // Check permission for system admin operations
+    const canAdminSystem = await hasPermission(session.user.id, { resource: "system", action: "admin" });
+    if (!canAdminSystem) {
+      return NextResponse.json({ error: "Forbidden - System admin permission required" }, { status: 403 });
     }
 
     const body = await request.json();

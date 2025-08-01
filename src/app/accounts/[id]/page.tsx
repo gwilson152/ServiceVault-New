@@ -29,6 +29,8 @@ import {
   Calendar,
   TrendingUp
 } from "lucide-react";
+import { CreateAccountUserDialog } from "@/components/accounts/CreateAccountUserDialog";
+import { usePermissions } from "@/hooks/usePermissions";
 
 interface AccountDetails {
   id: string;
@@ -94,6 +96,9 @@ export default function AccountDetailsPage() {
     address: '',
     phone: ''
   });
+  const [isCreateUserDialogOpen, setIsCreateUserDialogOpen] = useState(false);
+  
+  const { canCreateUsers } = usePermissions();
 
   const fetchAccount = async () => {
     try {
@@ -461,10 +466,12 @@ export default function AccountDetailsPage() {
                       <CardTitle>Account Users</CardTitle>
                       <CardDescription>Manage users and their access to this account</CardDescription>
                     </div>
-                    <Button>
-                      <Plus className="mr-2 h-4 w-4" />
-                      Invite User
-                    </Button>
+                    {canCreateUsers && (
+                      <Button onClick={() => setIsCreateUserDialogOpen(true)}>
+                        <Plus className="mr-2 h-4 w-4" />
+                        Invite User
+                      </Button>
+                    )}
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -667,6 +674,15 @@ export default function AccountDetailsPage() {
           </Tabs>
         </div>
       </main>
+
+      {/* Create User Dialog */}
+      <CreateAccountUserDialog
+        isOpen={isCreateUserDialogOpen}
+        onOpenChange={setIsCreateUserDialogOpen}
+        accountId={accountId}
+        accountName={account?.name || ''}
+        onUserCreated={fetchAccount}
+      />
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { usePermissions } from "@/hooks/usePermissions";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,7 @@ import { GeneralSettingsSection } from "@/components/settings/GeneralSettingsSec
 import { BillingRatesSection } from "@/components/settings/BillingRatesSection";
 import { TicketFieldsSection } from "@/components/settings/TicketFieldsSection";
 import { AccountSettingsSection } from "@/components/settings/AccountSettingsSection";
+import { EmailSettingsSection } from "@/components/settings/EmailSettingsSection";
 import { LicenseSection } from "@/components/settings/LicenseSection";
 import { DangerZoneSection } from "@/components/settings/DangerZoneSection";
 
@@ -30,19 +32,20 @@ export default function SettingsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [activeTab, setActiveTab] = useState("general");
+  const { canViewSettings, canUpdateSettings, isLoading: permissionsLoading } = usePermissions();
 
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/");
-    } else if (status === "authenticated") {
-      // Only admins can access settings
-      if (session.user?.role !== "ADMIN") {
+    } else if (status === "authenticated" && !permissionsLoading) {
+      // Check settings view permission instead of role
+      if (!canViewSettings) {
         router.push("/dashboard");
       } else {
         setIsLoading(false);
       }
     }
-  }, [status, session, router]);
+  }, [status, session, router, canViewSettings, permissionsLoading]);
 
   // Warn user about unsaved changes
   useEffect(() => {
@@ -57,7 +60,7 @@ export default function SettingsPage() {
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [hasUnsavedChanges]);
 
-  if (status === "loading" || isLoading) {
+  if (status === "loading" || isLoading || permissionsLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-lg">Loading...</div>
@@ -65,7 +68,7 @@ export default function SettingsPage() {
     );
   }
 
-  if (!session || session.user?.role !== "ADMIN") {
+  if (!session || !canViewSettings) {
     return null;
   }
 
@@ -131,7 +134,9 @@ export default function SettingsPage() {
             <span className="text-sm text-muted-foreground">
               {session.user?.name || session.user?.email}
             </span>
-            <Badge variant="secondary">Admin</Badge>
+            <Badge variant="secondary">
+              {canUpdateSettings ? "Settings Admin" : "Settings Viewer"}
+            </Badge>
             
             <Button
               variant="ghost"
@@ -156,11 +161,12 @@ export default function SettingsPage() {
 
           {/* Settings Tabs */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-            <TabsList className="grid w-full grid-cols-6">
+            <TabsList className="grid w-full grid-cols-7">
               <TabsTrigger value="general">General</TabsTrigger>
               <TabsTrigger value="billing">Billing Rates</TabsTrigger>
               <TabsTrigger value="fields">Ticket Fields</TabsTrigger>
               <TabsTrigger value="accounts">Accounts</TabsTrigger>
+              <TabsTrigger value="email">Email</TabsTrigger>
               <TabsTrigger value="license">License</TabsTrigger>
               <TabsTrigger value="danger" className="text-red-600 data-[state=active]:text-red-700">Danger Zone</TabsTrigger>
             </TabsList>
@@ -223,6 +229,22 @@ export default function SettingsPage() {
                 </CardHeader>
                 <CardContent>
                   <AccountSettingsSection 
+                    onSettingsChange={() => setHasUnsavedChanges(true)}
+                  />
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="email" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Email Configuration</CardTitle>
+                  <CardDescription>
+                    Configure SMTP settings, email templates, and notification preferences.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <EmailSettingsSection 
                     onSettingsChange={() => setHasUnsavedChanges(true)}
                   />
                 </CardContent>

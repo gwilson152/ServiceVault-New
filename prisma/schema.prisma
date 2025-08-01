@@ -88,6 +88,16 @@ model User {
   timers               Timer[]
   approvedTimeEntries  TimeEntry[]        @relation("TimeEntryApprover")
   userPermissions      UserPermission[]
+  
+  // Email relations
+  createdEmailTemplates EmailTemplate[]  @relation("EmailTemplateCreator")
+  updatedEmailTemplates EmailTemplate[]  @relation("EmailTemplateUpdater")
+  createdEmailSettings  EmailSettings[]  @relation("EmailSettingsCreator")
+  updatedEmailSettings  EmailSettings[]  @relation("EmailSettingsUpdater")
+  createdEmails         EmailQueue[]
+  
+  // Role relations
+  userRoles             UserRole[]
 }
 
 // Account model (replaces Customer)
@@ -357,4 +367,138 @@ model Blacklist {
   updatedAt   DateTime @updatedAt
 
   blocker User @relation(fields: [blockedBy], references: [id])
+}
+
+// Email template types enum
+enum EmailTemplateType {
+  USER_INVITATION
+  TICKET_UPDATE
+  TICKET_STATUS_CHANGE
+  TIME_ENTRY_APPROVAL
+  INVOICE_GENERATED
+  PASSWORD_RESET
+  ACCOUNT_WELCOME
+  SYSTEM_NOTIFICATION
+}
+
+// Email template status enum
+enum EmailTemplateStatus {
+  ACTIVE
+  INACTIVE
+  DRAFT
+}
+
+// Email queue status enum
+enum EmailQueueStatus {
+  PENDING
+  SENDING
+  SENT
+  FAILED
+  CANCELLED
+}
+
+// Email templates for various system notifications
+model EmailTemplate {
+  id          String              @id @default(cuid())
+  name        String              @unique
+  type        EmailTemplateType
+  subject     String
+  htmlBody    String              // HTML content
+  textBody    String?             // Plain text fallback
+  variables   String              @default("{}") // JSON object of available variables
+  isDefault   Boolean             @default(false) // Is this the default template for this type
+  status      EmailTemplateStatus @default(ACTIVE)
+  createdBy   String
+  updatedBy   String?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  creator User  @relation("EmailTemplateCreator", fields: [createdBy], references: [id])
+  updater User? @relation("EmailTemplateUpdater", fields: [updatedBy], references: [id])
+
+  // Relations to email queue
+  emailQueue EmailQueue[]
+}
+
+// Email queue for managing outbound emails
+model EmailQueue {
+  id            String           @id @default(cuid())
+  templateId    String?          // Optional - may be null for system-generated emails
+  fromEmail     String
+  fromName      String?
+  toEmail       String
+  toName        String?
+  ccEmails      String?          // JSON array of CC email addresses
+  bccEmails     String?          // JSON array of BCC email addresses
+  subject       String
+  htmlBody      String
+  textBody      String?
+  variables     String           @default("{}") // JSON object of template variables
+  status        EmailQueueStatus @default(PENDING)
+  priority      Int              @default(5) // 1 = highest, 10 = lowest
+  scheduledAt   DateTime?        // When to send the email (null = send immediately)
+  sentAt        DateTime?        // When the email was actually sent
+  failureReason String?          // Error message if failed
+  retryCount    Int              @default(0)
+  maxRetries    Int              @default(3)
+  createdBy     String?          // May be null for system-generated emails
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  template EmailTemplate? @relation(fields: [templateId], references: [id])
+  creator  User?          @relation(fields: [createdBy], references: [id])
+
+  @@index([status, scheduledAt])
+  @@index([createdAt])
+}
+
+// Email settings for SMTP configuration
+model EmailSettings {
+  id             String   @id @default(cuid())
+  smtpHost       String
+  smtpPort       Int      @default(587)
+  smtpUsername   String?  // Optional for servers that don't require auth
+  smtpPassword   String?  // Optional for servers that don't require auth
+  smtpSecure     Boolean  @default(false) // Use SSL/TLS
+  fromEmail      String   // Default from email
+  fromName       String   // Default from name
+  replyToEmail   String?  // Default reply-to email
+  isActive       Boolean  @default(true)
+  testMode       Boolean  @default(false) // If true, emails are logged but not sent
+  createdBy      String
+  updatedBy      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  creator User  @relation("EmailSettingsCreator", fields: [createdBy], references: [id])
+  updater User? @relation("EmailSettingsUpdater", fields: [updatedBy], references: [id])
+}
+
+// Role templates for permission management
+model RoleTemplate {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  permissions Json     // Array of permission names (e.g., ["time-entries:view", "tickets:create"])
+  isTemplate  Boolean  @default(true) // Whether this is a reusable template
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  userRoles UserRole[]
+}
+
+// Junction table for User-Role assignments
+model UserRole {
+  id     String @id @default(cuid())
+  userId String
+  roleId String
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role RoleTemplate @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId])
 }

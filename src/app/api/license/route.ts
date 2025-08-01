@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { licensingService } from "@/lib/licensing";
+import { hasPermission } from "@/lib/permissions";
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,8 +12,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Only admins can view license status
-    if (session.user?.role !== "ADMIN") {
+    // Check permission for system admin operations
+    const canAdminSystem = await hasPermission(session.user.id, { resource: "system", action: "admin" });
+    if (!canAdminSystem) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -35,8 +37,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Only admins can update license
-    if (session.user?.role !== "ADMIN") {
+    // Check permission for system admin operations
+    const canAdminSystem = await hasPermission(session.user.id, { resource: "system", action: "admin" });
+    if (!canAdminSystem) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

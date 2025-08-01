@@ -2,13 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { hasPermission } from "@/lib/permissions";
 
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
 
-    if (!session || (session.user?.role !== "ADMIN" && session.user?.role !== "EMPLOYEE")) {
+    if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Check permission to view billing/invoices
+    const canViewBilling = await hasPermission(session.user.id, { resource: "billing", action: "view" });
+    if (!canViewBilling) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const searchParams = request.nextUrl.searchParams;

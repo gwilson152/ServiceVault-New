@@ -6,29 +6,26 @@ import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 
 // ABAC permission check for time entry editing
 async function checkTimeEntryEditPermission(user: { id: string; role: string }, timeEntry: { userId: string }): Promise<boolean> {
-  // Admin can edit all time entries
-  if (user.role === 'ADMIN') {
-    return true;
+  // Check base permission to update time entries
+  const canUpdateTimeEntries = await hasPermission(user.id, { resource: "time-entries", action: "update" });
+  if (!canUpdateTimeEntries) {
+    return false;
   }
 
-  // Creator can always edit their own time entries
+  // Creator can always edit their own time entries if they have the permission
   if (timeEntry.userId === user.id) {
     return true;
   }
 
-  // For employees, check if they have management permissions for the account
-  if (user.role === 'EMPLOYEE') {
-    // Could add additional business logic here for managers editing subordinate entries
-    // For now, employees can only edit their own entries
-    return false;
-  }
-
-  // Account users have no edit permissions for time entries
-  if (user.role === 'ACCOUNT_USER') {
-    return false;
-  }
-
-  return false;
+  // For additional business logic (like managers editing subordinate entries), 
+  // we could check if user has update permission with "account" scope
+  const canUpdateAccountTimeEntries = await hasPermission(user.id, { 
+    resource: "time-entries", 
+    action: "update", 
+    scope: "account" 
+  });
+  
+  return canUpdateAccountTimeEntries;
 }
 
 export async function GET(
@@ -81,31 +78,34 @@ export async function GET(
       return NextResponse.json({ error: "Time entry not found" }, { status: 404 });
     }
 
-    // Check access permissions
-    const canAccess = (
-      session.user.role === 'ADMIN' ||
-      timeEntry.userId === session.user.id ||
-      (session.user.role === 'CUSTOMER' || session.user.role === 'ACCOUNT_USER')
-    );
+    // Check permission to view time entries
+    const canViewTimeEntries = await hasPermission(session.user.id, { resource: "time-entries", action: "view" });
+    if (!canViewTimeEntries) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
-    if (!canAccess) {
-      // For customers, check if they have access to the related account
-      if (session.user.role === 'CUSTOMER' || session.user.role === 'ACCOUNT_USER') {
-        const userAccounts = await prisma.accountUser.findMany({
-          where: { userId: session.user.id },
-          select: { accountId: true }
-        });
-        const accountIds = userAccounts.map(ua => ua.accountId);
-        
-        const hasAccountAccess = (
-          (timeEntry.accountId && accountIds.includes(timeEntry.accountId)) ||
-          (timeEntry.ticket?.account && accountIds.includes(timeEntry.ticket.account.id))
-        );
+    // Additional scope-based access check
+    const isOwner = timeEntry.userId === session.user.id;
+    const canViewAccountTimeEntries = await hasPermission(session.user.id, { 
+      resource: "time-entries", 
+      action: "view", 
+      scope: "account" 
+    });
 
-        if (!hasAccountAccess) {
-          return NextResponse.json({ error: "Access denied" }, { status: 403 });
-        }
-      } else {
+    if (!isOwner && !canViewAccountTimeEntries) {
+      // For account users, check if they have access to the related account
+      const userAccounts = await prisma.accountUser.findMany({
+        where: { userId: session.user.id },
+        select: { accountId: true }
+      });
+      const accountIds = userAccounts.map(ua => ua.accountId);
+      
+      const hasAccountAccess = (
+        (timeEntry.accountId && accountIds.includes(timeEntry.accountId)) ||
+        (timeEntry.ticket?.account && accountIds.includes(timeEntry.ticket.account.id))
+      );
+
+      if (!hasAccountAccess) {
         return NextResponse.json({ error: "Access denied" }, { status: 403 });
       }
     }

@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { settingsService } from "@/lib/settings";
 import { SettingsCategory } from "@/types/settings";
+import { hasPermission } from "@/lib/permissions";
 
 // GET /api/settings - Get all settings or by category
 export async function GET(request: Request) {
@@ -13,8 +14,9 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Only admin users can access settings
-    if (session.user.role !== "ADMIN") {
+    // Check permission to view settings
+    const canViewSettings = await hasPermission(session.user.id, { resource: "settings", action: "view" });
+    if (!canViewSettings) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -47,8 +49,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Only admin users can modify settings
-    if (session.user.role !== "ADMIN") {
+    // Check permission to update settings
+    const canUpdateSettings = await hasPermission(session.user.id, { resource: "settings", action: "update" });
+    if (!canUpdateSettings) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

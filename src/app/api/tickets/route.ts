@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { generateTicketNumber } from "@/lib/ticket-number-generator";
+import { hasPermission } from "@/lib/permissions";
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,6 +11,12 @@ export async function GET(request: NextRequest) {
 
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Check permission to view tickets
+    const canViewTickets = await hasPermission(session.user.id, { resource: "tickets", action: "view" });
+    if (!canViewTickets) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const searchParams = request.nextUrl.searchParams;
@@ -88,6 +95,12 @@ export async function POST(request: NextRequest) {
 
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Check permission to create tickets
+    const canCreateTickets = await hasPermission(session.user.id, { resource: "tickets", action: "create" });
+    if (!canCreateTickets) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const body = await request.json();

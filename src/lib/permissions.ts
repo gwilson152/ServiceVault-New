@@ -166,4 +166,18 @@ export const PERMISSIONS = {
     VIEW: { resource: "settings", action: "view" },
     UPDATE: { resource: "settings", action: "update" },
   },
+  USERS: {
+    VIEW: { resource: "users", action: "view" },
+    CREATE: { resource: "users", action: "create" },
+    UPDATE: { resource: "users", action: "update" },
+    DELETE: { resource: "users", action: "delete" },
+    INVITE: { resource: "users", action: "invite" },
+    MANAGE: { resource: "users", action: "manage" },
+  },
+  EMAIL: {
+    SEND: { resource: "email", action: "send" },
+    TEMPLATES: { resource: "email", action: "templates" },
+    SETTINGS: { resource: "email", action: "settings" },
+    QUEUE: { resource: "email", action: "queue" },
+  },
 } as const;

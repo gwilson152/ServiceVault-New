@@ -129,27 +129,54 @@ export const PERMISSIONS_REGISTRY = {
     VIEW: {
       resource: "users",
       action: "view",
-      description: "View users"
+      description: "View user lists and account users"
     },
     CREATE: {
       resource: "users",
       action: "create",
-      description: "Create new users"
+      description: "Create new account users"
     },
     UPDATE: {
       resource: "users",
       action: "update",
-      description: "Edit existing users"
+      description: "Edit user information"
     },
     DELETE: {
       resource: "users",
       action: "delete",
-      description: "Delete users"
+      description: "Remove users from accounts"
     },
     INVITE: {
       resource: "users",
       action: "invite",
-      description: "Invite new users"
+      description: "Send user invitations"
+    },
+    MANAGE: {
+      resource: "users",
+      action: "manage",
+      description: "Manage user status and permissions"
+    }
+  },
+  EMAIL: {
+    SEND: {
+      resource: "email",
+      action: "send",
+      description: "Send emails through the system"
+    },
+    TEMPLATES: {
+      resource: "email",
+      action: "templates",
+      description: "Manage email templates"
+    },
+    SETTINGS: {
+      resource: "email",
+      action: "settings",
+      description: "Configure SMTP and email settings"
+    },
+    QUEUE: {
+      resource: "email",
+      action: "queue",
+      description: "View and manage email queue"
     }
   },
   SETTINGS: {

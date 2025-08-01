@@ -22,11 +22,12 @@ import {
   Trash2,
   UserCheck,
   Lock,
-  Download,
-  Upload,
-  RefreshCw
+  Upload
 } from "lucide-react";
 import { UserSelector } from "@/components/permissions/UserSelector";
+import { MultiUserSelector } from "@/components/permissions/MultiUserSelector";
+import { PERMISSIONS_REGISTRY, DEFAULT_ROLE_PERMISSIONS } from "@/lib/permissions-registry";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface Permission {
   id: string;
@@ -76,11 +77,56 @@ interface UserPermission {
   };
 }
 
+interface Role {
+  id: string;
+  name: string;
+  description?: string;
+  permissions: string[];
+  isTemplate: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface UserRole {
+  id: string;
+  userId: string;
+  roleId: string;
+  createdAt: string;
+  updatedAt: string;
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+  };
+  role: {
+    id: string;
+    name: string;
+    description?: string;
+    permissions: string[];
+  };
+}
+
 export default function PermissionsPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("system");
+
+  // Role management state
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [isCreatingRole, setIsCreatingRole] = useState(false);
+  const [newRoleName, setNewRoleName] = useState("");
+  const [newRoleDescription, setNewRoleDescription] = useState("");
+  const [selectedRolePermissions, setSelectedRolePermissions] = useState<string[]>([]);
+  const [roleTemplate, setRoleTemplate] = useState("");
+
+  // Role assignment state
+  const [userRoles, setUserRoles] = useState<UserRole[]>([]);
+  const [selectedUsersForRole, setSelectedUsersForRole] = useState<string[]>([]);
+  const [selectedRoleForAssignment, setSelectedRoleForAssignment] = useState("");
+  const [isAssigningRole, setIsAssigningRole] = useState(false);
+  const [bulkAssignmentMode, setBulkAssignmentMode] = useState(false);
 
   // Data state
   const [permissions, setPermissions] = useState<Permission[]>([]);
@@ -120,6 +166,30 @@ export default function PermissionsPage() {
       }
     } catch (error) {
       console.error("Error fetching permissions:", error);
+    }
+  };
+
+  const fetchRoles = async () => {
+    try {
+      const response = await fetch("/api/roles");
+      if (response.ok) {
+        const data = await response.json();
+        setRoles(data);
+      }
+    } catch (error) {
+      console.error("Error fetching roles:", error);
+    }
+  };
+
+  const fetchUserRoles = async () => {
+    try {
+      const response = await fetch("/api/user-roles");
+      if (response.ok) {
+        const data = await response.json();
+        setUserRoles(data);
+      }
+    } catch (error) {
+      console.error("Error fetching user roles:", error);
     }
   };
 
@@ -168,7 +238,7 @@ export default function PermissionsPage() {
         router.push("/dashboard");
       } else {
         // Load data
-        Promise.all([fetchPermissions(), fetchAccountUsers(), fetchAccountPermissions(), fetchUserPermissions()]).then(() => {
+        Promise.all([fetchPermissions(), fetchAccountUsers(), fetchAccountPermissions(), fetchUserPermissions(), fetchRoles(), fetchUserRoles()]).then(() => {
           setIsLoading(false);
         });
       }
@@ -389,6 +459,150 @@ export default function PermissionsPage() {
     }
   };
 
+  const handleCreateRole = async () => {
+    if (isCreatingRole || !newRoleName.trim()) return;
+    
+    setIsCreatingRole(true);
+    try {
+      const response = await fetch("/api/roles", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: newRoleName.trim(),
+          description: newRoleDescription.trim() || null,
+          permissions: selectedRolePermissions,
+          isTemplate: true
+        }),
+      });
+
+      if (response.ok) {
+        setNewRoleName("");
+        setNewRoleDescription("");
+        setSelectedRolePermissions([]);
+        setRoleTemplate("");
+        await fetchRoles();
+      } else {
+        const error = await response.json();
+        console.error("Error creating role:", error);
+        alert("Failed to create role: " + error.error);
+      }
+    } catch (error) {
+      console.error("Error creating role:", error);
+      alert("Failed to create role");
+    } finally {
+      setIsCreatingRole(false);
+    }
+  };
+
+  const handleApplyRoleTemplate = (templateName: string) => {
+    const templatePermissions = DEFAULT_ROLE_PERMISSIONS[templateName as keyof typeof DEFAULT_ROLE_PERMISSIONS];
+    if (templatePermissions) {
+      const permissionNames = templatePermissions.map(p => `${p.resource}:${p.action}`);
+      setSelectedRolePermissions(permissionNames);
+      setRoleTemplate(templateName);
+    }
+  };
+
+  const handlePermissionToggle = (permissionName: string, checked: boolean) => {
+    if (checked) {
+      setSelectedRolePermissions(prev => [...prev, permissionName]);
+    } else {
+      setSelectedRolePermissions(prev => prev.filter(p => p !== permissionName));
+    }
+  };
+
+  const handleDeleteRole = async (roleId: string) => {
+    if (!confirm("Are you sure you want to delete this role?")) return;
+
+    try {
+      const response = await fetch("/api/roles", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ id: roleId }),
+      });
+
+      if (response.ok) {
+        await fetchRoles();
+      } else {
+        const error = await response.json();
+        console.error("Error deleting role:", error);
+        alert("Failed to delete role: " + error.error);
+      }
+    } catch (error) {
+      console.error("Error deleting role:", error);
+      alert("Failed to delete role");
+    }
+  };
+
+  const handleAssignRole = async () => {
+    if (isAssigningRole || !selectedRoleForAssignment) return;
+    
+    setIsAssigningRole(true);
+    try {
+      const response = await fetch("/api/user-roles", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          bulk: bulkAssignmentMode,
+          userIds: bulkAssignmentMode ? selectedUsersForRole : undefined,
+          userId: !bulkAssignmentMode ? selectedUsersForRole[0] : undefined,
+          roleId: selectedRoleForAssignment
+        }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (bulkAssignmentMode) {
+          alert(result.message || 'Roles assigned successfully');
+        }
+        setSelectedUsersForRole([]);
+        setSelectedRoleForAssignment("");
+        setBulkAssignmentMode(false);
+        await fetchUserRoles();
+      } else {
+        const error = await response.json();
+        console.error("Error assigning role:", error);
+        alert("Failed to assign role: " + error.error);
+      }
+    } catch (error) {
+      console.error("Error assigning role:", error);
+      alert("Failed to assign role");
+    } finally {
+      setIsAssigningRole(false);
+    }
+  };
+
+  const handleRemoveRoleAssignment = async (assignmentId: string) => {
+    if (!confirm("Are you sure you want to remove this role assignment?")) return;
+
+    try {
+      const response = await fetch("/api/user-roles", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ id: assignmentId }),
+      });
+
+      if (response.ok) {
+        await fetchUserRoles();
+      } else {
+        const error = await response.json();
+        console.error("Error removing role assignment:", error);
+        alert("Failed to remove role assignment: " + error.error);
+      }
+    } catch (error) {
+      console.error("Error removing role assignment:", error);
+      alert("Failed to remove role assignment");
+    }
+  };
+
   const resourceOptions = [
     "tickets", "time-entries", "accounts", "billing", "reports", "settings"
   ];
@@ -458,7 +672,7 @@ export default function PermissionsPage() {
           </div>
 
           {/* Stats Cards */}
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">System Permissions</CardTitle>
@@ -472,23 +686,34 @@ export default function PermissionsPage() {
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">User Permissions</CardTitle>
-                <Users className="h-4 w-4 text-green-600" />
+                <CardTitle className="text-sm font-medium">Role Templates</CardTitle>
+                <Shield className="h-4 w-4 text-indigo-600" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{userPermissions.length}</div>
-                <p className="text-xs text-muted-foreground">System user permissions</p>
+                <div className="text-2xl font-bold">{roles.length}</div>
+                <p className="text-xs text-muted-foreground">Role templates</p>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Account Permissions</CardTitle>
-                <UserCheck className="h-4 w-4 text-purple-600" />
+                <CardTitle className="text-sm font-medium">Role Assignments</CardTitle>
+                <UserCheck className="h-4 w-4 text-green-600" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{accountPermissions.length}</div>
-                <p className="text-xs text-muted-foreground">Account user permissions</p>
+                <div className="text-2xl font-bold">{userRoles.length}</div>
+                <p className="text-xs text-muted-foreground">Users with roles</p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Direct Permissions</CardTitle>
+                <Users className="h-4 w-4 text-purple-600" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{userPermissions.length + accountPermissions.length}</div>
+                <p className="text-xs text-muted-foreground">Individual permissions</p>
               </CardContent>
             </Card>
 
@@ -506,8 +731,10 @@ export default function PermissionsPage() {
 
           {/* Main Content Tabs */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className="grid w-full grid-cols-6">
               <TabsTrigger value="system">System Permissions</TabsTrigger>
+              <TabsTrigger value="roles">Role Templates</TabsTrigger>
+              <TabsTrigger value="assignments">Role Assignments</TabsTrigger>
               <TabsTrigger value="users">User Permissions</TabsTrigger>
               <TabsTrigger value="account">Account Permissions</TabsTrigger>
               <TabsTrigger value="create">Create Permission</TabsTrigger>
@@ -569,6 +796,322 @@ export default function PermissionsPage() {
                   </div>
                 </CardContent>
               </Card>
+            </TabsContent>
+
+            {/* Role Templates Tab */}
+            <TabsContent value="roles" className="space-y-4">
+              <div className="grid gap-6 lg:grid-cols-2">
+                {/* Create Role Form */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Create Role Template</CardTitle>
+                    <CardDescription>
+                      Create reusable role templates with predefined permission sets
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="role-name">Role Name</Label>
+                      <Input
+                        id="role-name"
+                        value={newRoleName}
+                        onChange={(e) => setNewRoleName(e.target.value)}
+                        placeholder="e.g., Account Manager"
+                        disabled={isCreatingRole}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="role-description">Description</Label>
+                      <Textarea
+                        id="role-description"
+                        value={newRoleDescription}
+                        onChange={(e) => setNewRoleDescription(e.target.value)}
+                        placeholder="Describe the role's responsibilities..."
+                        rows={2}
+                        disabled={isCreatingRole}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Quick Templates</Label>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          variant={roleTemplate === 'ADMIN' ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => handleApplyRoleTemplate('ADMIN')}
+                          disabled={isCreatingRole}
+                        >
+                          Admin Template
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={roleTemplate === 'EMPLOYEE' ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => handleApplyRoleTemplate('EMPLOYEE')}
+                          disabled={isCreatingRole}
+                        >
+                          Employee Template
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={roleTemplate === 'ACCOUNT_USER' ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => handleApplyRoleTemplate('ACCOUNT_USER')}
+                          disabled={isCreatingRole}
+                        >
+                          Account User Template
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      <Label>Permissions ({selectedRolePermissions.length} selected)</Label>
+                      <div className="max-h-60 overflow-y-auto border rounded-md p-3 space-y-2">
+                        {Object.entries(PERMISSIONS_REGISTRY).map(([category, categoryPerms]) => (
+                          <div key={category} className="space-y-2">
+                            <h4 className="font-medium text-sm text-muted-foreground">{category.replace('_', ' ')}</h4>
+                            <div className="grid grid-cols-1 gap-2 ml-4">
+                              {Object.entries(categoryPerms).map(([, permission]) => {
+                                const permissionName = `${permission.resource}:${permission.action}`;
+                                const isChecked = selectedRolePermissions.includes(permissionName);
+                                return (
+                                  <div key={permissionName} className="flex items-center space-x-2">
+                                    <Checkbox
+                                      id={permissionName}
+                                      checked={isChecked}
+                                      onCheckedChange={(checked) => handlePermissionToggle(permissionName, checked === true)}
+                                      disabled={isCreatingRole}
+                                    />
+                                    <Label htmlFor={permissionName} className="text-xs flex-1">
+                                      {permission.description || permissionName}
+                                    </Label>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <Button 
+                      onClick={handleCreateRole}
+                      disabled={!newRoleName.trim() || selectedRolePermissions.length === 0 || isCreatingRole}
+                      className="w-full"
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      {isCreatingRole ? "Creating..." : "Create Role"}
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                {/* Existing Roles */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Role Templates</CardTitle>
+                    <CardDescription>
+                      Manage existing role templates and their permission sets
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {roles.map((role) => (
+                        <Card key={role.id}>
+                          <CardContent className="p-4">
+                            <div className="flex items-start justify-between">
+                              <div className="space-y-2">
+                                <div className="flex items-center gap-2">
+                                  <Shield className="h-4 w-4" />
+                                  <span className="font-medium">{role.name}</span>
+                                  {role.isTemplate && <Badge variant="secondary">Template</Badge>}
+                                </div>
+                                
+                                {role.description && (
+                                  <p className="text-sm text-muted-foreground">{role.description}</p>
+                                )}
+                                
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="outline">{role.permissions?.length || 0} permissions</Badge>
+                                  <span className="text-xs text-muted-foreground">
+                                    Created: {new Date(role.createdAt).toLocaleDateString()}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className="flex gap-2">
+                                <Button variant="ghost" size="sm">
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  className="text-red-600 hover:text-red-700"
+                                  onClick={() => handleDeleteRole(role.id)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                      
+                      {roles.length === 0 && (
+                        <div className="text-center py-8">
+                          <Shield className="mx-auto h-12 w-12 text-muted-foreground" />
+                          <h3 className="mt-2 text-sm font-semibold">No roles created</h3>
+                          <p className="text-sm text-muted-foreground">Create your first role template to get started.</p>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </TabsContent>
+
+            {/* Role Assignments Tab */}
+            <TabsContent value="assignments" className="space-y-4">
+              <div className="grid gap-6 lg:grid-cols-2">
+                {/* Assign Roles Form */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Assign Roles to Users</CardTitle>
+                    <CardDescription>
+                      Assign role templates to users for bulk permission management
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="bulk-mode"
+                        checked={bulkAssignmentMode}
+                        onCheckedChange={(checked) => {
+                          setBulkAssignmentMode(checked === true);
+                          setSelectedUsersForRole([]);
+                        }}
+                        disabled={isAssigningRole}
+                      />
+                      <Label htmlFor="bulk-mode" className="text-sm">
+                        Bulk assignment mode (select multiple users)
+                      </Label>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Users</Label>
+                      {bulkAssignmentMode ? (
+                        <MultiUserSelector
+                          selectedUserIds={selectedUsersForRole}
+                          onSelectionChange={setSelectedUsersForRole}
+                          disabled={isAssigningRole}
+                          placeholder="Select users to assign role"
+                          excludeAccountUsers={true}
+                        />
+                      ) : (
+                        <UserSelector
+                          value={selectedUsersForRole[0] || ""}
+                          onValueChange={(value) => setSelectedUsersForRole([value])}
+                          placeholder="Select user to assign role"
+                          excludeAccountUsers={true}
+                          className="w-full"
+                        />
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Role Template</Label>
+                      <Select value={selectedRoleForAssignment} onValueChange={setSelectedRoleForAssignment}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select role template to assign" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {roles.map(role => (
+                            <SelectItem key={role.id} value={role.id}>
+                              {role.name} ({Array.isArray(role.permissions) ? role.permissions.length : 0} permissions)
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <Button 
+                      onClick={handleAssignRole}
+                      disabled={selectedUsersForRole.length === 0 || !selectedRoleForAssignment || isAssigningRole}
+                      className="w-full"
+                    >
+                      <UserCheck className="mr-2 h-4 w-4" />
+                      {isAssigningRole ? "Assigning..." : bulkAssignmentMode ? `Assign Role to ${selectedUsersForRole.length} Users` : "Assign Role"}
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                {/* Current Role Assignments */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Current Role Assignments</CardTitle>
+                    <CardDescription>
+                      View and manage existing role assignments
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {userRoles.map((assignment) => (
+                        <Card key={assignment.id}>
+                          <CardContent className="p-4">
+                            <div className="flex items-start justify-between">
+                              <div className="space-y-2">
+                                <div className="flex items-center gap-2">
+                                  <UserCheck className="h-4 w-4" />
+                                  <span className="font-medium">{assignment.user.name || assignment.user.email}</span>
+                                  <Badge variant={assignment.user.role === 'ADMIN' ? 'destructive' : 'default'}>
+                                    {assignment.user.role}
+                                  </Badge>
+                                </div>
+                                
+                                <div className="flex items-center gap-2">
+                                  <Shield className="h-3 w-3" />
+                                  <span className="text-sm">{assignment.role.name}</span>
+                                  <Badge variant="outline">
+                                    {Array.isArray(assignment.role.permissions) ? assignment.role.permissions.length : 0} permissions
+                                  </Badge>
+                                </div>
+                                
+                                {assignment.role.description && (
+                                  <p className="text-xs text-muted-foreground">{assignment.role.description}</p>
+                                )}
+                                
+                                <div className="text-xs text-muted-foreground">
+                                  Assigned: {new Date(assignment.createdAt).toLocaleDateString()}
+                                </div>
+                              </div>
+
+                              <div className="flex gap-2">
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  className="text-red-600 hover:text-red-700"
+                                  onClick={() => handleRemoveRoleAssignment(assignment.id)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                      
+                      {userRoles.length === 0 && (
+                        <div className="text-center py-8">
+                          <UserCheck className="mx-auto h-12 w-12 text-muted-foreground" />
+                          <h3 className="mt-2 text-sm font-semibold">No role assignments</h3>
+                          <p className="text-sm text-muted-foreground">Assign roles to users to get started.</p>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
             </TabsContent>
 
             {/* User Permissions Tab */}

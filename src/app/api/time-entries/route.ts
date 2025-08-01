@@ -2,12 +2,23 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { hasPermission } from "@/lib/permissions";
 
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Check view permission
+    const canViewTimeEntries = await hasPermission(session.user.id, {
+      resource: 'time-entries',
+      action: 'view'
+    });
+
+    if (!canViewTimeEntries) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const { searchParams } = new URL(request.url);
@@ -25,25 +36,40 @@ export async function GET(request: NextRequest) {
     // Build where clause
     const where: Record<string, unknown> = {};
 
-    // Role-based filtering
-    if (session.user.role === 'CUSTOMER' || session.user.role === 'ACCOUNT_USER') {
-      // Customers can only see their own time entries or those related to their accounts
-      const userAccounts = await prisma.accountUser.findMany({
-        where: { userId: session.user.id },
-        select: { accountId: true }
+    // Permission-based filtering
+    const canViewAllTimeEntries = await hasPermission(session.user.id, {
+      resource: 'time-entries',
+      action: 'view',
+      scope: 'global'
+    });
+
+    if (!canViewAllTimeEntries) {
+      // Check if user can view account-level time entries
+      const canViewAccountTimeEntries = await hasPermission(session.user.id, {
+        resource: 'time-entries',
+        action: 'view',
+        scope: 'account'
       });
-      const accountIds = userAccounts.map(ua => ua.accountId);
-      
-      where.OR = [
-        { userId: session.user.id },
-        { accountId: { in: accountIds } },
-        { ticket: { accountId: { in: accountIds } } }
-      ];
-    } else if (session.user.role === 'EMPLOYEE') {
-      // Employees can see their own time entries
-      where.userId = session.user.id;
+
+      if (canViewAccountTimeEntries) {
+        // User can see time entries for their accounts
+        const userAccounts = await prisma.accountUser.findMany({
+          where: { userId: session.user.id },
+          select: { accountId: true }
+        });
+        const accountIds = userAccounts.map(ua => ua.accountId);
+        
+        where.OR = [
+          { userId: session.user.id },
+          { accountId: { in: accountIds } },
+          { ticket: { accountId: { in: accountIds } } }
+        ];
+      } else {
+        // User can only see their own time entries
+        where.userId = session.user.id;
+      }
     }
-    // Admins can see all time entries (no additional filtering)
+    // Users with global permission can see all time entries (no additional filtering)
 
     // Apply filters
     if (ticketId) {
@@ -52,7 +78,7 @@ export async function GET(request: NextRequest) {
     if (accountId) {
       where.accountId = accountId;
     }
-    if (userId && (session.user.role === 'ADMIN' || session.user.id === userId)) {
+    if (userId && (canViewAllTimeEntries || session.user.id === userId)) {
       where.userId = userId;
     }
     if (startDate) {
@@ -131,8 +157,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Only employees and admins can create time entries
-    if (session.user.role !== 'EMPLOYEE' && session.user.role !== 'ADMIN') {
+    // Check create permission
+    const canCreateTimeEntries = await hasPermission(session.user.id, {
+      resource: 'time-entries',
+      action: 'create'
+    });
+
+    if (!canCreateTimeEntries) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -177,9 +208,15 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
       }
 
-      // Check access permissions
-      if (session.user.role === 'EMPLOYEE') {
-        // Employees can only log time on tickets assigned to them or in general
+      // Check ticket access permissions
+      const canCreateOnAllTickets = await hasPermission(session.user.id, {
+        resource: 'time-entries',
+        action: 'create',
+        scope: 'global'
+      });
+
+      if (!canCreateOnAllTickets) {
+        // User can only log time on tickets assigned to them or unassigned tickets
         const hasAccess = ticket.assigneeId === session.user.id || !ticket.assigneeId;
         if (!hasAccess) {
           return NextResponse.json({ error: "Access denied to this ticket" }, { status: 403 });
@@ -197,11 +234,8 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Account not found" }, { status: 404 });
       }
 
-      // Check access permissions for account-direct time entries
-      if (session.user.role === 'EMPLOYEE') {
-        // Employees can log time to any account (business decision)
-        // Or we could restrict this to accounts they're associated with
-      }
+      // Account-direct time entries are allowed for users with appropriate permissions
+      // No additional access check needed here - the create permission is sufficient
     }
 
     // Get billing rate details if provided

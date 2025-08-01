@@ -2,18 +2,30 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { hasPermission } from '@/lib/permissions';
+import { emailService } from '@/lib/email/EmailService';
 import crypto from 'crypto';
 
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
 
-    if (!session || (session.user.role !== 'ADMIN' && session.user.role !== 'EMPLOYEE')) {
+    if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Check user invitation permission
+    const canInviteUsers = await hasPermission(session.user.id, {
+      resource: 'users',
+      action: 'invite'
+    });
+
+    if (!canInviteUsers) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const body = await request.json();
-    const { accountId, email, name, phone, permissions } = body;
+    const { accountId, email, name, phone, permissions, sendInvitation } = body;
 
     if (!accountId || !email || !name) {
       return NextResponse.json(
@@ -68,9 +80,28 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    // TODO: Send invitation email
-    // For now, we'll just return the invitation link
     const invitationLink = `${process.env.NEXTAUTH_URL}/portal/accept-invitation?token=${invitationToken}`;
+
+    // Send invitation email if requested
+    if (sendInvitation) {
+      try {
+        await emailService.sendTemplateEmail('USER_INVITATION', {
+          to: email,
+          toName: name
+        }, {
+          systemName: 'Service Vault',
+          userName: name,
+          accountName: account.name,
+          inviterName: session.user.name || session.user.email,
+          inviterEmail: session.user.email,
+          invitationLink,
+          expirationDate: invitationExpiry.toLocaleDateString()
+        });
+      } catch (emailError) {
+        console.error('Failed to send invitation email:', emailError);
+        // Continue with user creation even if email fails
+      }
+    }
 
     return NextResponse.json({
       accountUser: {
@@ -81,6 +112,7 @@ export async function POST(request: NextRequest) {
         account: accountUser.account,
         invitationToken,
         invitationLink,
+        emailSent: sendInvitation
       }
     });
 

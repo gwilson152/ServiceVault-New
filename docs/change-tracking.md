@@ -2,6 +2,92 @@
 
 This document tracks significant changes and refactoring work done to the Service Vault application.
 
+## Role Management System & Bulk Permission Assignment (2025-01-31)
+
+### Overview
+Implemented a comprehensive role-based access control (RBAC) system with role templates and bulk permission assignment capabilities. This system allows administrators to create reusable role templates and efficiently assign them to multiple users.
+
+### Core Implementation
+
+#### Database Schema Enhancements
+- **`RoleTemplate` Model**: Role template storage with JSON permissions array
+- **`UserRole` Model**: Junction table for user-role assignments with proper constraints
+- **Relations**: Integrated with existing User model for complete role management
+
+#### Role Management API
+- **`/api/roles`**: Complete CRUD operations for role template management
+  - GET: Retrieve all role templates with assignment counts
+  - POST: Create new role templates with permission validation
+  - PUT: Update existing roles with conflict detection
+  - DELETE: Safe deletion with assignment checks
+- **`/api/user-roles`**: Role assignment management with bulk operations
+  - GET: Retrieve all user role assignments with related data
+  - POST: Single and bulk role assignment with error handling
+  - DELETE: Remove role assignments by ID or user/role combination
+
+#### Enhanced Permissions Page
+- **Role Templates Tab**: Interactive role creation with permission selection
+  - Quick template buttons (Admin, Employee, Account User)
+  - Category-organized permission checkboxes with real-time counting
+  - Form validation and error handling
+- **Role Assignments Tab**: Comprehensive role assignment interface
+  - Bulk assignment mode with multi-user selection
+  - Visual feedback with selected user badges
+  - Assignment history and management tools
+
+#### Multi-User Selection Component
+- **`MultiUserSelector`**: Advanced multi-select dialog component
+  - Search and filter capabilities by name/email
+  - Bulk selection with "Select All" and "Clear All" actions
+  - Visual feedback with removable user badges
+  - Permission-aware user filtering (exclude account users)
+  - Responsive design with scroll area for large user lists
+
+#### Permission Registry Integration
+- **Template System**: Leverages existing permissions registry for role templates
+- **Default Roles**: Pre-defined permission sets for common roles
+- **Validation**: Ensures role permissions reference valid system permissions
+
+### Technical Features
+
+#### Role Template Management
+- Create custom role templates with specific permission combinations
+- Use predefined templates as starting points for customization
+- View and manage existing role templates with usage statistics
+- Safe deletion with prevention of removing assigned roles
+
+#### Bulk Assignment System
+- Assign roles to single users or multiple users simultaneously
+- Multi-user selection with search, filter, and bulk actions
+- Error handling for duplicate assignments and validation failures
+- Progress feedback and success/failure reporting
+
+#### Permission Inheritance
+- Users inherit permissions from assigned role templates
+- Existing individual permission system remains intact
+- Hybrid approach supporting both role-based and direct permissions
+- Clear separation between template permissions and direct assignments
+
+#### UI/UX Enhancements
+- Updated statistics dashboard with role metrics
+- Intuitive tab-based navigation for different permission types
+- Visual indicators for role assignments and permission counts
+- Responsive design supporting both desktop and mobile interfaces
+
+### Database Impact
+- Added `RoleTemplate` and `UserRole` tables
+- Enhanced User model with role relations
+- JSON storage for permission arrays (SQLite compatible)
+- Proper indexing and constraints for performance
+
+### Security Considerations
+- All operations require proper system admin permissions
+- Validation prevents duplicate assignments and orphaned data
+- Safe deletion checks prevent breaking user access
+- Input sanitization and error handling throughout
+
+This implementation provides a scalable, user-friendly approach to permission management through reusable role templates with efficient bulk assignment capabilities.
+
 ## Initial Configuration Wizard (2025-01-31)
 
 ### Overview
@@ -1193,6 +1279,346 @@ GET    /api/users?role=&excludeAccountUsers= // List users with filtering
 - **Bulk Operations**: Use new bulk APIs for efficient user management
 - **Component Integration**: Use UserSelector for user selection needs
 - **Permission Checking**: Leverage enhanced permission hooks
+
+## Email Service Infrastructure Implementation (2025-08-01)
+
+### Overview
+Complete implementation of a comprehensive email service infrastructure with SMTP configuration, template management, queuing system, and settings integration. This provides the foundation for automated email notifications throughout the Service Vault application.
+
+### Core Features Implemented
+
+#### Email Service Architecture
+- **EmailService Class**: Full-featured email service with SMTP integration
+- **Template System**: Dynamic email templates with variable substitution
+- **Email Queue**: Persistent queue with retry logic and priority handling
+- **Settings Management**: Complete SMTP configuration through admin interface
+
+#### Database Schema
+```sql
+-- Email template types and management
+EmailTemplate {
+  id: string (UUID primary key)
+  name: string (unique)
+  type: EmailTemplateType (USER_INVITATION, TICKET_UPDATE, etc.)
+  subject: string
+  htmlBody: string
+  textBody: string (optional)
+  variables: string (JSON object)
+  isDefault: boolean
+  status: EmailTemplateStatus (ACTIVE, INACTIVE, DRAFT)
+  createdBy: string (foreign key)
+  updatedBy: string (optional foreign key)
+}
+
+-- Email queue for outbound messages
+EmailQueue {
+  id: string (UUID primary key)
+  templateId: string (optional foreign key)
+  fromEmail: string
+  fromName: string (optional)
+  toEmail: string
+  toName: string (optional)
+  ccEmails: string (JSON array, optional)
+  bccEmails: string (JSON array, optional) 
+  subject: string
+  htmlBody: string
+  textBody: string (optional)
+  variables: string (JSON object)
+  status: EmailQueueStatus (PENDING, SENDING, SENT, FAILED, CANCELLED)
+  priority: number (1-10, 1 = highest)
+  scheduledAt: DateTime (optional)
+  sentAt: DateTime (optional)
+  failureReason: string (optional)
+  retryCount: number
+  maxRetries: number
+}
+
+-- SMTP configuration
+EmailSettings {
+  id: string (UUID primary key)
+  smtpHost: string
+  smtpPort: number (default 587)
+  smtpUsername: string (optional - supports no-auth servers)
+  smtpPassword: string (optional - supports no-auth servers)
+  smtpSecure: boolean (SSL/TLS)
+  fromEmail: string
+  fromName: string
+  replyToEmail: string (optional)
+  testMode: boolean (log only, don't send)
+  isActive: boolean
+}
+```
+
+#### Email Template Types
+- **USER_INVITATION**: Account user invitation emails
+- **TICKET_UPDATE**: General ticket update notifications
+- **TICKET_STATUS_CHANGE**: Ticket status change notifications
+- **TIME_ENTRY_APPROVAL**: Time entry approval/rejection notifications
+- **INVOICE_GENERATED**: Invoice generation notifications
+- **PASSWORD_RESET**: Password reset emails
+- **ACCOUNT_WELCOME**: New account welcome emails
+- **SYSTEM_NOTIFICATION**: General system notifications
+
+### Technical Implementation
+
+#### EmailService Features
+- **SMTP Integration**: Full nodemailer integration with configurable auth
+- **Optional Authentication**: Supports SMTP servers without authentication
+- **Template Processing**: Variable substitution with `{{variableName}}` syntax
+- **Queue Management**: Automatic email queuing with priority and scheduling
+- **Retry Logic**: Configurable retry attempts for failed emails
+- **Test Mode**: Development-friendly logging without sending
+- **Connection Testing**: SMTP connection validation
+- **Error Handling**: Comprehensive error handling with detailed feedback
+
+#### API Endpoints
+```typescript
+// SMTP Configuration
+GET    /api/email/settings           // Retrieve active SMTP settings
+POST   /api/email/settings           // Create new SMTP configuration
+PUT    /api/email/settings           // Update existing SMTP configuration
+
+// Email Templates
+GET    /api/email/templates          // List templates with filtering
+POST   /api/email/templates          // Create new template
+PUT    /api/email/templates/[id]     // Update template
+DELETE /api/email/templates/[id]     // Delete template
+
+// Email Queue
+GET    /api/email/queue              // List queued emails with stats
+POST   /api/email/queue              // Queue new email
+PUT    /api/email/queue/[id]         // Update email status
+DELETE /api/email/queue/[id]         // Cancel email
+
+// Testing
+POST   /api/email/test               // Send test email
+```
+
+#### Settings UI Integration
+- **4-Tab Interface**:
+  1. **SMTP Settings**: Complete SMTP configuration with optional authentication
+  2. **Templates**: Template management interface (framework ready)
+  3. **Email Queue**: Real-time queue monitoring with statistics
+  4. **Test Email**: Configuration testing with detailed feedback
+
+#### Template System Features
+- **Variable Substitution**: Dynamic content with `{{variableName}}` syntax
+- **HTML + Text**: Support for both HTML and plain text versions
+- **Default Templates**: Comprehensive set of pre-built templates
+- **Template Validation**: Variable validation against template requirements
+- **Status Management**: Active, inactive, and draft template states
+
+### Permission Integration
+
+#### RBAC Integration
+- **Permission-Based Access**: All email functions use proper RBAC permissions
+- **Email Permissions**: 
+  - `EMAIL.SEND` - Send emails through the system
+  - `EMAIL.TEMPLATES` - Manage email templates
+  - `EMAIL.SETTINGS` - Configure SMTP and email settings  
+  - `EMAIL.QUEUE` - View and manage email queue
+
+#### API Security
+- All endpoints require appropriate permissions
+- SMTP passwords excluded from API responses for security
+- Settings restricted to users with email management permissions
+
+### User Experience Features
+
+#### SMTP Configuration
+- **Optional Authentication**: Clear UI for servers that don't require auth
+- **Connection Testing**: One-click SMTP connection validation
+- **Test Mode Toggle**: Safe development mode with email logging
+- **Security**: Password fields properly handled with security considerations
+
+#### Email Queue Management
+- **Real-Time Statistics**: Live stats for pending, sending, sent, and failed emails
+- **Queue Monitoring**: Detailed view of email queue status
+- **Manual Operations**: Cancel, retry, and manage individual emails
+- **Priority System**: Visual priority indicators and sorting
+
+#### Template Management
+- **Template Library**: Pre-built templates for common scenarios
+- **Status Indicators**: Clear visual status (active, inactive, draft)
+- **Variable Documentation**: Built-in documentation for template variables
+- **Template Editor Ready**: Framework prepared for future visual editor
+
+### Default Templates Included
+
+#### User Invitation Template
+- Professional invitation email with company branding
+- Includes invitation link, expiration date, and inviter information
+- Supports both HTML and plain text versions
+- Required variables: userName, accountName, inviterName, invitationLink, etc.
+
+#### Ticket Status Update Template
+- Comprehensive ticket update notifications
+- Shows old vs. new status with optional message
+- Includes ticket details and direct link
+- Supports conditional content for status messages
+
+#### Time Entry Approval Template
+- Time entry approval/rejection notifications
+- Includes period summary and total hours
+- Shows approver information and optional message
+- Links back to time entries page
+
+#### Invoice Generation Template
+- Professional invoice notifications
+- Includes invoice details, period, and amounts
+- Summary of time entries and additional items
+- Links to view and download invoice
+
+### Integration Points
+
+#### Authentication System
+- Integrated with NextAuth for user context
+- Permission checking throughout email operations
+- User tracking for all email activities
+
+#### Settings Page Integration
+- Seamless integration with existing settings tabs
+- Consistent UI patterns with other settings sections
+- Permission-aware interface with proper access control
+
+#### Notification System Ready
+- Framework prepared for system-wide notifications
+- Event-driven email sending for user actions
+- Template-based notifications for consistency
+
+### Security Considerations
+
+#### Data Protection
+- SMTP passwords handled securely (ready for encryption)
+- Email content logged appropriately in development mode
+- Sensitive information excluded from API responses
+
+#### Access Control
+- Permission-based access to all email functions
+- Role-based restrictions on email settings management
+- Audit trail for all email operations (framework ready)
+
+#### SMTP Security
+- Support for SSL/TLS connections
+- Optional authentication for secure environments
+- Connection testing without exposing credentials
+
+### Performance Optimizations
+
+#### Email Processing
+- Asynchronous email queue processing
+- Configurable retry logic with backoff
+- Priority-based email sending
+- Batch processing capabilities
+
+#### UI Performance
+- Lazy loading of email data
+- Efficient state management with React hooks
+- Optimized permission checking with caching
+
+### Files Created/Modified
+
+#### Core Email Infrastructure
+- `src/lib/email/EmailService.ts` - Main email service class
+- `src/lib/email/templates.ts` - Default templates and utilities
+- `scripts/seed-email-templates.ts` - Template seeding script
+
+#### API Routes
+- `src/app/api/email/settings/route.ts` - SMTP configuration management
+- `src/app/api/email/templates/route.ts` - Template CRUD operations
+- `src/app/api/email/queue/route.ts` - Email queue management
+- `src/app/api/email/test/route.ts` - Email testing functionality
+
+#### UI Components
+- `src/components/settings/EmailSettingsSection.tsx` - Complete email settings UI
+- `src/app/settings/page.tsx` - Enhanced with email tab
+
+#### Database & Schema
+- `prisma/schema.prisma` - Email-related models and relationships
+- Database migration for email infrastructure
+
+#### Dependencies
+- `package.json` - Added nodemailer and @types/nodemailer
+
+### Testing & Validation
+
+#### Manual Testing Scenarios
+- ✅ SMTP configuration with and without authentication
+- ✅ Email template creation and management
+- ✅ Email queue monitoring and statistics
+- ✅ Test email sending with detailed feedback
+- ✅ Permission-based access control throughout
+- ✅ Optional authentication for SMTP servers
+- ✅ Test mode functionality (log without sending)
+
+#### Integration Testing
+- ✅ Settings page integration with email tab
+- ✅ Permission system integration
+- ✅ Database schema migration successful
+- ✅ Template seeding and management
+- ✅ API endpoint functionality and security
+
+### Impact Assessment
+
+#### Benefits Achieved
+- **Comprehensive Email Infrastructure**: Complete foundation for automated notifications
+- **Professional Templates**: Pre-built templates for common business scenarios
+- **Flexible Configuration**: Supports various SMTP configurations and environments
+- **Developer Friendly**: Test mode and debugging capabilities
+- **Production Ready**: Queue management, retry logic, and error handling
+
+#### Security & Reliability
+- **Secure Configuration**: Proper handling of SMTP credentials
+- **Permission-Based Access**: Full RBAC integration throughout
+- **Error Handling**: Comprehensive error handling and user feedback
+- **Data Integrity**: Proper database constraints and validation
+
+#### User Experience
+- **Intuitive Interface**: Easy-to-use settings with clear guidance
+- **Visual Feedback**: Real-time status updates and clear error messages
+- **Professional Output**: High-quality email templates with proper formatting
+- **Flexible Testing**: Safe testing environment with detailed feedback
+
+### Future Enhancements Ready
+
+#### Advanced Features
+- **Visual Template Editor**: Framework prepared for drag-and-drop editor
+- **Automated Notifications**: Event-driven email sending throughout the application
+- **Email Analytics**: Tracking open rates, clicks, and engagement
+- **Advanced Queuing**: Scheduled emails, bulk operations, and campaigns
+
+#### Integration Opportunities
+- **Notification Center**: Centralized notification management
+- **Webhook Integration**: External service notifications
+- **Mobile App Support**: API-ready for mobile email notifications
+- **Third-Party Services**: Framework supports SendGrid, Mailgun, etc.
+
+#### Scalability Features
+- **Queue Workers**: Background processing for high-volume environments
+- **Template Versioning**: Version control for email templates
+- **Multi-Language Support**: Localized email templates
+- **Advanced Personalization**: Dynamic content based on user attributes
+
+### Migration Guide
+
+#### For New Installations
+1. **Database Setup**: Email models created automatically with schema migration
+2. **SMTP Configuration**: Configure email settings through admin interface
+3. **Template Seeding**: Run template seeding script for default templates
+4. **Permission Assignment**: Assign email permissions to appropriate users
+
+#### For Existing Installations
+1. **Schema Migration**: Run `npx prisma db push` to create email tables
+2. **Dependency Installation**: `npm install nodemailer @types/nodemailer`
+3. **Permission Seeding**: Use permissions management to seed email permissions
+4. **Configuration**: Set up SMTP settings through new email settings tab
+5. **Template Population**: Use seeding script to populate default templates
+
+#### For Developers
+- **New Templates**: Add template definitions to `templates.ts`
+- **Email Integration**: Use `EmailService` for sending application emails  
+- **Permission Checks**: Use email permissions for access control
+- **Queue Management**: Monitor and manage email operations through API
 
 ---
 

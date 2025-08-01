@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { hasPermission } from '@/lib/permissions';
 
 export async function GET(
   request: NextRequest,
@@ -10,8 +11,14 @@ export async function GET(
   try {
     const session = await getServerSession(authOptions);
 
-    if (!session || (session.user.role !== 'ADMIN' && session.user.role !== 'EMPLOYEE')) {
+    if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Check permission to view accounts
+    const canViewAccounts = await hasPermission(session.user.id, { resource: 'accounts', action: 'view' });
+    if (!canViewAccounts) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const { id } = await params;
@@ -133,8 +140,14 @@ export async function PUT(
   try {
     const session = await getServerSession(authOptions);
 
-    if (!session || session.user.role !== 'ADMIN') {
+    if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Check permission to update accounts
+    const canUpdateAccounts = await hasPermission(session.user.id, { resource: 'accounts', action: 'update' });
+    if (!canUpdateAccounts) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const { id } = await params;
@@ -195,8 +208,14 @@ export async function DELETE(
   try {
     const session = await getServerSession(authOptions);
 
-    if (!session || session.user.role !== 'ADMIN') {
+    if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Check permission to update accounts
+    const canUpdateAccounts = await hasPermission(session.user.id, { resource: 'accounts', action: 'update' });
+    if (!canUpdateAccounts) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const { id } = await params;

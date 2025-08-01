@@ -130,6 +130,11 @@ export function usePermissions() {
   const canViewBilling = () => hasPermission(PERMISSIONS.BILLING.VIEW);
   const canUpdateBilling = () => hasPermission(PERMISSIONS.BILLING.UPDATE);
   const canViewReports = () => hasPermission(PERMISSIONS.REPORTS.VIEW);
+  const canViewSettings = () => hasPermission(PERMISSIONS.SETTINGS.VIEW);
+  const canUpdateSettings = () => hasPermission(PERMISSIONS.SETTINGS.UPDATE);
+  const canCreateUsers = () => hasPermission(PERMISSIONS.USERS.CREATE);
+  const canInviteUsers = () => hasPermission(PERMISSIONS.USERS.INVITE);
+  const canManageUsers = () => hasPermission(PERMISSIONS.USERS.MANAGE);
 
   // Clear cache when session changes
   useEffect(() => {
@@ -153,6 +158,11 @@ export function usePermissions() {
     canViewBilling,
     canUpdateBilling,
     canViewReports,
+    canViewSettings,
+    canUpdateSettings,
+    canCreateUsers,
+    canInviteUsers,
+    canManageUsers,
   };
 }
 
@@ -187,8 +197,9 @@ export function useTimeEntryPermissions(timeEntry?: {
       return false;
     }
 
-    // Admin can edit all entries, others can only edit their own
-    return session.user.role === 'ADMIN' || timeEntry.userId === session.user.id;
+    // Check if user can edit all entries or just their own
+    const canEditAll = await hasPermission({ resource: 'time-entries', action: 'update', scope: 'global' });
+    return canEditAll || timeEntry.userId === session.user.id;
   };
 
   const canDelete = async (): Promise<boolean> => {
@@ -207,8 +218,9 @@ export function useTimeEntryPermissions(timeEntry?: {
       return false;
     }
 
-    // Admin can delete all entries, others can only delete their own
-    return session.user.role === 'ADMIN' || timeEntry.userId === session.user.id;
+    // Check if user can delete all entries or just their own
+    const canDeleteAll = await hasPermission({ resource: 'time-entries', action: 'delete', scope: 'global' });
+    return canDeleteAll || timeEntry.userId === session.user.id;
   };
 
   const canApprove = async (): Promise<boolean> => {

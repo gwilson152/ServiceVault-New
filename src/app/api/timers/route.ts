@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { hasPermission } from "@/lib/permissions";
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,8 +11,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Only employees and admins can use timers
-    if (session.user.role !== 'EMPLOYEE' && session.user.role !== 'ADMIN') {
+    // Check permission to create time entries (timers are used to create time entries)
+    const canCreateTimeEntries = await hasPermission(session.user.id, { resource: "time-entries", action: "create" });
+    if (!canCreateTimeEntries) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -60,8 +62,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Only employees and admins can create timers
-    if (session.user.role !== 'EMPLOYEE' && session.user.role !== 'ADMIN') {
+    // Check permission to create time entries (timers are used to create time entries)
+    const canCreateTimeEntries = await hasPermission(session.user.id, { resource: "time-entries", action: "create" });
+    if (!canCreateTimeEntries) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -83,9 +86,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
     }
 
-    // Check access permissions
-    if (session.user.role === 'EMPLOYEE') {
-      // Employees can only start timers on tickets assigned to them or unassigned
+    // Check access permissions based on ticket assignments and permissions
+    const canCreateAccountTimeEntries = await hasPermission(session.user.id, { 
+      resource: "time-entries", 
+      action: "create", 
+      scope: "account" 
+    });
+    
+    // If user doesn't have account-wide permissions, check if they can only work on assigned tickets
+    if (!canCreateAccountTimeEntries) {
       const hasAccess = ticket.assigneeId === session.user.id || !ticket.assigneeId;
       if (!hasAccess) {
         return NextResponse.json({ error: "Access denied to this ticket" }, { status: 403 });
