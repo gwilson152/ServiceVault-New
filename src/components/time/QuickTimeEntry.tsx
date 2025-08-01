@@ -47,13 +47,17 @@ export function QuickTimeEntry({ ticketId, ticketTitle, onTimeLogged }: QuickTim
   };
 
   const handleStopTimer = async () => {
+    console.log("🟡 [QuickTimeEntry] handleStopTimer called for ticket:", ticketId);
     try {
+      console.log("🟡 [QuickTimeEntry] Calling stopTimer()...", "No manual timer management here - GlobalTimerWidget handles the modal");
+      // Note: stopTimer() is called without refreshing timers immediately 
+      // This allows the GlobalTimerWidget to show the log modal
+      // The QuickTimeEntry stop button should only trigger the stop action
+      // The actual modal and time logging is handled by GlobalTimerWidget
       const result = await stopTimer();
-      if (result) {
-        onTimeLogged?.(); // Refresh to show updated timer state
-      }
+      console.log("🟡 [QuickTimeEntry] stopTimer result:", result);
     } catch (error) {
-      console.error('Failed to stop timer:', error);
+      console.error('🟡 [QuickTimeEntry] Failed to stop timer:', error);
     }
   };
 

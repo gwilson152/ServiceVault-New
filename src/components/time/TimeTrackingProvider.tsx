@@ -226,12 +226,18 @@ export function TimeTrackingProvider({ children }: TimeTrackingProviderProps) {
 
   const stopTimer = async (timerId?: string) => {
     const targetTimerId = timerId || primaryTimerId;
-    if (!targetTimerId) return null;
+    console.log("🔵 [TimeTrackingProvider] stopTimer called with timerId:", timerId, "primaryTimerId:", primaryTimerId, "targetTimerId:", targetTimerId);
+    
+    if (!targetTimerId) {
+      console.log("🔵 [TimeTrackingProvider] No targetTimerId, returning null");
+      return null;
+    }
     
     setIsLoading(true);
     let result = null;
     
     try {
+      console.log("🔵 [TimeTrackingProvider] Making API call to stop timer:", targetTimerId);
       const response = await fetch(`/api/timers/${targetTimerId}`, {
         method: "PUT",
         headers: {
@@ -240,9 +246,14 @@ export function TimeTrackingProvider({ children }: TimeTrackingProviderProps) {
         body: JSON.stringify({ action: "stop" }),
       });
 
+      console.log("🔵 [TimeTrackingProvider] API response status:", response.status);
+      
       if (response.ok) {
         const stoppedTimer = await response.json();
+        console.log("🔵 [TimeTrackingProvider] Stopped timer data:", stoppedTimer);
+        
         const minutes = Math.round((stoppedTimer.pausedTime || 0) / 60);
+        console.log("🔵 [TimeTrackingProvider] Calculated minutes:", minutes);
         
         result = {
           minutes,
@@ -250,15 +261,21 @@ export function TimeTrackingProvider({ children }: TimeTrackingProviderProps) {
           timerId: stoppedTimer.id,
         };
 
-        // Refresh all timers to update state
-        await refreshAllActiveTimers();
+        console.log("🔵 [TimeTrackingProvider] Prepared result:", result);
+
+        // Don't refresh active timers immediately - let the caller handle the modal first
+        // The modal will refresh timers after logging the time entry
+        console.log("🔵 [TimeTrackingProvider] Skipping timer refresh to allow modal to show");
+      } else {
+        console.log("🔵 [TimeTrackingProvider] API response not ok:", response.status, response.statusText);
       }
     } catch (error) {
-      console.error("Error stopping timer:", error);
+      console.error("🔵 [TimeTrackingProvider] Error stopping timer:", error);
     } finally {
       setIsLoading(false);
     }
     
+    console.log("🔵 [TimeTrackingProvider] Returning result:", result);
     return result;
   };
 

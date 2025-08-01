@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
@@ -30,12 +31,18 @@ export function GlobalTimerWidget() {
     resumeTimer,
     stopTimer,
     formatTime,
-    refreshActiveTimer: _refreshActiveTimer
+    refreshAllActiveTimers
   } = useTimeTracking();
+
 
   const [isMinimized, setIsMinimized] = useState(false);
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
   const [isLoggingTime, setIsLoggingTime] = useState(false);
+
+  // Debug logging for modal state changes
+  useEffect(() => {
+    console.log("🔴 [GlobalTimerWidget] Modal state changed - isLogModalOpen:", isLogModalOpen);
+  }, [isLogModalOpen]);
   
   // Time entry form state
   const [description, setDescription] = useState("");
@@ -43,6 +50,7 @@ export function GlobalTimerWidget() {
   const [selectedBillingRate, setSelectedBillingRate] = useState<string>("none");
   const [billingRates, setBillingRates] = useState<Array<{id: string; name: string; rate: number; description?: string}>>([]);
   const [timerData, setTimerData] = useState<{ minutes: number; ticketId: string; timerId: string } | null>(null);
+  const [editableMinutes, setEditableMinutes] = useState<string>("");
 
   // Fetch billing rates when component mounts
   useEffect(() => {
@@ -67,20 +75,29 @@ export function GlobalTimerWidget() {
   }
 
   const handleStopTimer = async () => {
+    console.log("🔴 [GlobalTimerWidget] handleStopTimer called");
     try {
+      console.log("🔴 [GlobalTimerWidget] Calling stopTimer()...");
       const result = await stopTimer();
+      console.log("🔴 [GlobalTimerWidget] stopTimer result:", result);
+      
       if (result) {
+        console.log("🔴 [GlobalTimerWidget] Setting timer data and opening modal");
         setTimerData(result);
+        setEditableMinutes(result.minutes.toString());
         setIsLogModalOpen(true);
+        console.log("🔴 [GlobalTimerWidget] Modal state set to true");
+      } else {
+        console.log("🔴 [GlobalTimerWidget] No result from stopTimer");
       }
     } catch (error) {
-      console.error("Error stopping timer:", error);
+      console.error("🔴 [GlobalTimerWidget] Error stopping timer:", error);
       alert("Failed to stop timer");
     }
   };
 
   const handleLogTime = async () => {
-    if (!timerData || !description.trim()) return;
+    if (!timerData || !description.trim() || !editableMinutes || parseInt(editableMinutes) <= 0) return;
 
     setIsLoggingTime(true);
     try {
@@ -91,7 +108,7 @@ export function GlobalTimerWidget() {
         },
         body: JSON.stringify({
           ticketId: timerData.ticketId,
-          minutes: timerData.minutes,
+          minutes: parseInt(editableMinutes),
           description: description.trim(),
           date: new Date().toISOString().split('T')[0],
           noCharge,
@@ -106,6 +123,8 @@ export function GlobalTimerWidget() {
         setSelectedBillingRate("none");
         setTimerData(null);
         setIsLogModalOpen(false);
+        // Refresh timers after successful time entry logging
+        await refreshAllActiveTimers();
       } else {
         const errorData = await response.json();
         console.error("Failed to log time:", errorData.error);
@@ -119,12 +138,15 @@ export function GlobalTimerWidget() {
     }
   };
 
-  const handleCloseModal = () => {
+  const handleCloseModal = async () => {
     setIsLogModalOpen(false);
     setTimerData(null);
     setDescription("");
     setNoCharge(false);
     setSelectedBillingRate("none");
+    setEditableMinutes("");
+    // Refresh timers when modal is closed (in case user canceled)
+    await refreshAllActiveTimers();
   };
 
   if (isMinimized) {
@@ -223,16 +245,36 @@ export function GlobalTimerWidget() {
           </DialogHeader>
           
           <div className="space-y-4">
-            <div className="text-center p-4 bg-blue-50 dark:bg-blue-950/50 rounded-lg">
-              <div className="text-2xl font-bold text-blue-600">
-                {timerData ? `${timerData.minutes}m` : '0m'}
+            <div className="p-4 bg-blue-50 dark:bg-blue-950/50 rounded-lg space-y-3">
+              <div className="text-center">
+                <div className="text-sm text-muted-foreground">
+                  Time tracked for {currentTicketTitle}
+                </div>
+                <Badge variant="outline" className="text-xs mt-1">
+                  {currentTicketId}
+                </Badge>
+                {timerData && (
+                  <div className="text-xs text-muted-foreground mt-2">
+                    Original tracked: {timerData.minutes}m
+                  </div>
+                )}
               </div>
-              <div className="text-sm text-muted-foreground">
-                Time tracked for {currentTicketTitle}
+              
+              <div className="space-y-2">
+                <Label htmlFor="editable-minutes">Minutes to Log *</Label>
+                <Input
+                  id="editable-minutes"
+                  type="number"
+                  step="15"
+                  min="1"
+                  max="1440"
+                  value={editableMinutes}
+                  onChange={(e) => setEditableMinutes(e.target.value)}
+                  placeholder="120"
+                  className="text-center font-mono text-lg"
+                  required
+                />
               </div>
-              <Badge variant="outline" className="text-xs mt-1">
-                {currentTicketId}
-              </Badge>
             </div>
 
             <div className="space-y-2">
@@ -289,7 +331,7 @@ export function GlobalTimerWidget() {
               </Button>
               <Button
                 onClick={handleLogTime}
-                disabled={!description.trim() || isLoggingTime}
+                disabled={!description.trim() || !editableMinutes || parseInt(editableMinutes) <= 0 || isLoggingTime}
                 className="flex-1"
               >
                 <Plus className="h-4 w-4 mr-1" />
