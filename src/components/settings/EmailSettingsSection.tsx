@@ -27,6 +27,8 @@ import {
 } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 import { CreateEmailTemplateDialog } from "./CreateEmailTemplateDialog";
+import { EmailTemplatePreviewDialog } from "./EmailTemplatePreviewDialog";
+import { EditEmailTemplateDialog } from "./EditEmailTemplateDialog";
 
 interface EmailSettingsSectionProps {
   onSettingsChange: () => void;
@@ -91,6 +93,9 @@ export function EmailSettingsSection({ onSettingsChange }: EmailSettingsSectionP
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("__basic_test__");
   const [testVariables, setTestVariables] = useState<Record<string, string>>({});
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showPreviewDialog, setShowPreviewDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState<EmailTemplate | null>(null);
   
   const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
@@ -307,6 +312,45 @@ export function EmailSettingsSection({ onSettingsChange }: EmailSettingsSectionP
   };
 
   const handleTemplateCreated = () => {
+    loadTemplates(); // Refresh the templates list
+  };
+
+  const handlePreviewTemplate = (template: EmailTemplate) => {
+    setSelectedTemplate(template);
+    setShowPreviewDialog(true);
+  };
+
+  const handleEditTemplate = (template: EmailTemplate) => {
+    setSelectedTemplate(template);
+    setShowEditDialog(true);
+  };
+
+  const handleDeleteTemplate = async (template: EmailTemplate) => {
+    if (!canUpdateSettings) return;
+    
+    const confirmed = window.confirm(
+      `Are you sure you want to delete the template "${template.name}"? This action cannot be undone.`
+    );
+    
+    if (!confirmed) return;
+
+    try {
+      const response = await fetch(`/api/email/templates/${template.id}`, {
+        method: 'DELETE'
+      });
+
+      if (response.ok) {
+        loadTemplates(); // Refresh the templates list
+      } else {
+        alert('Failed to delete template. Please try again.');
+      }
+    } catch (error) {
+      console.error('Failed to delete template:', error);
+      alert('Failed to delete template. Please try again.');
+    }
+  };
+
+  const handleTemplateUpdated = () => {
     loadTemplates(); // Refresh the templates list
   };
 
@@ -586,14 +630,29 @@ export function EmailSettingsSection({ onSettingsChange }: EmailSettingsSectionP
                       </Badge>
                       {canUpdateSettings && (
                         <>
-                          <Button variant="outline" size="sm" title="Preview Template">
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            title="Preview Template"
+                            onClick={() => handlePreviewTemplate(template)}
+                          >
                             <Eye className="h-4 w-4" />
                           </Button>
-                          <Button variant="outline" size="sm" title="Edit Template">
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            title="Edit Template"
+                            onClick={() => handleEditTemplate(template)}
+                          >
                             <Edit3 className="h-4 w-4" />
                           </Button>
                           {!template.isDefault && (
-                            <Button variant="outline" size="sm" title="Delete Template">
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              title="Delete Template"
+                              onClick={() => handleDeleteTemplate(template)}
+                            >
                               <Trash2 className="h-4 w-4" />
                             </Button>
                           )}
@@ -794,6 +853,19 @@ export function EmailSettingsSection({ onSettingsChange }: EmailSettingsSectionP
         open={showCreateDialog}
         onOpenChange={setShowCreateDialog}
         onTemplateCreated={handleTemplateCreated}
+      />
+      
+      <EmailTemplatePreviewDialog
+        open={showPreviewDialog}
+        onOpenChange={setShowPreviewDialog}
+        template={selectedTemplate}
+      />
+      
+      <EditEmailTemplateDialog
+        open={showEditDialog}
+        onOpenChange={setShowEditDialog}
+        template={selectedTemplate}
+        onTemplateUpdated={handleTemplateUpdated}
       />
     </div>
   );
