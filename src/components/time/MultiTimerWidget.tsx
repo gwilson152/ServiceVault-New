@@ -20,6 +20,7 @@ export function MultiTimerWidget({ onTimeLogged }: MultiTimerWidgetProps = {}) {
   } = useTimeTracking();
 
   const [expandedTimerId, setExpandedTimerId] = useState<string | null>(null);
+  const [pendingStopResult, setPendingStopResult] = useState<{ minutes: number; ticketId: string; timerId: string } | null>(null);
 
   // Don't show widget if no timers are active
   if (!activeTimers || activeTimers.length === 0) {
@@ -31,7 +32,18 @@ export function MultiTimerWidget({ onTimeLogged }: MultiTimerWidgetProps = {}) {
   };
 
   const handleStopTimer = async (timerId: string) => {
+    console.log("🟠 [MultiTimerWidget] handleStopTimer called for timer:", timerId);
     const result = await stopTimer(timerId);
+    console.log("🟠 [MultiTimerWidget] stopTimer result:", result);
+    
+    if (result) {
+      console.log("🟠 [MultiTimerWidget] Setting pending stop result and expanding timer");
+      // Store the result to trigger modal in TimerCard
+      setPendingStopResult(result);
+      // Expand the timer that was stopped to show the modal
+      setExpandedTimerId(result.timerId);
+    }
+    
     // After stopping and potentially logging time, refresh all timers
     await refreshAllActiveTimers();
     return result;
@@ -68,6 +80,8 @@ export function MultiTimerWidget({ onTimeLogged }: MultiTimerWidgetProps = {}) {
                 onStop={handleStopTimer}
                 formatTime={formatTime}
                 onTimeLogged={handleTimeLogged}
+                pendingStopResult={pendingStopResult?.timerId === timer.id ? pendingStopResult : null}
+                onStopResultConsumed={() => setPendingStopResult(null)}
               />
             </div>
           ))}

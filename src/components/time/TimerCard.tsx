@@ -48,6 +48,8 @@ interface TimerCardProps {
   onStop: (timerId: string) => Promise<{ minutes: number; ticketId: string; timerId: string } | null>;
   formatTime: (seconds: number) => string;
   onTimeLogged?: () => void;
+  pendingStopResult?: { minutes: number; ticketId: string; timerId: string } | null;
+  onStopResultConsumed?: () => void;
 }
 
 export function TimerCard({
@@ -58,7 +60,9 @@ export function TimerCard({
   onResume,
   onStop,
   formatTime,
-  onTimeLogged
+  onTimeLogged,
+  pendingStopResult,
+  onStopResultConsumed
 }: TimerCardProps) {
   const [timerSeconds, setTimerSeconds] = useState(timer.totalSeconds || 0);
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
@@ -76,6 +80,18 @@ export function TimerCard({
   useEffect(() => {
     setTimerSeconds(timer.totalSeconds || 0);
   }, [timer.totalSeconds]);
+
+  // Handle pending stop result - automatically show log modal
+  useEffect(() => {
+    if (pendingStopResult) {
+      console.log("🔴 [TimerCard] Received pending stop result, showing modal:", pendingStopResult);
+      setTimerData(pendingStopResult);
+      setEditableMinutes(pendingStopResult.minutes.toString());
+      setIsLogModalOpen(true);
+      // Consume the pending result
+      onStopResultConsumed?.();
+    }
+  }, [pendingStopResult, onStopResultConsumed]);
 
   // Timer effect - updates UI timer every second for running timers
   useEffect(() => {
