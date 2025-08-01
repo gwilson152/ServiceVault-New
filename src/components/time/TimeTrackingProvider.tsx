@@ -47,6 +47,10 @@ interface TimeTrackingContextType {
   refreshActiveTimer: () => Promise<void>;
   refreshAllActiveTimers: () => Promise<void>;
   
+  // Global timer events
+  registerTimerLoggedCallback: (callback: () => void) => () => void;
+  notifyTimerLogged: () => void;
+  
   // Utility
   formatTime: (seconds: number) => string;
   getTimerForTicket: (ticketId: string) => Timer | null;
@@ -71,6 +75,9 @@ export function TimeTrackingProvider({ children }: TimeTrackingProviderProps) {
   // Multiple timers state
   const [activeTimers, setActiveTimers] = useState<Timer[]>([]);
   const [primaryTimerId, setPrimaryTimerId] = useState<string | null>(null);
+  
+  // Global timer event callbacks
+  const [timerLoggedCallbacks, setTimerLoggedCallbacks] = useState<Set<() => void>>(new Set());
 
   // Fetch all active timers from database
   const refreshAllActiveTimers = useCallback(async () => {
@@ -313,6 +320,30 @@ export function TimeTrackingProvider({ children }: TimeTrackingProviderProps) {
     return activeTimers.find(timer => timer.ticketId === ticketId) || null;
   };
 
+  // Global timer event system
+  const registerTimerLoggedCallback = useCallback((callback: () => void) => {
+    setTimerLoggedCallbacks(prev => new Set(prev).add(callback));
+    
+    // Return unregister function
+    return () => {
+      setTimerLoggedCallbacks(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(callback);
+        return newSet;
+      });
+    };
+  }, []);
+
+  const notifyTimerLogged = useCallback(() => {
+    timerLoggedCallbacks.forEach(callback => {
+      try {
+        callback();
+      } catch (error) {
+        console.error('Error in timer logged callback:', error);
+      }
+    });
+  }, [timerLoggedCallbacks]);
+
   const value: TimeTrackingContextType = {
     isTimerRunning,
     timerSeconds,
@@ -330,6 +361,8 @@ export function TimeTrackingProvider({ children }: TimeTrackingProviderProps) {
     switchToPrimaryTimer,
     refreshActiveTimer,
     refreshAllActiveTimers,
+    registerTimerLoggedCallback,
+    notifyTimerLogged,
     formatTime,
     getTimerForTicket,
   };

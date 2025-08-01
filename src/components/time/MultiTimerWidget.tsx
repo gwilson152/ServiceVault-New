@@ -4,14 +4,19 @@ import { useState } from "react";
 import { useTimeTracking } from "./TimeTrackingProvider";
 import { TimerCard } from "./TimerCard";
 
-export function MultiTimerWidget() {
+interface MultiTimerWidgetProps {
+  onTimeLogged?: () => void;
+}
+
+export function MultiTimerWidget({ onTimeLogged }: MultiTimerWidgetProps = {}) {
   const {
     activeTimers,
     pauseTimer,
     resumeTimer,
     stopTimer,
     formatTime,
-    refreshAllActiveTimers
+    refreshAllActiveTimers,
+    notifyTimerLogged
   } = useTimeTracking();
 
   const [expandedTimerId, setExpandedTimerId] = useState<string | null>(null);
@@ -30,6 +35,13 @@ export function MultiTimerWidget() {
     // After stopping and potentially logging time, refresh all timers
     await refreshAllActiveTimers();
     return result;
+  };
+
+  const handleTimeLogged = () => {
+    // Notify all registered components that a timer was logged
+    notifyTimerLogged();
+    // Also notify direct parent if provided
+    onTimeLogged?.();
   };
 
   return (
@@ -51,6 +63,7 @@ export function MultiTimerWidget() {
                 onResume={resumeTimer}
                 onStop={handleStopTimer}
                 formatTime={formatTime}
+                onTimeLogged={handleTimeLogged}
               />
             </div>
           ))}

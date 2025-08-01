@@ -47,6 +47,7 @@ interface TimerCardProps {
   onResume: (timerId: string) => Promise<void>;
   onStop: (timerId: string) => Promise<{ minutes: number; ticketId: string; timerId: string } | null>;
   formatTime: (seconds: number) => string;
+  onTimeLogged?: () => void;
 }
 
 export function TimerCard({
@@ -56,7 +57,8 @@ export function TimerCard({
   onPause,
   onResume,
   onStop,
-  formatTime
+  formatTime,
+  onTimeLogged
 }: TimerCardProps) {
   const [timerSeconds, setTimerSeconds] = useState(timer.totalSeconds || 0);
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
@@ -153,6 +155,8 @@ export function TimerCard({
         setSelectedBillingRate("none");
         setTimerData(null);
         setIsLogModalOpen(false);
+        // Notify parent that time was logged
+        onTimeLogged?.();
       } else {
         const errorData = await response.json();
         console.error("Failed to log time:", errorData.error);

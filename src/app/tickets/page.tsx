@@ -43,6 +43,7 @@ import { AccountSelector } from "@/components/selectors/account-selector";
 import { TicketDetailModal } from "@/components/tickets/TicketDetailModal";
 import { QuickTimeEntry } from "@/components/time/QuickTimeEntry";
 import { QuickAddonEntry } from "@/components/tickets/QuickAddonEntry";
+import { useTimeTracking } from "@/components/time/TimeTrackingProvider";
 import { 
   FileText, 
   Plus, 
@@ -65,6 +66,7 @@ export default function TicketsPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("list");
+  const { registerTimerLoggedCallback } = useTimeTracking();
 
   // Data state
   const [tickets, setTickets] = useState<Ticket[]>([]);
@@ -171,6 +173,16 @@ export default function TicketsPage() {
       }
     }
   }, [status, session, router]);
+
+  // Register for timer logged events to auto-refresh tickets
+  useEffect(() => {
+    const unregisterCallback = registerTimerLoggedCallback(() => {
+      // Refresh tickets when any timer is logged
+      fetchTickets();
+    });
+
+    return unregisterCallback;
+  }, [registerTimerLoggedCallback]);
 
   if (status === "loading" || isLoading) {
     return (

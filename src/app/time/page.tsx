@@ -49,6 +49,7 @@ export default function TimeTrackingPage() {
     startTimer: startTimerProvider,
     pauseTimer,
     resumeTimer,
+    registerTimerLoggedCallback,
     stopTimer: stopTimerProvider,
     formatTime
   } = useTimeTracking();
@@ -110,6 +111,16 @@ export default function TimeTrackingPage() {
       }
     }
   }, [status, session, router]);
+
+  // Register for timer logged events to auto-refresh data
+  useEffect(() => {
+    const unregisterCallback = registerTimerLoggedCallback(() => {
+      // Refresh accounts data when any timer is logged (to update time spent)
+      fetchAccounts();
+    });
+
+    return unregisterCallback;
+  }, [registerTimerLoggedCallback]);
 
   // Timer functions are now handled by TimeTrackingProvider
 
