@@ -149,14 +149,18 @@ export function TimerCard({
       });
 
       if (response.ok) {
+        console.log("🔴 [TimerCard] Time logged successfully - calling onTimeLogged callback");
         // Reset form and close modal
         setDescription("");
         setNoCharge(false);
         setSelectedBillingRate("none");
         setTimerData(null);
         setIsLogModalOpen(false);
-        // Notify parent that time was logged
-        onTimeLogged?.();
+        // Add small delay to ensure database transaction is fully committed
+        setTimeout(() => {
+          console.log("🔴 [TimerCard] Triggering onTimeLogged after delay");
+          onTimeLogged?.();
+        }, 100);
       } else {
         const errorData = await response.json();
         console.error("Failed to log time:", errorData.error);

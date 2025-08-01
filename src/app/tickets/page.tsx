@@ -177,6 +177,7 @@ export default function TicketsPage() {
   // Register for timer logged events to auto-refresh tickets
   useEffect(() => {
     const unregisterCallback = registerTimerLoggedCallback(() => {
+      console.log("🟢 [TicketsPage] Timer logged callback triggered - refreshing tickets");
       // Refresh tickets when any timer is logged
       fetchTickets();
     });

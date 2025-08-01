@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from "react";
+import { createContext, useContext, useState, useEffect, ReactNode, useCallback, useMemo } from "react";
 import { useSession } from "next-auth/react";
 
 interface Timer {
@@ -77,7 +77,7 @@ export function TimeTrackingProvider({ children }: TimeTrackingProviderProps) {
   const [primaryTimerId, setPrimaryTimerId] = useState<string | null>(null);
   
   // Global timer event callbacks
-  const [timerLoggedCallbacks, setTimerLoggedCallbacks] = useState<Set<() => void>>(new Set());
+  const [timerLoggedCallbacks, setTimerLoggedCallbacks] = useState<(() => void)[]>([]);
 
   // Fetch all active timers from database
   const refreshAllActiveTimers = useCallback(async () => {
@@ -322,21 +322,21 @@ export function TimeTrackingProvider({ children }: TimeTrackingProviderProps) {
 
   // Global timer event system
   const registerTimerLoggedCallback = useCallback((callback: () => void) => {
-    setTimerLoggedCallbacks(prev => new Set(prev).add(callback));
+    console.log("🔵 [TimeTrackingProvider] Registering timer logged callback");
+    setTimerLoggedCallbacks(prev => [...prev, callback]);
     
     // Return unregister function
     return () => {
-      setTimerLoggedCallbacks(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(callback);
-        return newSet;
-      });
+      console.log("🔵 [TimeTrackingProvider] Unregistering timer logged callback");
+      setTimerLoggedCallbacks(prev => prev.filter(cb => cb !== callback));
     };
   }, []);
 
   const notifyTimerLogged = useCallback(() => {
-    timerLoggedCallbacks.forEach(callback => {
+    console.log("🔵 [TimeTrackingProvider] Notifying timer logged - callbacks count:", timerLoggedCallbacks.length);
+    timerLoggedCallbacks.forEach((callback, index) => {
       try {
+        console.log(`🔵 [TimeTrackingProvider] Calling callback ${index + 1}`);
         callback();
       } catch (error) {
         console.error('Error in timer logged callback:', error);

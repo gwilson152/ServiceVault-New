@@ -37,8 +37,12 @@ export function MultiTimerWidget({ onTimeLogged }: MultiTimerWidgetProps = {}) {
     return result;
   };
 
-  const handleTimeLogged = () => {
-    // Notify all registered components that a timer was logged
+  const handleTimeLogged = async () => {
+    console.log("🟠 [MultiTimerWidget] handleTimeLogged called - refreshing timers and notifying global listeners");
+    // First refresh our own timer state to remove the logged timer
+    await refreshAllActiveTimers();
+    console.log("🟠 [MultiTimerWidget] Timer state refreshed, now notifying external components");
+    // Then notify all registered components that a timer was logged
     notifyTimerLogged();
     // Also notify direct parent if provided
     onTimeLogged?.();
