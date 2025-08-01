@@ -344,11 +344,11 @@ export default function AccountDetailsPage() {
                         <div className="text-xs text-muted-foreground">Total Tickets</div>
                       </div>
                       <div>
-                        <div className="text-2xl font-bold text-purple-600">{account.stats.timeEntries.totalHours.toFixed(1)}</div>
+                        <div className="text-2xl font-bold text-purple-600">{(account.stats?.timeEntries?.totalHours || 0).toFixed(1)}</div>
                         <div className="text-xs text-muted-foreground">Total Hours</div>
                       </div>
                       <div>
-                        <div className="text-2xl font-bold text-yellow-600">${account.stats.invoices.totalAmount.toFixed(0)}</div>
+                        <div className="text-2xl font-bold text-yellow-600">${(account.stats?.invoices?.totalAmount || 0).toFixed(0)}</div>
                         <div className="text-xs text-muted-foreground">Revenue</div>
                       </div>
                     </div>
@@ -408,11 +408,11 @@ export default function AccountDetailsPage() {
                     <div className="space-y-4">
                       <div className="flex items-center justify-between">
                         <span className="text-sm">Billable Hours</span>
-                        <span className="font-medium">{account.stats.timeEntries.billableHours.toFixed(1)}h</span>
+                        <span className="font-medium">{(account.stats?.timeEntries?.billableHours || 0).toFixed(1)}h</span>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-sm">Non-billable Hours</span>
-                        <span className="font-medium">{account.stats.timeEntries.nonBillableHours.toFixed(1)}h</span>
+                        <span className="font-medium">{(account.stats?.timeEntries?.nonBillableHours || 0).toFixed(1)}h</span>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-sm">Open Tickets</span>
@@ -624,7 +624,7 @@ export default function AccountDetailsPage() {
                           </p>
                         </div>
                         <div className="flex items-center space-x-2">
-                          <span className="font-medium">${invoice.total.toFixed(2)}</span>
+                          <span className="font-medium">${(invoice.total || 0).toFixed(2)}</span>
                           <Badge variant={invoice.status === "PAID" ? "outline" : invoice.status === "SENT" ? "default" : "secondary"}>
                             {invoice.status}
                           </Badge>

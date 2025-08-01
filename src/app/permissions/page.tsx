@@ -21,8 +21,12 @@ import {
   Edit,
   Trash2,
   UserCheck,
-  Lock
+  Lock,
+  Download,
+  Upload,
+  RefreshCw
 } from "lucide-react";
+import { UserSelector } from "@/components/permissions/UserSelector";
 
 interface Permission {
   id: string;
@@ -55,6 +59,23 @@ interface AccountPermission {
   updatedAt: string;
 }
 
+interface UserPermission {
+  id: string;
+  userId: string;
+  permissionName: string;
+  resource: string;
+  action: string;
+  scope: string;
+  createdAt: string;
+  updatedAt: string;
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+  };
+}
+
 export default function PermissionsPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -65,6 +86,7 @@ export default function PermissionsPage() {
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [accountUsers, setAccountUsers] = useState<AccountUser[]>([]);
   const [accountPermissions, setAccountPermissions] = useState<AccountPermission[]>([]);
+  const [userPermissions, setUserPermissions] = useState<UserPermission[]>([]);
 
   // Form state for creating system permissions
   const [permissionName, setPermissionName] = useState("");
@@ -78,6 +100,15 @@ export default function PermissionsPage() {
   const [selectedPermission, setSelectedPermission] = useState("");
   const [selectedScope, setSelectedScope] = useState("own");
   const [isCreatingAccountPermission, setIsCreatingAccountPermission] = useState(false);
+
+  // Form state for user permissions
+  const [selectedUser, setSelectedUser] = useState("");
+  const [selectedUserPermission, setSelectedUserPermission] = useState("");
+  const [selectedUserScope, setSelectedUserScope] = useState("own");
+  const [isCreatingUserPermission, setIsCreatingUserPermission] = useState(false);
+
+  // Seed permissions state
+  const [isSeedingPermissions, setIsSeedingPermissions] = useState(false);
 
   // Data fetching functions
   const fetchPermissions = async () => {
@@ -116,6 +147,18 @@ export default function PermissionsPage() {
     }
   };
 
+  const fetchUserPermissions = async () => {
+    try {
+      const response = await fetch("/api/user-permissions");
+      if (response.ok) {
+        const data = await response.json();
+        setUserPermissions(data);
+      }
+    } catch (error) {
+      console.error("Error fetching user permissions:", error);
+    }
+  };
+
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/");
@@ -125,7 +168,7 @@ export default function PermissionsPage() {
         router.push("/dashboard");
       } else {
         // Load data
-        Promise.all([fetchPermissions(), fetchAccountUsers(), fetchAccountPermissions()]).then(() => {
+        Promise.all([fetchPermissions(), fetchAccountUsers(), fetchAccountPermissions(), fetchUserPermissions()]).then(() => {
           setIsLoading(false);
         });
       }
@@ -248,6 +291,104 @@ export default function PermissionsPage() {
     }
   };
 
+  const handleCreateUserPermission = async () => {
+    if (isCreatingUserPermission) return;
+    
+    setIsCreatingUserPermission(true);
+    try {
+      const permission = permissions.find(p => p.id === selectedUserPermission);
+      if (!permission) return;
+
+      const response = await fetch("/api/user-permissions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId: selectedUser,
+          permissionName: permission.name,
+          resource: permission.resource,
+          action: permission.action,
+          scope: selectedUserScope,
+        }),
+      });
+
+      if (response.ok) {
+        // Reset form and refresh user permissions
+        setSelectedUser("");
+        setSelectedUserPermission("");
+        setSelectedUserScope("own");
+        await fetchUserPermissions();
+      } else {
+        const error = await response.json();
+        console.error("Error creating user permission:", error);
+        alert("Failed to create user permission: " + error.error);
+      }
+    } catch (error) {
+      console.error("Error creating user permission:", error);
+      alert("Failed to create user permission");
+    } finally {
+      setIsCreatingUserPermission(false);
+    }
+  };
+
+  const handleDeleteUserPermission = async (permissionId: string) => {
+    if (!confirm("Are you sure you want to delete this permission?")) return;
+
+    try {
+      const response = await fetch("/api/user-permissions", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ id: permissionId }),
+      });
+
+      if (response.ok) {
+        await fetchUserPermissions();
+      } else {
+        const error = await response.json();
+        console.error("Error deleting user permission:", error);
+        alert("Failed to delete user permission: " + error.error);
+      }
+    } catch (error) {
+      console.error("Error deleting user permission:", error);
+      alert("Failed to delete user permission");
+    }
+  };
+
+  const handleSeedPermissions = async () => {
+    if (isSeedingPermissions) return;
+
+    if (!confirm("This will create all permissions from the registry that don't exist in the database. Continue?")) return;
+    
+    setIsSeedingPermissions(true);
+    try {
+      const response = await fetch("/api/permissions/seed", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ force: false }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        alert(result.message);
+        await fetchPermissions();
+      } else {
+        const error = await response.json();
+        console.error("Error seeding permissions:", error);
+        alert("Failed to seed permissions: " + error.error);
+      }
+    } catch (error) {
+      console.error("Error seeding permissions:", error);
+      alert("Failed to seed permissions");
+    } finally {
+      setIsSeedingPermissions(false);
+    }
+  };
+
   const resourceOptions = [
     "tickets", "time-entries", "accounts", "billing", "reports", "settings"
   ];
@@ -331,12 +472,12 @@ export default function PermissionsPage() {
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Account Users</CardTitle>
+                <CardTitle className="text-sm font-medium">User Permissions</CardTitle>
                 <Users className="h-4 w-4 text-green-600" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{accountUsers.length}</div>
-                <p className="text-xs text-muted-foreground">Users with accounts</p>
+                <div className="text-2xl font-bold">{userPermissions.length}</div>
+                <p className="text-xs text-muted-foreground">System user permissions</p>
               </CardContent>
             </Card>
 
@@ -347,26 +488,27 @@ export default function PermissionsPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{accountPermissions.length}</div>
-                <p className="text-xs text-muted-foreground">Assigned permissions</p>
+                <p className="text-xs text-muted-foreground">Account user permissions</p>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Resources</CardTitle>
+                <CardTitle className="text-sm font-medium">Account Users</CardTitle>
                 <Lock className="h-4 w-4 text-orange-600" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{resourceOptions.length}</div>
-                <p className="text-xs text-muted-foreground">Protected resources</p>
+                <div className="text-2xl font-bold">{accountUsers.length}</div>
+                <p className="text-xs text-muted-foreground">Users with accounts</p>
               </CardContent>
             </Card>
           </div>
 
           {/* Main Content Tabs */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="system">System Permissions</TabsTrigger>
+              <TabsTrigger value="users">User Permissions</TabsTrigger>
               <TabsTrigger value="account">Account Permissions</TabsTrigger>
               <TabsTrigger value="create">Create Permission</TabsTrigger>
             </TabsList>
@@ -375,10 +517,22 @@ export default function PermissionsPage() {
             <TabsContent value="system" className="space-y-4">
               <Card>
                 <CardHeader>
-                  <CardTitle>System Permissions</CardTitle>
-                  <CardDescription>
-                    Global permissions available in the system. These can be assigned to account users.
-                  </CardDescription>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle>System Permissions</CardTitle>
+                      <CardDescription>
+                        Global permissions available in the system. These can be assigned to users.
+                      </CardDescription>
+                    </div>
+                    <Button
+                      onClick={handleSeedPermissions}
+                      disabled={isSeedingPermissions}
+                      variant="outline"
+                    >
+                      <Upload className="mr-2 h-4 w-4" />
+                      {isSeedingPermissions ? "Seeding..." : "Seed from Registry"}
+                    </Button>
+                  </div>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
@@ -406,6 +560,117 @@ export default function PermissionsPage() {
                             <div className="flex gap-2">
                               <Button variant="ghost" size="sm">
                                 <Edit className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* User Permissions Tab */}
+            <TabsContent value="users" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>System User Permissions</CardTitle>
+                  <CardDescription>
+                    Permissions assigned to system users (ADMIN and EMPLOYEE roles).
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="flex flex-wrap gap-4 mb-6">
+                      <div className="space-y-2">
+                        <Label>User</Label>
+                        <UserSelector
+                          value={selectedUser}
+                          onValueChange={setSelectedUser}
+                          placeholder="Select user to assign permission"
+                          excludeAccountUsers={true}
+                          className="w-[250px]"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Permission</Label>
+                        <Select value={selectedUserPermission} onValueChange={setSelectedUserPermission}>
+                          <SelectTrigger className="w-[200px]">
+                            <SelectValue placeholder="Select permission" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {permissions.map(permission => (
+                              <SelectItem key={permission.id} value={permission.id}>
+                                {permission.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Scope</Label>
+                        <Select value={selectedUserScope} onValueChange={setSelectedUserScope}>
+                          <SelectTrigger className="w-[180px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {scopeOptions.map(scope => (
+                              <SelectItem key={scope.value} value={scope.value}>
+                                {scope.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="flex items-end">
+                        <Button 
+                          onClick={handleCreateUserPermission}
+                          disabled={!selectedUser || !selectedUserPermission || isCreatingUserPermission}
+                        >
+                          <Plus className="mr-2 h-4 w-4" />
+                          {isCreatingUserPermission ? "Assigning..." : "Assign Permission"}
+                        </Button>
+                      </div>
+                    </div>
+
+                    {userPermissions.map((permission) => (
+                      <Card key={permission.id}>
+                        <CardContent className="p-4">
+                          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                            <div className="flex-1 space-y-2">
+                              <div className="flex items-center gap-2">
+                                <UserCheck className="h-4 w-4" />
+                                <span className="font-medium">{permission.permissionName}</span>
+                                <Badge variant="outline">{permission.resource}</Badge>
+                                <Badge variant="secondary">{permission.action}</Badge>
+                                <Badge variant="default">{permission.scope}</Badge>
+                              </div>
+                              
+                              <div className="flex items-center gap-2">
+                                <Users className="h-3 w-3" />
+                                <span className="text-sm">{permission.user.name || permission.user.email}</span>
+                                <Badge variant={permission.user.role === 'ADMIN' ? 'destructive' : 'default'}>
+                                  {permission.user.role}
+                                </Badge>
+                              </div>
+                              
+                              <div className="text-xs text-muted-foreground">
+                                Created: {new Date(permission.createdAt).toLocaleDateString()}
+                              </div>
+                            </div>
+
+                            <div className="flex gap-2">
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                className="text-red-600 hover:text-red-700"
+                                onClick={() => handleDeleteUserPermission(permission.id)}
+                              >
+                                <Trash2 className="h-4 w-4" />
                               </Button>
                             </div>
                           </div>

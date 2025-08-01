@@ -72,7 +72,7 @@ export async function GET(request: NextRequest) {
       addonsCount: ticket.addons.length,
     }));
 
-    return NextResponse.json(ticketsWithStats);
+    return NextResponse.json({ tickets: ticketsWithStats });
   } catch (error) {
     console.error("Error fetching tickets:", error);
     return NextResponse.json(

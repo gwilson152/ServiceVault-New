@@ -947,6 +947,253 @@ const PERMISSIONS = {
 - **Audit Trail**: Comprehensive logging of permission-based actions
 - **Mobile App Support**: API-ready for mobile time tracking applications
 
+## Comprehensive Permissions Management System (2025-08-01)
+
+### Overview
+Complete overhaul of the permissions management system to provide comprehensive, role-based, and user-friendly permission assignment and management. This replaces the basic permissions interface with a full-featured management system supporting both system users and account users with bulk operations, auto-seeding, and enhanced UX.
+
+### Core Features Implemented
+
+#### Multi-User Type Support
+- **System User Permissions**: Direct permission assignment to ADMIN and EMPLOYEE users
+- **Account User Permissions**: Granular permissions for account-based users (existing)
+- **Role-Based Templates**: Predefined permission sets for different user roles
+- **Unified Management**: Single interface for managing all permission types
+
+#### Database Schema Enhancements
+```sql
+-- New UserPermission model for system users
+UserPermission {
+  id: string (UUID primary key)
+  userId: string (foreign key to User)
+  permissionName: string
+  resource: string
+  action: string
+  scope: string (own, account, subsidiary, global)
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+-- Constraint: One permission per user
+UNIQUE(userId, permissionName)
+
+-- Enhanced User model with permissions relationship
+User {
+  userPermissions: UserPermission[]
+}
+```
+
+#### Advanced API Endpoints
+- **`/api/user-permissions`**: CRUD operations for system user permissions
+- **`/api/user-permissions/bulk`**: Bulk assignment and deletion operations
+- **`/api/permissions/seed`**: Auto-seed permissions from registry
+- **`/api/users`**: Enhanced user listing with role filtering
+
+### Technical Implementation
+
+#### Enhanced Permission Management UI
+- **4-Tab Structure**:
+  1. **System Permissions**: Registry-based permissions with auto-seeding
+  2. **User Permissions**: ADMIN/EMPLOYEE permission management
+  3. **Account Permissions**: Account user permission management (enhanced)
+  4. **Create Permission**: System permission creation (existing)
+
+#### UserSelector Component
+- **Advanced Search**: Real-time filtering by name and email
+- **Role-Based Filtering**: Filter users by role (ADMIN, EMPLOYEE, etc.)
+- **Visual Indicators**: Role badges and user status indicators
+- **Exclude Account Users**: Option to filter out account users when needed
+
+#### Bulk Operations Support
+```typescript
+// Bulk permission assignment types
+interface BulkPermissionAssignment {
+  userId: string;
+  permissions: PermissionDefinition[];
+}
+
+interface BulkUserAssignment {
+  permissionName: string;
+  resource: string;
+  action: string;
+  userIds: string[];
+}
+```
+
+#### Permission Seeding System
+- **Registry Integration**: Auto-populate from `permissions-registry.ts`
+- **Conflict Handling**: Smart detection of existing vs. new permissions
+- **Force Update**: Option to update existing permissions from registry
+- **Detailed Reporting**: Comprehensive feedback on seeding operations
+
+### User Experience Enhancements
+
+#### Enhanced Statistics Dashboard
+- **System Permissions**: Count of available permissions
+- **User Permissions**: Count of system user permissions
+- **Account Permissions**: Count of account user permissions
+- **Account Users**: Count of users with accounts
+
+#### Improved Permission Assignment
+- **User Search**: Find users quickly with real-time search
+- **Permission Templates**: Pre-defined sets for quick assignment
+- **Visual Feedback**: Clear status indicators and badges
+- **Role-Aware Display**: Different colors/icons for different roles
+
+#### Registry Integration
+- **Seed Button**: One-click population from permissions registry
+- **Status Analysis**: Compare registry vs. database permissions
+- **Smart Updates**: Only create missing permissions by default
+- **Force Sync**: Option to update all permissions from registry
+
+### Security & Business Logic
+
+#### Enhanced Permission Validation
+- **User Type Checking**: Prevent account users from getting system permissions
+- **Duplicate Prevention**: Cannot assign same permission twice to same user
+- **Role-Based Access**: Only ADMINs can manage permissions
+- **Scope Validation**: Proper scope assignment (own, account, subsidiary, global)
+
+#### Data Integrity
+- **Atomic Operations**: Bulk operations use database transactions
+- **Conflict Resolution**: Proper handling of permission conflicts
+- **Cleanup Logic**: Failed operations don't leave partial data
+- **Cascade Deletion**: User deletion properly removes permissions
+
+### API Architecture
+
+#### RESTful Design
+```typescript
+// User Permissions CRUD
+GET    /api/user-permissions?userId=&role=    // List with filtering
+POST   /api/user-permissions                  // Create single permission
+DELETE /api/user-permissions                  // Delete single permission
+
+// Bulk Operations
+POST   /api/user-permissions/bulk            // Bulk create/update
+DELETE /api/user-permissions/bulk            // Bulk delete
+
+// Permission Seeding
+POST   /api/permissions/seed                 // Seed from registry
+GET    /api/permissions/seed                 // Analyze registry vs DB
+
+// User Management
+GET    /api/users?role=&excludeAccountUsers= // List users with filtering
+```
+
+#### Response Formats
+- **Consistent Error Handling**: Standardized error responses
+- **Detailed Results**: Bulk operation results with success/failure counts
+- **Comprehensive Data**: Include user context in permission responses
+- **Status Reporting**: Clear feedback for all operations
+
+### Performance Optimizations
+
+#### Database Efficiency
+- **Indexed Queries**: Proper indexing on userId and permissionName
+- **Batch Processing**: Bulk operations use efficient batch queries
+- **Relationship Loading**: Include necessary relationships in single queries
+- **Transaction Management**: Atomic operations prevent partial states
+
+#### UI Performance
+- **Component Memoization**: Prevent unnecessary re-renders
+- **Efficient State Updates**: Targeted updates for permission changes
+- **Search Optimization**: Debounced search with client-side filtering
+- **Lazy Loading**: Load data only when tabs are accessed
+
+### Files Created/Modified
+
+#### New Components
+- `src/components/permissions/UserSelector.tsx` - Advanced user selection component
+- `src/app/api/user-permissions/route.ts` - System user permission management
+- `src/app/api/user-permissions/bulk/route.ts` - Bulk operations API
+- `src/app/api/permissions/seed/route.ts` - Registry seeding API
+- `src/app/api/users/route.ts` - Enhanced user listing API
+
+#### Enhanced Files
+- `src/app/permissions/page.tsx` - Complete UI overhaul with 4-tab structure
+- `prisma/schema.prisma` - Added UserPermission model and relationships
+
+#### Database Migration
+- Added UserPermission table with proper constraints
+- Enhanced User model with permission relationships
+- Maintained backward compatibility with existing AccountPermission system
+
+### Integration with Existing Systems
+
+#### Permission Registry Integration
+- **Auto-Seeding**: Populate database from centralized registry
+- **Consistency Checking**: Validate database matches registry
+- **Easy Updates**: Keep permissions in sync with code changes
+
+#### ABAC System Compatibility
+- **Hook Integration**: Works with existing `usePermissions` hooks
+- **API Consistency**: Same permission checking logic throughout
+- **Role Compatibility**: Maintains existing role-based access patterns
+
+#### User Management Integration
+- **Account User Support**: Maintains existing account user functionality
+- **Role-Based Filtering**: Clean separation between user types
+- **Unified Interface**: Single place to manage all permissions
+
+### Testing & Validation
+
+#### Manual Testing Scenarios
+- ✅ System user permission assignment and removal
+- ✅ Bulk permission operations with multiple users
+- ✅ Registry seeding with conflict detection
+- ✅ User search and filtering functionality
+- ✅ Permission scope validation and enforcement
+- ✅ Error handling for invalid operations
+- ✅ UI responsiveness and state management
+
+#### Database Integrity
+- ✅ UserPermission table created with proper constraints
+- ✅ User relationships established correctly
+- ✅ Existing AccountPermission system unchanged
+- ✅ Database migration completed successfully
+
+### Impact Assessment
+
+#### Benefits Achieved
+- **Comprehensive Management**: Single interface for all permission types
+- **Enhanced Productivity**: Bulk operations and templates reduce manual work
+- **Better Organization**: Clear separation between user types and permission scopes
+- **Improved Scalability**: Efficient bulk operations for large user bases
+- **Registry Integration**: Automatic synchronization with permission definitions
+
+#### User Experience Improvements
+- **Intuitive Interface**: Clear tabs and visual organization
+- **Powerful Search**: Find users and permissions quickly
+- **Visual Feedback**: Clear status indicators and operation results
+- **Bulk Efficiency**: Assign permissions to multiple users simultaneously
+
+#### Technical Benefits
+- **Type Safety**: Full TypeScript support throughout permission system
+- **API Consistency**: RESTful design with standardized responses
+- **Performance**: Optimized queries and efficient state management
+- **Maintainability**: Centralized logic with reusable components
+
+#### Future Enhancement Ready
+- **Permission Templates**: Framework ready for role-based templates
+- **Advanced Reporting**: API structure supports detailed permission analytics
+- **Audit Trail**: Database structure ready for permission change tracking
+- **WebSocket Integration**: Real-time permission updates across sessions
+
+### Migration Guide
+
+#### For Existing Installations
+1. **Database Migration**: Run `npx prisma db push` to create UserPermission table
+2. **Permission Seeding**: Use "Seed from Registry" button to populate permissions
+3. **User Assignment**: Assign permissions to existing ADMIN/EMPLOYEE users
+4. **Testing**: Verify permission-based access control works correctly
+
+#### For Developers
+- **New Permission Definitions**: Add to `permissions-registry.ts`
+- **Bulk Operations**: Use new bulk APIs for efficient user management
+- **Component Integration**: Use UserSelector for user selection needs
+- **Permission Checking**: Leverage enhanced permission hooks
+
 ---
 
 *Last updated: 2025-08-01*

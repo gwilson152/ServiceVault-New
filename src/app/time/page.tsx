@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AccountSelector } from "@/components/selectors/account-selector";
+import { TicketSelector } from "@/components/selectors/ticket-selector";
 import { Switch } from "@/components/ui/switch";
 import { useTimeTracking } from "@/components/time/TimeTrackingProvider";
 import { TimeEntryEditDialog } from "@/components/time/TimeEntryEditDialog";
@@ -81,7 +82,17 @@ export default function TimeTrackingPage() {
   // Data state
   const [accounts, setAccounts] = useState<Array<{id: string; name: string; accountType: string; parentAccountId?: string | null}>>([]);
   const [billingRates, setBillingRates] = useState<Array<{id: string; name: string; rate: number; description?: string}>>([]);
-  const [tickets, setTickets] = useState<Array<{id: string; ticketNumber: string; title: string; account: {id: string; name: string}}>>([]);
+  const [tickets, setTickets] = useState<Array<{
+    id: string; 
+    ticketNumber: string; 
+    title: string; 
+    status: string;
+    priority: string;
+    account: {id: string; name: string};
+    assignee?: {id: string; name: string} | null;
+    totalTimeSpent?: number;
+    timeEntriesCount?: number;
+  }>>([]);
   const [timeEntries, setTimeEntries] = useState<Array<{
     id: string;
     ticketId?: string;
@@ -724,18 +735,14 @@ export default function TimeTrackingPage() {
                     {entryType === "ticket" ? (
                       <div className="space-y-2">
                         <Label htmlFor="ticket-select">Ticket</Label>
-                        <Select value={selectedTicket} onValueChange={setSelectedTicket}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select a ticket" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {tickets.map(ticket => (
-                              <SelectItem key={ticket.id} value={ticket.id}>
-                                {ticket.ticketNumber} - {ticket.title} ({ticket.account.name})
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <TicketSelector
+                          tickets={tickets}
+                          value={selectedTicket}
+                          onValueChange={setSelectedTicket}
+                          placeholder="Select a ticket"
+                          enableFilters={true}
+                          enableGrouping={true}
+                        />
                       </div>
                     ) : (
                       <div className="space-y-2">
