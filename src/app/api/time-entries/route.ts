@@ -130,7 +130,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { ticketId, accountId, minutes, hours, description, date, time, noCharge, billingRateId } = body;
+    const { ticketId, accountId, minutes, hours, description, date, time, noCharge, billingRateId, timerId } = body;
 
     // Handle backward compatibility: if hours is provided, convert to minutes
     let timeInMinutes: number;
@@ -250,6 +250,25 @@ export async function POST(request: NextRequest) {
         }
       }
     });
+
+    // If a timerId was provided, delete the timer after successful time entry creation
+    if (timerId) {
+      try {
+        // Verify the timer belongs to the current user before deleting
+        const timer = await prisma.timer.findUnique({
+          where: { id: timerId }
+        });
+        
+        if (timer && timer.userId === session.user.id) {
+          await prisma.timer.delete({
+            where: { id: timerId }
+          });
+        }
+      } catch (timerError) {
+        // Log error but don't fail the time entry creation
+        console.error('Error deleting timer after time entry creation:', timerError);
+      }
+    }
 
     return NextResponse.json(timeEntry, { status: 201 });
 

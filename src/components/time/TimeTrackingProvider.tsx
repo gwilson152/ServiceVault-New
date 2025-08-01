@@ -263,8 +263,8 @@ export function TimeTrackingProvider({ children }: TimeTrackingProviderProps) {
 
         console.log("🔵 [TimeTrackingProvider] Prepared result:", result);
 
-        // Don't refresh active timers immediately - let the caller handle the modal first
-        // The modal will refresh timers after logging the time entry
+        // Don't refresh active timers immediately for the multi-timer widget
+        // The MultiTimerWidget will handle refreshing after successful time logging
         console.log("🔵 [TimeTrackingProvider] Skipping timer refresh to allow modal to show");
       } else {
         console.log("🔵 [TimeTrackingProvider] API response not ok:", response.status, response.statusText);

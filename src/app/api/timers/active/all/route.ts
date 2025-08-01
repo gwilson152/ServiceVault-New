@@ -15,11 +15,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // Find all currently running timers for this user
+    // Find all active timers for this user (running OR paused with accumulated time)
     const activeTimers = await prisma.timer.findMany({
       where: {
         userId: session.user.id,
-        isRunning: true
+        OR: [
+          { isRunning: true },
+          { 
+            isRunning: false, 
+            pausedTime: { gt: 0 } 
+          }
+        ]
       },
       include: {
         ticket: {

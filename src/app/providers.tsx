@@ -2,14 +2,14 @@
 
 import { SessionProvider as NextAuthSessionProvider } from "next-auth/react";
 import { TimeTrackingProvider } from "@/components/time/TimeTrackingProvider";
-import { GlobalTimerWidget } from "@/components/time/GlobalTimerWidget";
+import { MultiTimerWidget } from "@/components/time/MultiTimerWidget";
 
 export function SessionProvider({ children }: { children: React.ReactNode }) {
   return (
     <NextAuthSessionProvider>
       <TimeTrackingProvider>
         {children}
-        <GlobalTimerWidget />
+        <MultiTimerWidget />
       </TimeTrackingProvider>
     </NextAuthSessionProvider>
   );
