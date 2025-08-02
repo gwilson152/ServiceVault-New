@@ -96,6 +96,8 @@ export async function GET(request: NextRequest) {
           totalInvoices: account._count.invoices,
           totalMinutes,
           billableMinutes,
+          totalHours: Math.round((totalMinutes / 60) * 10) / 10, // Convert to hours with 1 decimal place
+          billableHours: Math.round((billableMinutes / 60) * 10) / 10
         }
       };
     });

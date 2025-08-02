@@ -10,9 +10,11 @@ This is a **time management and invoicing system** built with Next.js 15, Prisma
 
 - Admin dashboard for time tracking, ticket management, and invoice generation
 - Account portal for viewing tickets and time spent (permission-based)
+- **Hierarchical account management** with visual parent-child relationships and dual view modes
 - Comprehensive email template management with preview/edit/delete functionality
 - Account-scoped role system with hierarchical permissions
 - Manual and invitation-based user creation with status tracking
+- Account user transfer between parent and child accounts
 - Customizable ticket fields (system-wide and account-specific)
 - Billing rates with account-specific overrides
 - Cross-device timer synchronization
@@ -62,8 +64,13 @@ This is a **time management and invoicing system** built with Next.js 15, Prisma
     /ui/                # Shadcn/UI components & reusable UI patterns
       hierarchical-selector.tsx   # Generic hierarchical selector
     /accounts/          # Account management components
+      AccountTreeView.tsx         # Tree-style hierarchical account display
+      AccountHierarchyCard.tsx    # Enhanced cards with hierarchy indicators
+      AccountViewToggle.tsx       # Grid/Tree view switcher
   /lib
     /licensing          # Licensing platform integration
+  /utils
+    hierarchy.ts        # Account hierarchy processing utilities
 /prisma
   schema.prisma         # Database schema
 /docs                   # Project documentation
@@ -94,9 +101,10 @@ This is a **time management and invoicing system** built with Next.js 15, Prisma
 **Admin Workflow:**
 
 1. Login → Dashboard → Time entry/ticket management
-2. Settings page with modular sections (tabs/accordion layout)
-3. Invoice generation from time entries and addons
-4. User and customer management
+2. **Accounts page** → Hierarchical account management with Grid/Tree views
+3. Settings page with modular sections (tabs/accordion layout)
+4. Invoice generation from time entries and addons
+5. User and customer management with account transfers
 
 **Customer Workflow:**
 
@@ -192,8 +200,18 @@ This is a **time management and invoicing system** built with Next.js 15, Prisma
 - **Backward compatibility** maintained with deprecated wrapper components
 - **TypeScript generics** used for type-safe reusable components
 
+### Hierarchical Account System
+
+- **Data Processing**: Use `/src/utils/hierarchy.ts` for building tree structures from flat account data
+- **View Components**: `AccountTreeView` for tree display, `AccountHierarchyCard` for grid with hierarchy
+- **View Management**: `AccountViewToggle` with localStorage persistence for user preferences
+- **Account Navigation**: Settings button uses `?tab=settings` query parameter for direct tab access
+- **User Transfer**: Move users between accounts within same hierarchy using API endpoints
+- **Search Integration**: Use `searchAccountsInHierarchy()` for hierarchy-aware search functionality
+
 ### Documentation
 
 - Create page-specific docs if appropriate in /docs/pages/{pageName.md}
 - Create/update/refactor /docs/change-tracking.md as changes are implemented
 - **Timer System**: Comprehensive documentation at `/docs/timer-system.md` covering usage, API, and integration patterns
+- **Hierarchical Accounts**: Complete system documentation at `/docs/hierarchical-accounts.md`

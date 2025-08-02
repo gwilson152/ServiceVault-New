@@ -82,7 +82,16 @@ export async function GET(
           select: { id: true, name: true, accountType: true }
         },
         childAccounts: {
-          select: { id: true, name: true, accountType: true }
+          include: {
+            accountUsers: {
+              include: {
+                user: {
+                  select: { id: true, email: true, name: true, createdAt: true }
+                }
+              },
+              orderBy: { createdAt: 'desc' }
+            }
+          }
         }
       }
     });
@@ -120,15 +129,39 @@ export async function GET(
     };
 
     // Add status information to account users
+    const processAccountUser = (accountUser: any, sourceAccountName?: string) => ({
+      ...accountUser,
+      hasLogin: !!accountUser.user,
+      canBeAssigned: accountUser.isActive,
+      invitationStatus: accountUser.user ? 'activated' : 
+                       accountUser.invitationToken ? 'pending' : 'none',
+      sourceAccount: sourceAccountName || account.name
+    });
+
+    // Process direct account users
+    const directAccountUsers = account.accountUsers.map(accountUser => 
+      processAccountUser(accountUser)
+    );
+
+    // Process child account users
+    const childAccountUsers = account.childAccounts.flatMap(childAccount => 
+      childAccount.accountUsers.map(accountUser => 
+        processAccountUser(accountUser, childAccount.name)
+      )
+    );
+
+    // Combine all users
+    const allAccountUsers = [...directAccountUsers, ...childAccountUsers];
+
     const accountWithStatus = {
       ...account,
-      accountUsers: account.accountUsers.map(accountUser => ({
-        ...accountUser,
-        hasLogin: !!accountUser.user,
-        canBeAssigned: accountUser.isActive,
-        invitationStatus: accountUser.user ? 'activated' : 
-                         accountUser.invitationToken ? 'pending' : 'none'
-      })),
+      accountUsers: directAccountUsers, // Keep original for backward compatibility
+      allAccountUsers: allAccountUsers, // New field with all users including child accounts
+      childAccounts: account.childAccounts.map(child => ({
+        id: child.id,
+        name: child.name,
+        accountType: child.accountType
+      })), // Remove the accountUsers from childAccounts to avoid duplication
       stats
     };
 

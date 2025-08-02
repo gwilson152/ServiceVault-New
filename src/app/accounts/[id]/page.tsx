@@ -1,7 +1,7 @@
 "use client";
 
 import { useSession, signOut } from "next-auth/react";
-import { useRouter, useParams } from "next/navigation";
+import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -55,6 +55,7 @@ interface AccountDetails {
   parentAccount?: { id: string; name: string; accountType: string };
   childAccounts: Array<{ id: string; name: string; accountType: string }>;
   accountUsers: AccountUserWithStatus[];
+  allAccountUsers?: (AccountUserWithStatus & { sourceAccount: string })[];
   tickets: Array<{
     id: string;
     title: string;
@@ -91,7 +92,9 @@ export default function AccountDetailsPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
   const accountId = params.id as string;
+  const initialTab = searchParams.get('tab') || 'overview';
   
   const [isLoading, setIsLoading] = useState(true);
   const [account, setAccount] = useState<AccountDetails | null>(null);
@@ -461,7 +464,7 @@ export default function AccountDetailsPage() {
           </Card>
 
           {/* Tabbed Content */}
-          <Tabs defaultValue="overview" className="space-y-4">
+          <Tabs defaultValue={initialTab} className="space-y-4">
             <TabsList className="grid w-full grid-cols-7">
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="users">Users</TabsTrigger>
@@ -581,8 +584,11 @@ export default function AccountDetailsPage() {
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <div>
-                      <CardTitle>Account Users</CardTitle>
-                      <CardDescription>Manage users and their access to this account</CardDescription>
+                      <CardTitle>All Account Users</CardTitle>
+                      <CardDescription>
+                        Users with access to this account and its subsidiary accounts
+                        {account.allAccountUsers && ` (${account.allAccountUsers.length} total)`}
+                      </CardDescription>
                     </div>
                     {canCreateUsers && (
                       <Button onClick={() => setIsCreateUserDialogOpen(true)}>
@@ -594,7 +600,8 @@ export default function AccountDetailsPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {account.accountUsers.map((accountUser) => {
+                    {(account.allAccountUsers || account.accountUsers).length > 0 ? (
+                      (account.allAccountUsers || account.accountUsers.map(u => ({ ...u, sourceAccount: account.name }))).map((accountUser) => {
                       const hasExpiredInvitation = accountUser.invitationExpiry && 
                         new Date(accountUser.invitationExpiry) < new Date();
                       
@@ -613,6 +620,12 @@ export default function AccountDetailsPage() {
                             <div className="flex-1">
                               <div className="flex items-center space-x-2 mb-2">
                                 <p className="font-medium">{accountUser.name}</p>
+                                {accountUser.sourceAccount !== account.name && (
+                                  <Badge variant="outline" className="text-xs">
+                                    <Building2 className="h-3 w-3 mr-1" />
+                                    {accountUser.sourceAccount}
+                                  </Badge>
+                                )}
                               </div>
                               <p className="text-sm text-muted-foreground mb-2">{accountUser.email}</p>
                               
@@ -674,12 +687,11 @@ export default function AccountDetailsPage() {
                           </div>
                         </div>
                       );
-                    })}
-                    {account.accountUsers.length === 0 && (
+                    })) : (
                       <div className="text-center py-8">
                         <Users className="mx-auto h-12 w-12 text-muted-foreground" />
                         <h3 className="mt-2 text-sm font-semibold">No users</h3>
-                        <p className="text-sm text-muted-foreground">Invite users to access this account.</p>
+                        <p className="text-sm text-muted-foreground">Invite users to access this account and its subsidiaries.</p>
                       </div>
                     )}
                   </div>
