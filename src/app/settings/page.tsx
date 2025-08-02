@@ -19,9 +19,7 @@ import {
 
 // Import setting section components (will be created)
 import { GeneralSettingsSection } from "@/components/settings/GeneralSettingsSection";
-import { BillingRatesSection } from "@/components/settings/BillingRatesSection";
 import { TicketFieldsSection } from "@/components/settings/TicketFieldsSection";
-import { AccountSettingsSection } from "@/components/settings/AccountSettingsSection";
 import { EmailSettingsSection } from "@/components/settings/EmailSettingsSection";
 import { LicenseSection } from "@/components/settings/LicenseSection";
 import { DangerZoneSection } from "@/components/settings/DangerZoneSection";
@@ -155,17 +153,15 @@ export default function SettingsPage() {
           <div className="space-y-2">
             <h2 className="text-2xl font-bold tracking-tight">System Configuration</h2>
             <p className="text-muted-foreground">
-              Manage system-wide settings, billing rates, custom fields, and integrations.
+              Manage system-wide settings, custom fields, email configuration, and integrations.
             </p>
           </div>
 
           {/* Settings Tabs */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-            <TabsList className="grid w-full grid-cols-7">
+            <TabsList className="grid w-full grid-cols-5">
               <TabsTrigger value="general">General</TabsTrigger>
-              <TabsTrigger value="billing">Billing Rates</TabsTrigger>
               <TabsTrigger value="fields">Ticket Fields</TabsTrigger>
-              <TabsTrigger value="accounts">Accounts</TabsTrigger>
               <TabsTrigger value="email">Email</TabsTrigger>
               <TabsTrigger value="license">License</TabsTrigger>
               <TabsTrigger value="danger" className="text-red-600 data-[state=active]:text-red-700">Danger Zone</TabsTrigger>
@@ -187,21 +183,6 @@ export default function SettingsPage() {
               </Card>
             </TabsContent>
 
-            <TabsContent value="billing" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Billing Rates</CardTitle>
-                  <CardDescription>
-                    Manage system-wide and account-specific billing rates.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <BillingRatesSection 
-                    onSettingsChange={() => setHasUnsavedChanges(true)}
-                  />
-                </CardContent>
-              </Card>
-            </TabsContent>
 
             <TabsContent value="fields" className="space-y-4">
               <Card>
@@ -219,21 +200,6 @@ export default function SettingsPage() {
               </Card>
             </TabsContent>
 
-            <TabsContent value="accounts" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Account Settings</CardTitle>
-                  <CardDescription>
-                    Manage account permissions, hierarchical relationships, and user invitations.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <AccountSettingsSection 
-                    onSettingsChange={() => setHasUnsavedChanges(true)}
-                  />
-                </CardContent>
-              </Card>
-            </TabsContent>
 
             <TabsContent value="email" className="space-y-4">
               <Card>

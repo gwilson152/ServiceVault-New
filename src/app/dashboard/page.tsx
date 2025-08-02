@@ -7,12 +7,49 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Clock, Users, FileText, DollarSign, Plus, Settings, LogOut, Menu, Shield } from "lucide-react";
+import { Clock, Users, FileText, DollarSign, Plus, Settings, LogOut, Menu, Shield, Loader2, Timer } from "lucide-react";
+import { format } from "date-fns";
+import { RecentTimeEntries } from "@/components/dashboard/RecentTimeEntries";
+
+interface DashboardStats {
+  activeTickets: number;
+  weekHours: string;
+  totalAccounts: number;
+  monthlyRevenue: number;
+}
+
+interface RecentTicket {
+  id: string;
+  ticketNumber: string;
+  title: string;
+  accountName: string;
+  priority: string;
+  status: string;
+  assigneeName: string;
+}
+
+interface ActivityItem {
+  type: 'ticket_created' | 'time_logged' | 'invoice_generated';
+  message: string;
+  ticketId?: string;
+  invoiceId?: string;
+  minutes?: number;
+  timestamp: string;
+}
 
 export default function Dashboard() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [stats, setStats] = useState<DashboardStats>({
+    activeTickets: 0,
+    weekHours: "0",
+    totalAccounts: 0,
+    monthlyRevenue: 0
+  });
+  const [recentTickets, setRecentTickets] = useState<RecentTicket[]>([]);
+  const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([]);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -21,6 +58,34 @@ export default function Dashboard() {
       router.push("/portal");
     }
   }, [status, session, router]);
+
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      if (status !== "authenticated") return;
+      
+      try {
+        setIsLoading(true);
+        const response = await fetch('/api/dashboard/stats');
+        if (response.ok) {
+          const data = await response.json();
+          setStats(data.stats);
+          setRecentTickets(data.recentTickets);
+          setRecentActivity(data.recentActivity);
+        }
+      } catch (error) {
+        console.error('Error fetching dashboard data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+    
+    // Refresh dashboard data every 30 seconds
+    const interval = setInterval(fetchDashboardData, 30000);
+    
+    return () => clearInterval(interval);
+  }, [status]);
 
   if (status === "loading") {
     return (
@@ -37,42 +102,49 @@ export default function Dashboard() {
   const isAdmin = session.user?.role === "ADMIN";
   const isEmployee = session.user?.role === "EMPLOYEE" || isAdmin;
 
-  const stats = [
+  const statsCards = [
     {
       title: "Active Tickets",
-      value: "12",
+      value: isLoading ? "..." : stats.activeTickets.toString(),
       description: "Open support tickets",
       icon: FileText,
       color: "text-blue-600",
     },
     {
       title: "Hours This Week",
-      value: "32.5",
+      value: isLoading ? "..." : stats.weekHours,
       description: "Time logged this week",
       icon: Clock,
       color: "text-green-600",
     },
     {
       title: "Total Accounts",
-      value: "8",
+      value: isLoading ? "..." : stats.totalAccounts.toString(),
       description: "Active client accounts",
       icon: Users,
       color: "text-purple-600",
     },
     {
       title: "Monthly Revenue",
-      value: "$12,450",
+      value: isLoading ? "..." : `$${stats.monthlyRevenue.toLocaleString()}`,
       description: "Revenue this month",
       icon: DollarSign,
       color: "text-yellow-600",
     },
   ];
 
-  const recentTickets = [
-    { id: "T-001", title: "Fix login issue", account: "TechCorp Solutions", priority: "High", status: "In Progress" },
-    { id: "T-002", title: "Database optimization", account: "Tech Solutions", priority: "Medium", status: "Open" },
-    { id: "T-003", title: "UI improvements", account: "StartupXYZ", priority: "Low", status: "Review" },
-  ];
+  const getActivityIcon = (type: string) => {
+    switch (type) {
+      case 'ticket_created':
+        return "bg-green-500";
+      case 'time_logged':
+        return "bg-blue-500";
+      case 'invoice_generated':
+        return "bg-yellow-500";
+      default:
+        return "bg-gray-500";
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -201,7 +273,7 @@ export default function Dashboard() {
           <div className="space-y-6">
             {/* Stats Cards */}
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              {stats.map((stat, index) => (
+              {statsCards.map((stat, index) => (
                 <Card key={index}>
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">
@@ -210,7 +282,13 @@ export default function Dashboard() {
                     <stat.icon className={`h-4 w-4 ${stat.color}`} />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold">{stat.value}</div>
+                    <div className="text-2xl font-bold">
+                      {isLoading ? (
+                        <Loader2 className="h-6 w-6 animate-spin" />
+                      ) : (
+                        stat.value
+                      )}
+                    </div>
                     <p className="text-xs text-muted-foreground">
                       {stat.description}
                     </p>
@@ -241,20 +319,34 @@ export default function Dashboard() {
                       </CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <div className="space-y-4">
-                        <div className="flex items-center space-x-2">
-                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                          <span className="text-sm">New ticket created by TechCorp Solutions</span>
+                      {isLoading ? (
+                        <div className="flex items-center justify-center py-8">
+                          <Loader2 className="h-6 w-6 animate-spin" />
                         </div>
-                        <div className="flex items-center space-x-2">
-                          <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                          <span className="text-sm">Time entry logged for T-001</span>
+                      ) : recentActivity.length > 0 ? (
+                        <div className="space-y-4">
+                          {recentActivity.map((activity, index) => (
+                            <div key={index} className="flex items-center space-x-2">
+                              <div className={`w-2 h-2 ${getActivityIcon(activity.type)} rounded-full`}></div>
+                              <div className="flex-1">
+                                <span className="text-sm">{activity.message}</span>
+                                {activity.minutes && (
+                                  <span className="text-xs text-muted-foreground ml-1">
+                                    ({activity.minutes}m)
+                                  </span>
+                                )}
+                                <span className="text-xs text-muted-foreground ml-2">
+                                  {format(new Date(activity.timestamp), 'MMM d, h:mm a')}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
                         </div>
-                        <div className="flex items-center space-x-2">
-                          <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
-                          <span className="text-sm">Invoice #INV-2024-001 generated</span>
+                      ) : (
+                        <div className="text-center py-8 text-muted-foreground">
+                          No recent activity
                         </div>
-                      </div>
+                      )}
                     </CardContent>
                   </Card>
 
@@ -270,7 +362,7 @@ export default function Dashboard() {
                         <>
                           <Button 
                             className="w-full justify-start"
-                            onClick={() => router.push("/tickets")}
+                            onClick={() => router.push("/tickets/new")}
                           >
                             <Plus className="mr-2 h-4 w-4" />
                             Create New Ticket
@@ -290,15 +382,15 @@ export default function Dashboard() {
                           <Button 
                             variant="outline" 
                             className="w-full justify-start"
-                            onClick={() => router.push("/accounts")}
+                            onClick={() => router.push("/accounts/new")}
                           >
                             <Users className="mr-2 h-4 w-4" />
-                            Manage Accounts
+                            Add New Account
                           </Button>
                           <Button 
                             variant="outline" 
                             className="w-full justify-start"
-                            onClick={() => router.push("/billing")}
+                            onClick={() => router.push("/invoices/generate")}
                           >
                             <DollarSign className="mr-2 h-4 w-4" />
                             Generate Invoice
@@ -320,26 +412,52 @@ export default function Dashboard() {
                       </CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <div className="space-y-4">
-                        {recentTickets.map((ticket) => (
-                          <div key={ticket.id} className="flex items-center justify-between p-4 border rounded-lg">
-                            <div className="space-y-1">
-                              <div className="flex items-center space-x-2">
-                                <span className="font-medium">{ticket.id}</span>
-                                <Badge variant={
-                                  ticket.priority === "High" ? "destructive" :
-                                  ticket.priority === "Medium" ? "default" : "secondary"
-                                }>
-                                  {ticket.priority}
-                                </Badge>
+                      {isLoading ? (
+                        <div className="flex items-center justify-center py-8">
+                          <Loader2 className="h-6 w-6 animate-spin" />
+                        </div>
+                      ) : recentTickets.length > 0 ? (
+                        <div className="space-y-4">
+                          {recentTickets.map((ticket) => (
+                            <div 
+                              key={ticket.id} 
+                              className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/50 cursor-pointer transition-colors"
+                              onClick={() => router.push(`/tickets/${ticket.id}`)}
+                            >
+                              <div className="space-y-1">
+                                <div className="flex items-center space-x-2">
+                                  <span className="font-medium">{ticket.ticketNumber}</span>
+                                  <Badge variant={
+                                    ticket.priority === "HIGH" ? "destructive" :
+                                    ticket.priority === "MEDIUM" ? "default" : "secondary"
+                                  }>
+                                    {ticket.priority}
+                                  </Badge>
+                                </div>
+                                <p className="text-sm font-medium">{ticket.title}</p>
+                                <p className="text-sm text-muted-foreground">{ticket.accountName}</p>
                               </div>
-                              <p className="text-sm font-medium">{ticket.title}</p>
-                              <p className="text-sm text-muted-foreground">{ticket.account}</p>
+                              <div className="flex flex-col items-end gap-1">
+                                <Badge variant="outline">{ticket.status.replace('_', ' ')}</Badge>
+                                <span className="text-xs text-muted-foreground">{ticket.assigneeName}</span>
+                              </div>
                             </div>
-                            <Badge variant="outline">{ticket.status}</Badge>
-                          </div>
-                        ))}
-                      </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-center py-8">
+                          <FileText className="mx-auto h-12 w-12 text-muted-foreground" />
+                          <h3 className="mt-2 text-sm font-semibold">No tickets yet</h3>
+                          <p className="text-sm text-muted-foreground">Create your first ticket to get started.</p>
+                          <Button 
+                            className="mt-4"
+                            onClick={() => router.push("/tickets/new")}
+                          >
+                            <Plus className="mr-2 h-4 w-4" />
+                            Create Ticket
+                          </Button>
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 </TabsContent>
@@ -347,25 +465,7 @@ export default function Dashboard() {
 
               {isEmployee && (
                 <TabsContent value="time" className="space-y-4">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Time Tracking</CardTitle>
-                      <CardDescription>
-                        Your recent time entries
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-center py-8">
-                        <Clock className="mx-auto h-12 w-12 text-muted-foreground" />
-                        <h3 className="mt-2 text-sm font-semibold">No time entries</h3>
-                        <p className="text-sm text-muted-foreground">Start tracking your time on tickets.</p>
-                        <Button className="mt-4">
-                          <Plus className="mr-2 h-4 w-4" />
-                          Log Time Entry
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
+                  <RecentTimeEntries userId={session.user?.id} limit={10} />
                 </TabsContent>
               )}
             </Tabs>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -9,88 +9,157 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Save, AlertCircle, CheckCircle } from "lucide-react";
+import { Save, AlertCircle, CheckCircle, Settings, Globe, Clock, RotateCcw } from "lucide-react";
+import { CompanyInfoSection } from "./CompanyInfoSection";
+import { useToast } from "@/hooks/useToast";
 
 interface GeneralSettingsSectionProps {
   onSettingsChange: () => void;
 }
 
-interface GeneralSettings {
+interface SystemSettings {
   appName: string;
   appDescription: string;
   supportEmail: string;
-  companyName: string;
-  companyAddress: string;
   timezone: string;
   dateFormat: string;
+  language: string;
   defaultTaxRate: number;
   enableEmailNotifications: boolean;
   enableSMSNotifications: boolean;
   maintenanceMode: boolean;
 }
 
+const TIMEZONE_OPTIONS = [
+  { value: "UTC", label: "UTC (Coordinated Universal Time)" },
+  { value: "America/New_York", label: "Eastern Time (US & Canada)" },
+  { value: "America/Chicago", label: "Central Time (US & Canada)" },
+  { value: "America/Denver", label: "Mountain Time (US & Canada)" },
+  { value: "America/Los_Angeles", label: "Pacific Time (US & Canada)" },
+  { value: "Europe/London", label: "London" },
+  { value: "Europe/Paris", label: "Paris" },
+  { value: "Europe/Berlin", label: "Berlin" },
+  { value: "Asia/Tokyo", label: "Tokyo" },
+  { value: "Asia/Shanghai", label: "Shanghai" },
+  { value: "Australia/Sydney", label: "Sydney" }
+];
+
+const DATE_FORMAT_OPTIONS = [
+  { value: "MM/DD/YYYY", label: "MM/DD/YYYY (US)" },
+  { value: "DD/MM/YYYY", label: "DD/MM/YYYY (European)" },
+  { value: "YYYY-MM-DD", label: "YYYY-MM-DD (ISO)" }
+];
+
+const LANGUAGE_OPTIONS = [
+  { value: "en", label: "English" },
+  { value: "es", label: "Spanish" },
+  { value: "fr", label: "French" },
+  { value: "de", label: "German" },
+  { value: "it", label: "Italian" },
+  { value: "pt", label: "Portuguese" }
+];
+
+const DEFAULT_SETTINGS: SystemSettings = {
+  appName: "Service Vault",
+  appDescription: "Time management and invoicing system for internal business use",
+  supportEmail: "support@example.com",
+  timezone: "America/New_York",
+  dateFormat: "MM/DD/YYYY",
+  language: "en",
+  defaultTaxRate: 8.0,
+  enableEmailNotifications: true,
+  enableSMSNotifications: false,
+  maintenanceMode: false,
+};
+
 export function GeneralSettingsSection({ onSettingsChange }: GeneralSettingsSectionProps) {
-  const [settings, setSettings] = useState<GeneralSettings>({
-    appName: "Service Vault",
-    appDescription: "Time management and invoicing system for internal business use",
-    supportEmail: "support@example.com",
-    companyName: "Your Company Name",
-    companyAddress: "123 Business St, City, State 12345",
-    timezone: "America/New_York",
-    dateFormat: "MM/DD/YYYY",
-    defaultTaxRate: 8.0,
-    enableEmailNotifications: true,
-    enableSMSNotifications: false,
-    maintenanceMode: false,
-  });
-
+  const [settings, setSettings] = useState<SystemSettings>(DEFAULT_SETTINGS);
+  const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [hasChanges, setHasChanges] = useState(false);
+  const { success, error } = useToast();
 
-  const handleSettingChange = (key: keyof GeneralSettings, value: string | number | boolean) => {
+  useEffect(() => {
+    loadSettings();
+  }, []);
+
+  const loadSettings = async () => {
+    try {
+      const response = await fetch('/api/settings/system');
+      if (response.ok) {
+        const data = await response.json();
+        setSettings({ ...DEFAULT_SETTINGS, ...data });
+      } else {
+        console.log('No system settings found, using defaults');
+      }
+    } catch (err) {
+      console.error('Failed to load system settings:', err);
+      error('Failed to load system settings');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSettingChange = (key: keyof SystemSettings, value: string | number | boolean) => {
     setSettings(prev => ({ ...prev, [key]: value }));
+    setHasChanges(true);
     onSettingsChange();
   };
 
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      // TODO: Implement API call to save general settings
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API call
-      setSaveStatus('success');
-      setTimeout(() => setSaveStatus('idle'), 3000);
-    } catch {
-      setSaveStatus('error');
-      setTimeout(() => setSaveStatus('idle'), 3000);
+      const response = await fetch('/api/settings/system', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(settings),
+      });
+
+      if (response.ok) {
+        setHasChanges(false);
+        success('System settings saved successfully');
+      } else {
+        const data = await response.json();
+        error('Failed to save system settings', data.error);
+      }
+    } catch (err) {
+      console.error('Failed to save system settings:', err);
+      error('Failed to save system settings');
     } finally {
       setIsSaving(false);
     }
   };
 
-  const timezones = [
-    "America/New_York",
-    "America/Chicago",
-    "America/Denver",
-    "America/Los_Angeles",
-    "UTC",
-    "Europe/London",
-    "Europe/Paris",
-    "Asia/Tokyo",
-  ];
+  const handleReset = () => {
+    loadSettings();
+    setHasChanges(false);
+  };
 
-  const dateFormats = [
-    "MM/DD/YYYY",
-    "DD/MM/YYYY",
-    "YYYY-MM-DD",
-    "MMM DD, YYYY",
-  ];
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-sm text-muted-foreground">Loading settings...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
+      {/* Company Information Section */}
+      <CompanyInfoSection onSettingsChange={onSettingsChange} />
+
       {/* Application Information */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Application Information</CardTitle>
+          <CardTitle className="flex items-center">
+            <Settings className="mr-2 h-5 w-5" />
+            Application Information
+          </CardTitle>
           <CardDescription>
             Basic information about your Service Vault installation.
           </CardDescription>
@@ -132,48 +201,19 @@ export function GeneralSettingsSection({ onSettingsChange }: GeneralSettingsSect
         </CardContent>
       </Card>
 
-      {/* Company Information */}
+      {/* System Configuration */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Company Information</CardTitle>
+          <CardTitle className="flex items-center">
+            <Globe className="mr-2 h-5 w-5" />
+            System Configuration
+          </CardTitle>
           <CardDescription>
-            Your company details for invoices and communications.
+            Configure timezone, date formats, and localization preferences.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="companyName">Company Name</Label>
-            <Input
-              id="companyName"
-              value={settings.companyName}
-              onChange={(e) => handleSettingChange('companyName', e.target.value)}
-              placeholder="Your Company Name"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="companyAddress">Company Address</Label>
-            <Textarea
-              id="companyAddress"
-              value={settings.companyAddress}
-              onChange={(e) => handleSettingChange('companyAddress', e.target.value)}
-              placeholder="123 Business St, City, State 12345"
-              className="min-h-[80px]"
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Regional Settings */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Regional Settings</CardTitle>
-          <CardDescription>
-            Configure timezone, date formats, and localization.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label htmlFor="timezone">Timezone</Label>
               <Select
@@ -184,9 +224,9 @@ export function GeneralSettingsSection({ onSettingsChange }: GeneralSettingsSect
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {timezones.map((tz) => (
-                    <SelectItem key={tz} value={tz}>
-                      {tz}
+                  {TIMEZONE_OPTIONS.map((tz) => (
+                    <SelectItem key={tz.value} value={tz.value}>
+                      {tz.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -203,9 +243,28 @@ export function GeneralSettingsSection({ onSettingsChange }: GeneralSettingsSect
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {dateFormats.map((format) => (
-                    <SelectItem key={format} value={format}>
-                      {format}
+                  {DATE_FORMAT_OPTIONS.map((format) => (
+                    <SelectItem key={format.value} value={format.value}>
+                      {format.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="language">Language</Label>
+              <Select
+                value={settings.language}
+                onValueChange={(value) => handleSettingChange('language', value)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {LANGUAGE_OPTIONS.map((lang) => (
+                    <SelectItem key={lang.value} value={lang.value}>
+                      {lang.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -224,6 +283,7 @@ export function GeneralSettingsSection({ onSettingsChange }: GeneralSettingsSect
               value={settings.defaultTaxRate}
               onChange={(e) => handleSettingChange('defaultTaxRate', parseFloat(e.target.value) || 0)}
               placeholder="8.0"
+              className="max-w-xs"
             />
           </div>
         </CardContent>
@@ -310,31 +370,25 @@ export function GeneralSettingsSection({ onSettingsChange }: GeneralSettingsSect
       </Card>
 
       {/* Save Section */}
-      <div className="flex items-center justify-between pt-4 border-t">
-        <div className="flex items-center space-x-2">
-          {saveStatus === 'success' && (
-            <>
-              <CheckCircle className="h-4 w-4 text-green-600" />
-              <span className="text-sm text-green-600">Settings saved successfully</span>
-            </>
-          )}
-          {saveStatus === 'error' && (
-            <>
-              <AlertCircle className="h-4 w-4 text-red-600" />
-              <span className="text-sm text-red-600">Failed to save settings</span>
-            </>
-          )}
+      {hasChanges && (
+        <div className="flex justify-end space-x-2">
+          <Button
+            variant="outline"
+            onClick={handleReset}
+            disabled={isSaving}
+          >
+            <RotateCcw className="mr-2 h-4 w-4" />
+            Reset
+          </Button>
+          <Button
+            onClick={handleSave}
+            disabled={isSaving}
+          >
+            <Save className="mr-2 h-4 w-4" />
+            {isSaving ? 'Saving...' : 'Save System Settings'}
+          </Button>
         </div>
-        
-        <Button 
-          onClick={handleSave}
-          disabled={isSaving}
-        >
-          {isSaving && <Save className="mr-2 h-4 w-4 animate-spin" />}
-          {!isSaving && <Save className="mr-2 h-4 w-4" />}
-          {isSaving ? 'Saving...' : 'Save General Settings'}
-        </Button>
-      </div>
+      )}
     </div>
   );
 }

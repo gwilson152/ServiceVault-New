@@ -3,12 +3,12 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { hasPermission } from '@/lib/permissions';
-import { emailService } from '@/lib/email/EmailService';
+import { emailService, EmailServiceError } from '@/lib/email/EmailService';
 import crypto from 'crypto';
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -27,7 +27,7 @@ export async function POST(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const accountUserId = params.id;
+    const { id: accountUserId } = await params;
 
     // Find the account user
     const accountUser = await prisma.accountUser.findUnique({
@@ -111,8 +111,22 @@ export async function POST(
         }
       });
 
+      // Return user-friendly error message based on error type
+      if (emailError instanceof EmailServiceError) {
+        return NextResponse.json(
+          { 
+            error: emailError.userMessage,
+            code: emailError.code,
+            details: emailError.code === 'EMAIL_TEMPLATE_NOT_FOUND' ? 
+              'The system administrator needs to configure the USER_INVITATION email template.' : 
+              undefined
+          },
+          { status: 500 }
+        );
+      }
+
       return NextResponse.json(
-        { error: 'Failed to send invitation email' },
+        { error: 'Failed to send invitation email. Please try again or contact support.' },
         { status: 500 }
       );
     }

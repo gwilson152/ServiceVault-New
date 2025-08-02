@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   DollarSign, 
@@ -23,8 +22,11 @@ import {
   Edit,
   Trash2,
   Download,
-  Eye
+  Eye,
+  Save,
+  X
 } from "lucide-react";
+import { useToast } from "@/hooks/useToast";
 
 export default function BillingPage() {
   const { data: session, status } = useSession();
@@ -37,6 +39,17 @@ export default function BillingPage() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [includeUnbilledOnly, setIncludeUnbilledOnly] = useState(true);
+
+  // Billing rates state
+  const [editingRate, setEditingRate] = useState<string | null>(null);
+  const [showAddRate, setShowAddRate] = useState(false);
+  const [newRate, setNewRate] = useState({
+    name: "",
+    hourlyRate: 0,
+    description: ""
+  });
+
+  const { success, error } = useToast();
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -126,6 +139,83 @@ export default function BillingPage() {
     });
   };
 
+  const handleAddRate = async () => {
+    if (!newRate.name || !newRate.hourlyRate) {
+      error('Please fill in all required fields');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/billing/rates', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(newRate),
+      });
+
+      if (response.ok) {
+        success('Billing rate added successfully');
+        setShowAddRate(false);
+        setNewRate({ name: "", hourlyRate: 0, description: "" });
+        // TODO: Refresh billing rates list
+      } else {
+        const data = await response.json();
+        error('Failed to add billing rate', data.error);
+      }
+    } catch (err) {
+      console.error('Failed to add billing rate:', err);
+      error('Failed to add billing rate');
+    }
+  };
+
+  const handleDeleteRate = async (rateId: string) => {
+    try {
+      const response = await fetch(`/api/billing/rates/${rateId}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        success('Billing rate deleted successfully');
+        // TODO: Refresh billing rates list
+      } else {
+        const data = await response.json();
+        error('Failed to delete billing rate', data.error);
+      }
+    } catch (err) {
+      console.error('Failed to delete billing rate:', err);
+      error('Failed to delete billing rate');
+    }
+  };
+
+  const handleEditRate = (rateId: string) => {
+    setEditingRate(rateId);
+  };
+
+  const handleSaveRate = async (rateId: string, updatedRate: { name: string; hourlyRate: number; description: string }) => {
+    try {
+      const response = await fetch(`/api/billing/rates/${rateId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updatedRate),
+      });
+
+      if (response.ok) {
+        success('Billing rate updated successfully');
+        setEditingRate(null);
+        // TODO: Refresh billing rates list
+      } else {
+        const data = await response.json();
+        error('Failed to update billing rate', data.error);
+      }
+    } catch (err) {
+      console.error('Failed to update billing rate:', err);
+      error('Failed to update billing rate');
+    }
+  };
+
   const getStatusColor = (status: string): "default" | "secondary" | "destructive" | "outline" => {
     switch (status) {
       case "DRAFT": return "secondary";
@@ -141,6 +231,105 @@ export default function BillingPage() {
     draftInvoices: invoices.filter(i => i.status === "DRAFT").length,
     totalRevenue: invoices.filter(i => i.status === "PAID").reduce((sum, i) => sum + i.total, 0),
     pendingAmount: invoices.filter(i => i.status === "SENT").reduce((sum, i) => sum + i.total, 0)
+  };
+
+  // Billing Rate Card Component
+  const BillingRateCard = ({ rate }: { rate: { id: string; name: string; hourlyRate: number; description: string } }) => {
+    const [editData, setEditData] = useState({
+      name: rate.name,
+      hourlyRate: rate.hourlyRate,
+      description: rate.description
+    });
+
+    const isEditing = editingRate === rate.id;
+
+    const handleSave = () => {
+      handleSaveRate(rate.id, editData);
+    };
+
+    const handleCancel = () => {
+      setEditingRate(null);
+      setEditData({
+        name: rate.name,
+        hourlyRate: rate.hourlyRate,
+        description: rate.description
+      });
+    };
+
+    return (
+      <Card key={rate.id}>
+        <CardContent className="p-4">
+          {isEditing ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor={`name-${rate.id}`}>Rate Name</Label>
+                  <Input
+                    id={`name-${rate.id}`}
+                    value={editData.name}
+                    onChange={(e) => setEditData(prev => ({ ...prev, name: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor={`rate-${rate.id}`}>Hourly Rate ($)</Label>
+                  <Input
+                    id={`rate-${rate.id}`}
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={editData.hourlyRate}
+                    onChange={(e) => setEditData(prev => ({ ...prev, hourlyRate: parseFloat(e.target.value) || 0 }))}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor={`desc-${rate.id}`}>Description</Label>
+                <Input
+                  id={`desc-${rate.id}`}
+                  value={editData.description}
+                  onChange={(e) => setEditData(prev => ({ ...prev, description: e.target.value }))}
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" onClick={handleSave}>
+                  <Save className="h-4 w-4 mr-2" />
+                  Save
+                </Button>
+                <Button variant="outline" size="sm" onClick={handleCancel}>
+                  <X className="h-4 w-4 mr-2" />
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <div className="font-medium">{rate.name}</div>
+                <div className="text-sm text-muted-foreground">{rate.description}</div>
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="text-2xl font-bold text-green-600">
+                  ${rate.hourlyRate}/hr
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="ghost" size="sm" onClick={() => handleEditRate(rate.id)}>
+                    <Edit className="h-4 w-4" />
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="text-red-600 hover:text-red-700"
+                    onClick={() => handleDeleteRate(rate.id)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>  
+    );
   };
 
   return (
@@ -404,43 +593,96 @@ export default function BillingPage() {
             <TabsContent value="rates" className="space-y-4">
               <Card>
                 <CardHeader>
-                  <CardTitle>Billing Rates</CardTitle>
-                  <CardDescription>
-                    Manage hourly billing rates for different types of work.
-                  </CardDescription>
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <CardTitle>Billing Rates Management</CardTitle>
+                      <CardDescription>
+                        Manage hourly billing rates for different types of work. Create, edit, and delete billing rates used in time tracking and invoicing.
+                      </CardDescription>
+                    </div>
+                    <Button onClick={() => setShowAddRate(true)}>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add Rate
+                    </Button>
+                  </div>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {billingRates.map((rate) => (
-                      <Card key={rate.id}>
+                    {/* Add New Rate Form */}
+                    {showAddRate && (
+                      <Card className="border-dashed">
                         <CardContent className="p-4">
-                          <div className="flex items-center justify-between">
-                            <div className="space-y-1">
-                              <div className="font-medium">{rate.name}</div>
-                              <div className="text-sm text-muted-foreground">{rate.description}</div>
+                          <div className="space-y-4">
+                            <h4 className="font-medium">Add New Billing Rate</h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <Label htmlFor="new-rate-name">Rate Name *</Label>
+                                <Input
+                                  id="new-rate-name"
+                                  value={newRate.name}
+                                  onChange={(e) => setNewRate(prev => ({ ...prev, name: e.target.value }))}
+                                  placeholder="e.g., Senior Development"
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor="new-rate-amount">Hourly Rate ($) *</Label>
+                                <Input
+                                  id="new-rate-amount"
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  value={newRate.hourlyRate}
+                                  onChange={(e) => setNewRate(prev => ({ ...prev, hourlyRate: parseFloat(e.target.value) || 0 }))}
+                                  placeholder="125.00"
+                                />
+                              </div>
                             </div>
-                            <div className="flex items-center gap-4">
-                              <div className="text-2xl font-bold text-green-600">
-                                ${rate.hourlyRate}/hr
-                              </div>
-                              <div className="flex gap-2">
-                                <Button variant="ghost" size="sm">
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                                <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700">
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="new-rate-desc">Description</Label>
+                              <Input
+                                id="new-rate-desc"
+                                value={newRate.description}
+                                onChange={(e) => setNewRate(prev => ({ ...prev, description: e.target.value }))}
+                                placeholder="Brief description of this billing rate"
+                              />
+                            </div>
+                            <div className="flex gap-2">
+                              <Button onClick={handleAddRate}>
+                                <Save className="h-4 w-4 mr-2" />
+                                Add Rate
+                              </Button>
+                              <Button 
+                                variant="outline" 
+                                onClick={() => {
+                                  setShowAddRate(false);
+                                  setNewRate({ name: "", hourlyRate: 0, description: "" });
+                                }}
+                              >
+                                <X className="h-4 w-4 mr-2" />
+                                Cancel
+                              </Button>
                             </div>
                           </div>
                         </CardContent>
                       </Card>
-                    ))}
-                    
-                    <Button className="w-full" variant="outline">
-                      <Plus className="mr-2 h-4 w-4" />
-                      Add New Billing Rate
-                    </Button>
+                    )}
+
+                    {/* Existing Billing Rates */}
+                    {billingRates.length === 0 ? (
+                      <div className="text-center py-8">
+                        <DollarSign className="mx-auto h-12 w-12 text-muted-foreground" />
+                        <h3 className="mt-2 text-sm font-semibold">No billing rates</h3>
+                        <p className="text-sm text-muted-foreground">Create your first billing rate to get started.</p>
+                        <Button className="mt-4" onClick={() => setShowAddRate(true)}>
+                          <Plus className="mr-2 h-4 w-4" />
+                          Add Billing Rate
+                        </Button>
+                      </div>
+                    ) : (
+                      billingRates.map((rate) => (
+                        <BillingRateCard key={rate.id} rate={rate} />
+                      ))
+                    )}
                   </div>
                 </CardContent>
               </Card>

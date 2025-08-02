@@ -9,12 +9,14 @@ This is a **time management and invoicing system** built with Next.js 15, Prisma
 ### Key Features
 
 - Admin dashboard for time tracking, ticket management, and invoice generation
-- Customer portal for viewing own tickets and time spent (if permitted)
-- Customizable ticket fields (system-wide and customer-specific)
-- Billing rates with customer-specific overrides
-- Ticket addons (parts/additions with price and quantity)
-- Licensing platform integration for access control
-- Role-based permissions (ADMIN, EMPLOYEE, CUSTOMER)
+- Account portal for viewing tickets and time spent (permission-based)
+- Comprehensive email template management with preview/edit/delete functionality
+- Account-scoped role system with hierarchical permissions
+- Manual and invitation-based user creation with status tracking
+- Customizable ticket fields (system-wide and account-specific)
+- Billing rates with account-specific overrides
+- Cross-device timer synchronization
+- Professional email service with template testing
 
 ## Technology Stack
 

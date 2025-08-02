@@ -104,6 +104,7 @@ export async function GET(request: NextRequest) {
           ticket: {
             select: { 
               id: true, 
+              ticketNumber: true,
               title: true,
               account: {
                 select: { id: true, name: true }

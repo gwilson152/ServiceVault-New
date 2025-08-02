@@ -14,6 +14,18 @@ export interface EmailSettings {
   testMode: boolean;
 }
 
+export class EmailServiceError extends Error {
+  constructor(
+    message: string,
+    public code: string,
+    public userMessage: string,
+    public details?: any
+  ) {
+    super(message);
+    this.name = 'EmailServiceError';
+  }
+}
+
 export interface EmailData {
   to: string;
   toName?: string;
@@ -87,7 +99,7 @@ export class EmailService {
         };
       }
 
-      this.transporter = nodemailer.createTransporter(transporterConfig);
+      this.transporter = nodemailer.createTransport(transporterConfig);
 
       // Verify connection
       await this.transporter.verify();
@@ -105,7 +117,11 @@ export class EmailService {
   async queueEmail(emailData: EmailData): Promise<string> {
     try {
       if (!this.settings) {
-        throw new Error('Email service not initialized');
+        throw new EmailServiceError(
+          'Email service not initialized',
+          'EMAIL_SERVICE_NOT_INITIALIZED',
+          'Email service is not configured. Please check your email settings.'
+        );
       }
 
       const queueEntry = await prisma.emailQueue.create({
@@ -136,7 +152,15 @@ export class EmailService {
       return queueEntry.id;
     } catch (error) {
       console.error('Failed to queue email:', error);
-      throw error;
+      if (error instanceof EmailServiceError) {
+        throw error;
+      }
+      throw new EmailServiceError(
+        `Failed to queue email: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'EMAIL_QUEUE_FAILED',
+        'Failed to queue email for sending. Please try again.',
+        error
+      );
     }
   }
 
@@ -157,7 +181,12 @@ export class EmailService {
       // Get the template
       const template = await this.getTemplate(templateType);
       if (!template) {
-        throw new Error(`No active template found for type: ${templateType}`);
+        throw new EmailServiceError(
+          `No active template found for type: ${templateType}`,
+          'EMAIL_TEMPLATE_NOT_FOUND',
+          `Email template "${templateType}" is not available. Please contact an administrator to configure the email template.`,
+          { templateType }
+        );
       }
 
       // Process template variables
@@ -177,7 +206,15 @@ export class EmailService {
       });
     } catch (error) {
       console.error('Failed to send template email:', error);
-      throw error;
+      if (error instanceof EmailServiceError) {
+        throw error;
+      }
+      throw new EmailServiceError(
+        `Failed to send template email: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'EMAIL_TEMPLATE_SEND_FAILED',
+        'Failed to send email using template. Please try again.',
+        { templateType, error }
+      );
     }
   }
 
@@ -318,7 +355,7 @@ export class EmailService {
    * Get active template by type
    */
   private async getTemplate(type: EmailTemplateType): Promise<EmailTemplate | null> {
-    const template = await prisma.emailTemplate.findFirst({
+    let template = await prisma.emailTemplate.findFirst({
       where: {
         type,
         status: 'ACTIVE'
@@ -328,6 +365,24 @@ export class EmailService {
         { createdAt: 'desc' }
       ]
     });
+
+    // If no template found, try to seed default templates
+    if (!template) {
+      console.log(`No template found for type ${type}, attempting to seed default templates...`);
+      await this.seedDefaultTemplates();
+      
+      // Try again after seeding
+      template = await prisma.emailTemplate.findFirst({
+        where: {
+          type,
+          status: 'ACTIVE'
+        },
+        orderBy: [
+          { isDefault: 'desc' },
+          { createdAt: 'desc' }
+        ]
+      });
+    }
 
     if (!template) {
       return null;
@@ -342,6 +397,76 @@ export class EmailService {
       textBody: template.textBody || undefined,
       variables: JSON.parse(template.variables)
     };
+  }
+
+  /**
+   * Seed default email templates if they don't exist
+   */
+  private async seedDefaultTemplates(): Promise<void> {
+    try {
+      const defaultTemplates = [
+        {
+          name: 'User Invitation',
+          type: 'USER_INVITATION' as EmailTemplateType,
+          subject: 'Invitation to join {{systemName}}',
+          htmlBody: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2>You're invited to join {{systemName}}</h2>
+              <p>Hello {{userName}},</p>
+              <p>{{inviterName}} has invited you to join <strong>{{accountName}}</strong> on {{systemName}}.</p>
+              <p>Click the link below to accept your invitation:</p>
+              <p><a href="{{invitationLink}}" style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px;">Accept Invitation</a></p>
+              <p><strong>Important:</strong> This invitation expires on {{expirationDate}}.</p>
+              <p>If you have any questions, please contact {{inviterEmail}}.</p>
+              <p>Best regards,<br>The {{systemName}} Team</p>
+            </div>
+          `,
+          textBody: `
+            You're invited to join {{systemName}}
+            
+            Hello {{userName}},
+            
+            {{inviterName}} has invited you to join {{accountName}} on {{systemName}}.
+            
+            Click the link below to accept your invitation:
+            {{invitationLink}}
+            
+            Important: This invitation expires on {{expirationDate}}.
+            
+            If you have any questions, please contact {{inviterEmail}}.
+            
+            Best regards,
+            The {{systemName}} Team
+          `,
+          variables: JSON.stringify({
+            systemName: "System name",
+            userName: "Recipient's name", 
+            accountName: "Account name",
+            inviterName: "Inviter's name",
+            inviterEmail: "Inviter's email",
+            invitationLink: "Invitation acceptance link",
+            expirationDate: "Invitation expiration date"
+          }),
+          status: 'ACTIVE',
+          isDefault: true
+        }
+      ];
+
+      for (const templateData of defaultTemplates) {
+        const existing = await prisma.emailTemplate.findFirst({
+          where: { type: templateData.type }
+        });
+
+        if (!existing) {
+          await prisma.emailTemplate.create({
+            data: templateData
+          });
+          console.log(`Created default template: ${templateData.name}`);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to seed default templates:', error);
+    }
   }
 
   /**

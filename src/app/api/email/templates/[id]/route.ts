@@ -6,7 +6,7 @@ import { hasPermission } from '@/lib/permissions';
 import { EmailTemplateType, EmailTemplateStatus } from '@prisma/client';
 
 interface RouteParams {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
@@ -26,8 +26,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    const { id } = await params;
     const template = await prisma.emailTemplate.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         creator: {
           select: { id: true, name: true, email: true }
@@ -73,8 +74,9 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     }
 
     // Check if template exists
+    const { id } = await params;
     const existingTemplate = await prisma.emailTemplate.findUnique({
-      where: { id: params.id }
+      where: { id }
     });
 
     if (!existingTemplate) {
@@ -105,7 +107,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     const nameExists = await prisma.emailTemplate.findFirst({
       where: { 
         name,
-        id: { not: params.id }
+        id: { not: id }
       }
     });
 
@@ -122,14 +124,14 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         where: { 
           type, 
           isDefault: true,
-          id: { not: params.id }
+          id: { not: id }
         },
         data: { isDefault: false }
       });
     }
 
     const updatedTemplate = await prisma.emailTemplate.update({
-      where: { id: params.id },
+      where: { id },
       data: {
         name,
         type,
@@ -179,8 +181,9 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     }
 
     // Check if template exists
+    const { id } = await params;
     const existingTemplate = await prisma.emailTemplate.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         _count: {
           select: { emailQueue: true }
@@ -212,12 +215,12 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     }
 
     await prisma.emailTemplate.delete({
-      where: { id: params.id }
+      where: { id }
     });
 
     return NextResponse.json({ 
       message: 'Template deleted successfully',
-      deletedId: params.id 
+      deletedId: id 
     });
   } catch (error) {
     console.error('Error deleting email template:', error);
