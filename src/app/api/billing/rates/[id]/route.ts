@@ -22,21 +22,33 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { name, hourlyRate, description } = body;
+    const { name, rate, description, isDefault } = body;
 
-    if (!name || !hourlyRate) {
+    if (!name || rate === undefined || rate === null) {
       return NextResponse.json(
-        { error: "Name and hourly rate are required" },
+        { error: "Name and rate are required" },
         { status: 400 }
       );
+    }
+
+    // If setting as default, unset other defaults
+    if (isDefault) {
+      await prisma.billingRate.updateMany({
+        where: { 
+          isDefault: true,
+          id: { not: params.id }
+        },
+        data: { isDefault: false }
+      });
     }
 
     const billingRate = await prisma.billingRate.update({
       where: { id: params.id },
       data: {
         name,
-        hourlyRate: parseFloat(hourlyRate),
+        rate: parseFloat(rate),
         description: description || null,
+        isDefault: isDefault || false,
       },
     });
 

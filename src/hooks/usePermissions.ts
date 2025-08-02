@@ -128,7 +128,9 @@ export function usePermissions() {
   const canDeleteTimeEntries = () => hasPermission(PERMISSIONS.TIME_ENTRIES.DELETE);
   const canApproveTimeEntries = () => hasPermission(PERMISSIONS.TIME_ENTRIES.APPROVE);
   const canViewBilling = () => hasPermission(PERMISSIONS.BILLING.VIEW);
+  const canCreateBilling = () => hasPermission(PERMISSIONS.BILLING.CREATE);
   const canUpdateBilling = () => hasPermission(PERMISSIONS.BILLING.UPDATE);
+  const canDeleteBilling = () => hasPermission(PERMISSIONS.BILLING.DELETE);
   const canViewReports = () => hasPermission(PERMISSIONS.REPORTS.VIEW);
   const canViewSettings = () => hasPermission(PERMISSIONS.SETTINGS.VIEW);
   const canUpdateSettings = () => hasPermission(PERMISSIONS.SETTINGS.UPDATE);
@@ -165,7 +167,9 @@ export function usePermissions() {
     canDeleteTimeEntries,
     canApproveTimeEntries,
     canViewBilling,
+    canCreateBilling,
     canUpdateBilling,
+    canDeleteBilling,
     canViewReports,
     canViewSettings,
     canUpdateSettings,

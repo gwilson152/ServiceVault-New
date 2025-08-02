@@ -44,7 +44,6 @@ export function QuickTimeEntry({ ticketId, ticketTitle, onTimeLogged }: QuickTim
   };
   
   const timerState = getTimerState();
-  console.log("🟡 [QuickTimeEntry] Timer state for ticket", ticketId, "is:", timerState, "activeTimer:", activeTimer);
 
   const handleStartTimer = async () => {
     try {

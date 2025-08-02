@@ -30,6 +30,7 @@ interface Timer {
   ticket: {
     id: string;
     title: string;
+    ticketNumber: string;
     account: {
       id: string;
       name: string;
@@ -260,7 +261,7 @@ export function TimerCard({
                     Time tracked for {timer.ticket.title}
                   </div>
                   <Badge variant="outline" className="text-xs mt-1">
-                    {timer.ticketId}
+                    {timer.ticket.ticketNumber}
                   </Badge>
                   {timerData && (
                     <div className="text-xs text-muted-foreground mt-2">
@@ -387,7 +388,7 @@ export function TimerCard({
                 {timer.ticket.title}
               </div>
               <Badge variant="outline" className="text-xs mt-1">
-                {timer.ticketId}
+                {timer.ticket.ticketNumber}
               </Badge>
             </div>
 
@@ -439,7 +440,7 @@ export function TimerCard({
                   Time tracked for {timer.ticket.title}
                 </div>
                 <Badge variant="outline" className="text-xs mt-1">
-                  {timer.ticketId}
+                  {timer.ticket.ticketNumber}
                 </Badge>
                 {timerData && (
                   <div className="text-xs text-muted-foreground mt-2">

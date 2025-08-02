@@ -49,13 +49,22 @@ export default function BillingPage() {
     canDeleteInvoices,
     canEditInvoiceItems,
     canViewBilling,
-    canUpdateBilling
+    canCreateBilling,
+    canUpdateBilling,
+    canDeleteBilling
   } = usePermissions();
 
   // Real data state
   const [accounts, setAccounts] = useState<AccountWithHierarchy[]>([]);
   const [invoices, setInvoices] = useState<any[]>([]);
   const [billingRates, setBillingRates] = useState<any[]>([]);
+  
+  // Permission state
+  const [permissions, setPermissions] = useState({
+    createBilling: false,
+    updateBilling: false,
+    deleteBilling: false
+  });
 
   // Invoice generation state
   const [selectedAccount, setSelectedAccount] = useState<string>("");
@@ -75,8 +84,9 @@ export default function BillingPage() {
   const [showAddRate, setShowAddRate] = useState(false);
   const [newRate, setNewRate] = useState({
     name: "",
-    hourlyRate: 0,
-    description: ""
+    rate: 0,
+    description: "",
+    isDefault: false
   });
 
   const { success, error } = useToast();
@@ -84,10 +94,10 @@ export default function BillingPage() {
   // Data fetching functions
   const fetchAccounts = async () => {
     try {
-      const response = await fetch('/api/accounts');
+      const response = await fetch('/api/accounts/all');
       if (response.ok) {
         const data = await response.json();
-        setAccounts(data.accounts || []);
+        setAccounts(data || []);
       }
     } catch (err) {
       console.error('Failed to fetch accounts:', err);
@@ -130,6 +140,19 @@ export default function BillingPage() {
           return;
         }
 
+        // Check billing permissions
+        const [createBilling, updateBilling, deleteBilling] = await Promise.all([
+          canCreateBilling(),
+          canUpdateBilling(),
+          canDeleteBilling()
+        ]);
+        
+        setPermissions({
+          createBilling,
+          updateBilling,
+          deleteBilling
+        });
+
         // Fetch initial data
         Promise.all([
           fetchAccounts(),
@@ -142,7 +165,7 @@ export default function BillingPage() {
 
       checkPermissions();
     }
-  }, [status, session, router, canViewInvoices]);
+  }, [status, session, router]);
 
   if (status === "loading" || isLoading) {
     return (
@@ -258,7 +281,7 @@ export default function BillingPage() {
   };
 
   const handleAddRate = async () => {
-    if (!newRate.name || !newRate.hourlyRate) {
+    if (!newRate.name || !newRate.rate) {
       error('Please fill in all required fields');
       return;
     }
@@ -275,7 +298,7 @@ export default function BillingPage() {
       if (response.ok) {
         success('Billing rate added successfully');
         setShowAddRate(false);
-        setNewRate({ name: "", hourlyRate: 0, description: "" });
+        setNewRate({ name: "", rate: 0, description: "", isDefault: false });
         fetchBillingRates();
       } else {
         const data = await response.json();
@@ -310,7 +333,7 @@ export default function BillingPage() {
     setEditingRate(rateId);
   };
 
-  const handleSaveRate = async (rateId: string, updatedRate: { name: string; hourlyRate: number; description: string }) => {
+  const handleSaveRate = async (rateId: string, updatedRate: { name: string; rate: number; description: string; isDefault: boolean }) => {
     try {
       const response = await fetch(`/api/billing/rates/${rateId}`, {
         method: 'PUT',
@@ -471,11 +494,12 @@ export default function BillingPage() {
   };
 
   // Billing Rate Card Component
-  const BillingRateCard = ({ rate }: { rate: { id: string; name: string; hourlyRate: number; description: string } }) => {
+  const BillingRateCard = ({ rate }: { rate: { id: string; name: string; rate: number; description: string; isDefault: boolean } }) => {
     const [editData, setEditData] = useState({
       name: rate.name,
-      hourlyRate: rate.hourlyRate,
-      description: rate.description
+      rate: rate.rate,
+      description: rate.description,
+      isDefault: rate.isDefault
     });
 
     const isEditing = editingRate === rate.id;
@@ -488,8 +512,9 @@ export default function BillingPage() {
       setEditingRate(null);
       setEditData({
         name: rate.name,
-        hourlyRate: rate.hourlyRate,
-        description: rate.description
+        rate: rate.rate,
+        description: rate.description,
+        isDefault: rate.isDefault
       });
     };
 
@@ -514,8 +539,8 @@ export default function BillingPage() {
                     type="number"
                     step="0.01"
                     min="0"
-                    value={editData.hourlyRate}
-                    onChange={(e) => setEditData(prev => ({ ...prev, hourlyRate: parseFloat(e.target.value) || 0 }))}
+                    value={editData.rate}
+                    onChange={(e) => setEditData(prev => ({ ...prev, rate: parseFloat(e.target.value) || 0 }))}
                   />
                 </div>
               </div>
@@ -526,6 +551,18 @@ export default function BillingPage() {
                   value={editData.description}
                   onChange={(e) => setEditData(prev => ({ ...prev, description: e.target.value }))}
                 />
+              </div>
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id={`default-${rate.id}`}
+                  checked={editData.isDefault}
+                  onChange={(e) => setEditData(prev => ({ ...prev, isDefault: e.target.checked }))}
+                  className="rounded"
+                />
+                <Label htmlFor={`default-${rate.id}`} className="text-sm">
+                  Set as default rate
+                </Label>
               </div>
               <div className="flex gap-2">
                 <Button size="sm" onClick={handleSave}>
@@ -541,25 +578,36 @@ export default function BillingPage() {
           ) : (
             <div className="flex items-center justify-between">
               <div className="space-y-1">
-                <div className="font-medium">{rate.name}</div>
+                <div className="flex items-center gap-2">
+                  <div className="font-medium">{rate.name}</div>
+                  {rate.isDefault && (
+                    <Badge variant="secondary" className="text-xs">
+                      Default
+                    </Badge>
+                  )}
+                </div>
                 <div className="text-sm text-muted-foreground">{rate.description}</div>
               </div>
               <div className="flex items-center gap-4">
                 <div className="text-2xl font-bold text-green-600">
-                  ${rate.hourlyRate}/hr
+                  ${rate.rate}/hr
                 </div>
                 <div className="flex gap-2">
-                  <Button variant="ghost" size="sm" onClick={() => handleEditRate(rate.id)}>
-                    <Edit className="h-4 w-4" />
-                  </Button>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="text-red-600 hover:text-red-700"
-                    onClick={() => handleDeleteRate(rate.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  {permissions.updateBilling && (
+                    <Button variant="ghost" size="sm" onClick={() => handleEditRate(rate.id)}>
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                  )}
+                  {permissions.deleteBilling && (
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="text-red-600 hover:text-red-700"
+                      onClick={() => handleDeleteRate(rate.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
               </div>
             </div>
@@ -1057,7 +1105,10 @@ export default function BillingPage() {
                         Manage hourly billing rates for different types of work. Create, edit, and delete billing rates used in time tracking and invoicing.
                       </CardDescription>
                     </div>
-                    <Button onClick={() => setShowAddRate(true)}>
+                    <Button 
+                      onClick={() => setShowAddRate(true)}
+                      disabled={!permissions.createBilling}
+                    >
                       <Plus className="mr-2 h-4 w-4" />
                       Add Rate
                     </Button>
@@ -1088,8 +1139,8 @@ export default function BillingPage() {
                                   type="number"
                                   step="0.01"
                                   min="0"
-                                  value={newRate.hourlyRate}
-                                  onChange={(e) => setNewRate(prev => ({ ...prev, hourlyRate: parseFloat(e.target.value) || 0 }))}
+                                  value={newRate.rate}
+                                  onChange={(e) => setNewRate(prev => ({ ...prev, rate: parseFloat(e.target.value) || 0 }))}
                                   placeholder="125.00"
                                 />
                               </div>
@@ -1103,6 +1154,18 @@ export default function BillingPage() {
                                 placeholder="Brief description of this billing rate"
                               />
                             </div>
+                            <div className="flex items-center space-x-2">
+                              <input
+                                type="checkbox"
+                                id="new-rate-default"
+                                checked={newRate.isDefault}
+                                onChange={(e) => setNewRate(prev => ({ ...prev, isDefault: e.target.checked }))}
+                                className="rounded"
+                              />
+                              <Label htmlFor="new-rate-default" className="text-sm">
+                                Set as default rate
+                              </Label>
+                            </div>
                             <div className="flex gap-2">
                               <Button onClick={handleAddRate}>
                                 <Save className="h-4 w-4 mr-2" />
@@ -1112,7 +1175,7 @@ export default function BillingPage() {
                                 variant="outline" 
                                 onClick={() => {
                                   setShowAddRate(false);
-                                  setNewRate({ name: "", hourlyRate: 0, description: "" });
+                                  setNewRate({ name: "", rate: 0, description: "", isDefault: false });
                                 }}
                               >
                                 <X className="h-4 w-4 mr-2" />
@@ -1130,7 +1193,11 @@ export default function BillingPage() {
                         <DollarSign className="mx-auto h-12 w-12 text-muted-foreground" />
                         <h3 className="mt-2 text-sm font-semibold">No billing rates</h3>
                         <p className="text-sm text-muted-foreground">Create your first billing rate to get started.</p>
-                        <Button className="mt-4" onClick={() => setShowAddRate(true)}>
+                        <Button 
+                          className="mt-4" 
+                          onClick={() => setShowAddRate(true)}
+                          disabled={!permissions.createBilling}
+                        >
                           <Plus className="mr-2 h-4 w-4" />
                           Add Billing Rate
                         </Button>
