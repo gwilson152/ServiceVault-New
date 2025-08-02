@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { AccountSelector } from "@/components/selectors/account-selector";
+import { AccountUserSelector } from "@/components/selectors/account-user-selector";
 import { QuickTimeEntry } from "@/components/time/QuickTimeEntry";
 import { AddonsManagement } from "@/components/tickets/AddonsManagement";
 import { 
@@ -99,10 +100,12 @@ interface TicketDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
   onUpdate?: (updatedTicket: Ticket) => void;
+  onCreate?: (newTicket: Ticket) => void;
   canEdit: boolean;
   accounts: Account[];
   users: User[];
   customFields: CustomField[];
+  isCreateMode?: boolean;
 }
 
 export function TicketDetailModal({
@@ -110,14 +113,18 @@ export function TicketDetailModal({
   isOpen,
   onClose,
   onUpdate,
+  onCreate,
   canEdit,
   accounts,
   users,
-  customFields
+  customFields,
+  isCreateMode = false
 }: TicketDetailModalProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [activeTab, setActiveTab] = useState("details");
+  const [currentTicket, setCurrentTicket] = useState<Ticket | null>(ticket);
+  const [internalCreateMode, setInternalCreateMode] = useState(isCreateMode);
   
   // Form state
   const [editTitle, setEditTitle] = useState("");
@@ -165,9 +172,9 @@ export function TicketDetailModal({
     }
   }, [ticket]);
 
-  // Reset form when ticket changes
+  // Reset form when ticket changes or create mode is activated
   useEffect(() => {
-    if (ticket) {
+    if (ticket && !isCreateMode) {
       setEditTitle(ticket.title);
       setEditDescription(ticket.description);
       setEditStatus(ticket.status);
@@ -176,50 +183,106 @@ export function TicketDetailModal({
       setEditAssigneeId(ticket.assigneeId || "unassigned");
       setEditCustomFields(ticket.customFields || {});
       setIsEditing(false);
+      setCurrentTicket(ticket);
+      setInternalCreateMode(false);
+    } else if (isCreateMode) {
+      // Reset form for create mode
+      setEditTitle("");
+      setEditDescription("");
+      setEditStatus("OPEN");
+      setEditPriority("MEDIUM");
+      setEditAccountId("");
+      setEditAssigneeId("unassigned");
+      setEditCustomFields({});
+      setIsEditing(true); // Always in edit mode when creating
+      setCurrentTicket(null);
+      setInternalCreateMode(true);
     }
-  }, [ticket]);
+  }, [ticket, isCreateMode]);
 
-  // Load detailed data when modal opens
+  // Load detailed data when modal opens (only for existing tickets)
   useEffect(() => {
-    if (isOpen && ticket) {
+    if (isOpen && ticket && !internalCreateMode) {
       loadTimeEntries();
       loadAddons();
     }
-  }, [isOpen, ticket, loadTimeEntries, loadAddons]);
+  }, [isOpen, ticket, internalCreateMode, loadTimeEntries, loadAddons]);
 
   const handleSave = async () => {
-    if (!ticket) return;
+    if (!internalCreateMode && !currentTicket) return;
+
+    // Validation for create mode
+    if (internalCreateMode && (!editTitle || !editDescription || !editAccountId)) {
+      alert("Please fill in all required fields (Title, Description, Account)");
+      return;
+    }
 
     setIsSaving(true);
     try {
-      const response = await fetch(`/api/tickets/${ticket.id}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          title: editTitle,
-          description: editDescription,
-          status: editStatus,
-          priority: editPriority,
-          accountId: editAccountId,
-          assigneeId: editAssigneeId === "unassigned" ? null : editAssigneeId,
-          customFields: editCustomFields,
-        }),
-      });
+      if (internalCreateMode) {
+        // Create new ticket
+        const response = await fetch("/api/tickets", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            title: editTitle,
+            description: editDescription,
+            priority: editPriority,
+            accountId: editAccountId,
+            assigneeId: editAssigneeId === "unassigned" ? null : editAssigneeId,
+            customFields: editCustomFields,
+          }),
+        });
 
-      if (response.ok) {
-        const updatedTicket = await response.json();
-        onUpdate?.(updatedTicket);
-        setIsEditing(false);
+        if (response.ok) {
+          const newTicket = await response.json();
+          // Switch to edit mode with the new ticket
+          setCurrentTicket(newTicket);
+          setInternalCreateMode(false);
+          setIsEditing(false);
+          onCreate?.(newTicket);
+          // Load related data for the new ticket
+          loadTimeEntries();
+          loadAddons();
+        } else {
+          const error = await response.json();
+          console.error("Error creating ticket:", error);
+          alert("Failed to create ticket: " + error.error);
+        }
       } else {
-        const error = await response.json();
-        console.error("Error updating ticket:", error);
-        alert("Failed to update ticket: " + error.error);
+        // Update existing ticket
+        const response = await fetch(`/api/tickets/${currentTicket!.id}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            title: editTitle,
+            description: editDescription,
+            status: editStatus,
+            priority: editPriority,
+            accountId: editAccountId,
+            assigneeId: editAssigneeId === "unassigned" ? null : editAssigneeId,
+            customFields: editCustomFields,
+          }),
+        });
+
+        if (response.ok) {
+          const updatedTicket = await response.json();
+          setCurrentTicket(updatedTicket);
+          onUpdate?.(updatedTicket);
+          setIsEditing(false);
+        } else {
+          const error = await response.json();
+          console.error("Error updating ticket:", error);
+          alert("Failed to update ticket: " + error.error);
+        }
       }
     } catch (error) {
-      console.error("Error updating ticket:", error);
-      alert("Failed to update ticket");
+      console.error("Error saving ticket:", error);
+      alert("Failed to save ticket");
     } finally {
       setIsSaving(false);
     }
@@ -255,7 +318,7 @@ export function TicketDetailModal({
   };
 
   const renderCustomFieldValue = (field: CustomField) => {
-    const value = ticket?.customFields?.[field.name];
+    const value = currentTicket?.customFields?.[field.name];
     if (!value) return "—";
     return value;
   };
@@ -315,7 +378,10 @@ export function TicketDetailModal({
     }
   };
 
-  if (!ticket) return null;
+  if (!isOpen) return null;
+  
+  const displayTicket = currentTicket || ticket;
+  const showAdvancedTabs = !internalCreateMode && displayTicket;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -323,49 +389,66 @@ export function TicketDetailModal({
         <DialogHeader>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              {getStatusIcon(ticket.status)}
-              <DialogTitle className="text-xl">
-                {ticket.ticketNumber}
-              </DialogTitle>
-              <Badge variant={getStatusColor(ticket.status)}>
-                {ticket.status}
-              </Badge>
-              <Badge variant={getPriorityColor(ticket.priority)}>
-                {ticket.priority}
-              </Badge>
+              {internalCreateMode ? (
+                <>
+                  <FileText className="h-5 w-5" />
+                  <DialogTitle className="text-xl">
+                    Create New Ticket
+                  </DialogTitle>
+                </>
+              ) : displayTicket ? (
+                <>
+                  {getStatusIcon(displayTicket.status)}
+                  <DialogTitle className="text-xl">
+                    {displayTicket.ticketNumber}
+                  </DialogTitle>
+                  <Badge variant={getStatusColor(displayTicket.status)}>
+                    {displayTicket.status}
+                  </Badge>
+                  <Badge variant={getPriorityColor(displayTicket.priority)}>
+                    {displayTicket.priority}
+                  </Badge>
+                </>
+              ) : (
+                <DialogTitle className="text-xl">Ticket Details</DialogTitle>
+              )}
             </div>
             
             <div className="flex items-center gap-2">
-              {/* Time Tracking Controls */}
-              <QuickTimeEntry
-                ticketId={ticket.id}
-                ticketTitle={ticket.title}
-                onTimeLogged={() => {
-                  loadTimeEntries();
-                  onUpdate?.(ticket);
-                }}
-              />
+              {/* Time Tracking Controls - only for existing tickets */}
+              {!internalCreateMode && displayTicket && (
+                <QuickTimeEntry
+                  ticketId={displayTicket.id}
+                  ticketTitle={displayTicket.title}
+                  onTimeLogged={() => {
+                    loadTimeEntries();
+                    onUpdate?.(displayTicket);
+                  }}
+                />
+              )}
               
               {canEdit && (
                 <>
-                  {isEditing ? (
+                  {(isEditing || internalCreateMode) ? (
                     <>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setIsEditing(false)}
-                        disabled={isSaving}
-                      >
-                        <X className="h-4 w-4 mr-1" />
-                        Cancel
-                      </Button>
+                      {!internalCreateMode && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setIsEditing(false)}
+                          disabled={isSaving}
+                        >
+                          <X className="h-4 w-4 mr-1" />
+                          Cancel
+                        </Button>
+                      )}
                       <Button
                         size="sm"
                         onClick={handleSave}
                         disabled={isSaving}
                       >
                         <Save className="h-4 w-4 mr-1" />
-                        {isSaving ? "Saving..." : "Save"}
+                        {isSaving ? (internalCreateMode ? "Creating..." : "Saving...") : (internalCreateMode ? "Create Ticket" : "Save")}
                       </Button>
                     </>
                   ) : (
@@ -385,15 +468,19 @@ export function TicketDetailModal({
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className={`grid w-full ${showAdvancedTabs ? 'grid-cols-4' : 'grid-cols-1'}`}>
             <TabsTrigger value="details">Details</TabsTrigger>
-            <TabsTrigger value="time">
-              Time ({ticket.timeEntriesCount})
-            </TabsTrigger>
-            <TabsTrigger value="addons">
-              Addons ({ticket.addonsCount})
-            </TabsTrigger>
-            <TabsTrigger value="history">History</TabsTrigger>
+            {showAdvancedTabs && (
+              <>
+                <TabsTrigger value="time">
+                  Time ({displayTicket?.timeEntriesCount || 0})
+                </TabsTrigger>
+                <TabsTrigger value="addons">
+                  Addons ({displayTicket?.addonsCount || 0})
+                </TabsTrigger>
+                <TabsTrigger value="history">History</TabsTrigger>
+              </>
+            )}
           </TabsList>
 
           {/* Details Tab */}
@@ -414,7 +501,7 @@ export function TicketDetailModal({
                         placeholder="Ticket title"
                       />
                     ) : (
-                      <p className="text-sm font-medium">{ticket.title}</p>
+                      <p className="text-sm font-medium">{displayTicket?.title || ""}</p>
                     )}
                   </div>
 
@@ -428,7 +515,7 @@ export function TicketDetailModal({
                         rows={4}
                       />
                     ) : (
-                      <p className="text-sm text-muted-foreground">{ticket.description}</p>
+                      <p className="text-sm text-muted-foreground">{displayTicket?.description || ""}</p>
                     )}
                   </div>
 
@@ -447,11 +534,11 @@ export function TicketDetailModal({
                             <SelectItem value="CLOSED">Closed</SelectItem>
                           </SelectContent>
                         </Select>
-                      ) : (
-                        <Badge variant={getStatusColor(ticket.status)}>
-                          {ticket.status}
+                      ) : displayTicket ? (
+                        <Badge variant={getStatusColor(displayTicket.status)}>
+                          {displayTicket.status}
                         </Badge>
-                      )}
+                      ) : null}
                     </div>
 
                     <div className="space-y-2">
@@ -467,11 +554,11 @@ export function TicketDetailModal({
                             <SelectItem value="LOW">Low</SelectItem>
                           </SelectContent>
                         </Select>
-                      ) : (
-                        <Badge variant={getPriorityColor(ticket.priority)}>
-                          {ticket.priority}
+                      ) : displayTicket ? (
+                        <Badge variant={getPriorityColor(displayTicket.priority)}>
+                          {displayTicket.priority}
                         </Badge>
-                      )}
+                      ) : null}
                     </div>
                   </div>
                 </CardContent>
@@ -483,75 +570,67 @@ export function TicketDetailModal({
                   <CardTitle className="text-lg">Assignment</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>Account</Label>
-                    {isEditing ? (
-                      <AccountSelector
-                        accounts={accounts}
-                        value={editAccountId}
-                        onValueChange={setEditAccountId}
-                        placeholder="Select account"
-                        enableFilters={true}
-                        enableGrouping={true}
-                      />
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <Building className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm">{ticket.account.name}</span>
-                        <Badge variant="outline" className="text-xs">
-                          {ticket.account.accountType}
-                        </Badge>
+                  {isEditing || internalCreateMode ? (
+                    <AccountUserSelector
+                      accounts={accounts}
+                      employees={users}
+                      selectedAccountId={editAccountId}
+                      selectedAssigneeId={editAssigneeId}
+                      onAccountChange={setEditAccountId}
+                      onAssigneeChange={setEditAssigneeId}
+                      showAccountUsers={true}
+                      showEmployees={true}
+                    />
+                  ) : displayTicket ? (
+                    <>
+                      <div className="space-y-2">
+                        <Label>Account</Label>
+                        <div className="flex items-center gap-2">
+                          <Building className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm">{displayTicket.account.name}</span>
+                          <Badge variant="outline" className="text-xs">
+                            {displayTicket.account.accountType}
+                          </Badge>
+                        </div>
                       </div>
-                    )}
-                  </div>
 
-                  <div className="space-y-2">
-                    <Label>Assigned To</Label>
-                    {isEditing ? (
-                      <Select value={editAssigneeId} onValueChange={setEditAssigneeId}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select assignee" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="unassigned">Unassigned</SelectItem>
-                          {users.map(user => (
-                            <SelectItem key={user.id} value={user.id}>
-                              {user.name} ({user.email})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <User className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm">
-                          {ticket.assignee ? ticket.assignee.name : "Unassigned"}
-                        </span>
+                      <div className="space-y-2">
+                        <Label>Assigned To</Label>
+                        <div className="flex items-center gap-2">
+                          <User className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm">
+                            {displayTicket.assignee ? displayTicket.assignee.name : "Unassigned"}
+                          </span>
+                        </div>
                       </div>
-                    )}
-                  </div>
+                    </>
+                  ) : null}
 
-                  <Separator />
+                  {!internalCreateMode && displayTicket && (
+                    <>
+                      <Separator />
 
-                  <div className="space-y-2">
-                    <Label>Created By</Label>
-                    <div className="flex items-center gap-2">
-                      <User className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm">
-                        {ticket.creator?.name || "System"}
-                      </span>
-                    </div>
-                  </div>
+                      <div className="space-y-2">
+                        <Label>Created By</Label>
+                        <div className="flex items-center gap-2">
+                          <User className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm">
+                            {displayTicket.creator?.name || "System"}
+                          </span>
+                        </div>
+                      </div>
 
-                  <div className="space-y-2">
-                    <Label>Created At</Label>
-                    <div className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm">
-                        {new Date(ticket.createdAt).toLocaleString()}
-                      </span>
-                    </div>
-                  </div>
+                      <div className="space-y-2">
+                        <Label>Created At</Label>
+                        <div className="flex items-center gap-2">
+                          <Calendar className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm">
+                            {new Date(displayTicket.createdAt).toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </CardContent>
               </Card>
             </div>
@@ -584,44 +663,47 @@ export function TicketDetailModal({
               </Card>
             )}
 
-            {/* Summary Statistics */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Summary</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-blue-600">
-                      {formatMinutes(ticket.totalTimeSpent)}
+            {/* Summary Statistics - only for existing tickets */}
+            {!internalCreateMode && displayTicket && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Summary</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-blue-600">
+                        {formatMinutes(displayTicket.totalTimeSpent)}
+                      </div>
+                      <div className="text-sm text-muted-foreground">Total Time</div>
                     </div>
-                    <div className="text-sm text-muted-foreground">Total Time</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-green-600">
-                      {ticket.timeEntriesCount}
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-green-600">
+                        {displayTicket.timeEntriesCount}
+                      </div>
+                      <div className="text-sm text-muted-foreground">Time Entries</div>
                     </div>
-                    <div className="text-sm text-muted-foreground">Time Entries</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-orange-600">
-                      ${ticket.totalAddonCost.toFixed(2)}
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-orange-600">
+                        ${displayTicket.totalAddonCost.toFixed(2)}
+                      </div>
+                      <div className="text-sm text-muted-foreground">Addon Cost</div>
                     </div>
-                    <div className="text-sm text-muted-foreground">Addon Cost</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-purple-600">
-                      {ticket.addonsCount}
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-purple-600">
+                        {displayTicket.addonsCount}
+                      </div>
+                      <div className="text-sm text-muted-foreground">Addons</div>
                     </div>
-                    <div className="text-sm text-muted-foreground">Addons</div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
 
           {/* Time Entries Tab */}
-          <TabsContent value="time" className="space-y-4">
+          {showAdvancedTabs && (
+            <TabsContent value="time" className="space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold">Time Entries</h3>
               <Button size="sm">
@@ -683,23 +765,27 @@ export function TicketDetailModal({
                 ))}
               </div>
             )}
-          </TabsContent>
+            </TabsContent>
+          )}
 
           {/* Addons Tab */}
-          <TabsContent value="addons" className="space-y-4">
-            <AddonsManagement
-              ticketId={ticket.id}
-              addons={addons}
-              onAddonsChange={() => {
-                loadAddons();
-                onUpdate?.(ticket);
-              }}
-              canEdit={canEdit}
-            />
-          </TabsContent>
+          {showAdvancedTabs && (
+            <TabsContent value="addons" className="space-y-4">
+              <AddonsManagement
+                ticketId={displayTicket!.id}
+                addons={addons}
+                onAddonsChange={() => {
+                  loadAddons();
+                  onUpdate?.(displayTicket!);
+                }}
+                canEdit={canEdit}
+              />
+            </TabsContent>
+          )}
 
           {/* History Tab */}
-          <TabsContent value="history" className="space-y-4">
+          {showAdvancedTabs && (
+            <TabsContent value="history" className="space-y-4">
             <h3 className="text-lg font-semibold">Activity History</h3>
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-12">
@@ -710,7 +796,8 @@ export function TicketDetailModal({
                 </p>
               </CardContent>
             </Card>
-          </TabsContent>
+            </TabsContent>
+          )}
         </Tabs>
       </DialogContent>
     </Dialog>

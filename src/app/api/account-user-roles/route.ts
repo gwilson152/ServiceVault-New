@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Build where clause based on account context
-    let whereClause: any = {};
+    const whereClause: any = {};
     if (accountId) {
       whereClause.accountUser = {
         accountId: accountId

@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -25,6 +26,7 @@ import {
   X,
   Plus,
   Building,
+  Building2,
   User,
   Mail,
   Phone,
@@ -41,6 +43,7 @@ import {
 import { CreateAccountUserDialog } from "@/components/accounts/CreateAccountUserDialog";
 import { AccountUserRoleManager } from "@/components/accounts/AccountUserRoleManager";
 import { usePermissions } from "@/hooks/usePermissions";
+import { AccountUserWithStatus, getAccountUserStatusDisplay } from "@/types/account-user";
 
 interface AccountDetails {
   id: string;
@@ -51,14 +54,7 @@ interface AccountDetails {
   phone?: string;
   parentAccount?: { id: string; name: string; accountType: string };
   childAccounts: Array<{ id: string; name: string; accountType: string }>;
-  accountUsers: Array<{
-    id: string;
-    name: string;
-    email: string;
-    isActive: boolean;
-    user?: { id: string; name: string; email: string };
-    invitationToken?: string;
-  }>;
+  accountUsers: AccountUserWithStatus[];
   tickets: Array<{
     id: string;
     title: string;
@@ -107,8 +103,42 @@ export default function AccountDetailsPage() {
     phone: ''
   });
   const [isCreateUserDialogOpen, setIsCreateUserDialogOpen] = useState(false);
+  const [showMoveUserDialog, setShowMoveUserDialog] = useState(false);
+  const [userToMove, setUserToMove] = useState<AccountUserWithStatus | null>(null);
   
   const { canCreateUsers, canResendInvitations } = usePermissions();
+
+  const handleMoveUser = (accountUser: AccountUserWithStatus) => {
+    setUserToMove(accountUser);
+    setShowMoveUserDialog(true);
+  };
+
+  const handleMoveUserToAccount = async (targetAccountId: string) => {
+    if (!userToMove) return;
+
+    try {
+      const response = await fetch(`/api/account-users/${userToMove.id}/move`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ accountId: targetAccountId }),
+      });
+
+      if (response.ok) {
+        // Refresh the account data
+        await fetchAccount();
+        setShowMoveUserDialog(false);
+        setUserToMove(null);
+      } else {
+        const error = await response.json();
+        alert(`Failed to move user: ${error.error}`);
+      }
+    } catch (error) {
+      console.error('Error moving user:', error);
+      alert('Failed to move user. Please try again.');
+    }
+  };
 
   const handleResendInvitation = async (accountUserId: string, userName: string) => {
     if (!confirm(`Are you sure you want to resend the invitation to ${userName}?`)) {
@@ -137,33 +167,34 @@ export default function AccountDetailsPage() {
     }
   };
 
-  const getUserStatus = (accountUser: AccountDetails['accountUsers'][0]) => {
-    if (accountUser.user) {
-      return 'active';
-    }
+  const getUserStatusBadges = (accountUser: AccountUserWithStatus) => {
     
-    if (accountUser.invitationExpiry) {
-      const now = new Date();
-      const expiry = new Date(accountUser.invitationExpiry);
-      if (expiry < now) {
-        return 'expired';
-      }
-    }
-    
-    return 'invited';
-  };
-
-  const getUserStatusBadge = (status: string) => {
-    switch (status) {
-      case 'active':
-        return <Badge variant="outline" className="text-green-600 border-green-600"><CheckCircle className="h-3 w-3 mr-1" />Active</Badge>;
-      case 'invited':
-        return <Badge variant="secondary"><Clock4 className="h-3 w-3 mr-1" />Invited</Badge>;
-      case 'expired':
-        return <Badge variant="destructive"><AlertTriangle className="h-3 w-3 mr-1" />Expired</Badge>;
-      default:
-        return <Badge variant="outline">{status}</Badge>;
-    }
+    return (
+      <div className="flex flex-col gap-1">
+        {/* Assignment Status */}
+        <Badge 
+          variant={accountUser.isActive ? "outline" : "destructive"} 
+          className={accountUser.isActive ? "text-green-600 border-green-600" : ""}
+        >
+          {accountUser.isActive ? (
+            <><CheckCircle className="h-3 w-3 mr-1" />Can be assigned</>
+          ) : (
+            <><AlertTriangle className="h-3 w-3 mr-1" />Disabled</>
+          )}
+        </Badge>
+        
+        {/* Login Status */}
+        <Badge variant="secondary">
+          {accountUser.hasLogin ? (
+            <><CheckCircle className="h-3 w-3 mr-1" />Login activated</>
+          ) : accountUser.invitationToken ? (
+            <><Clock4 className="h-3 w-3 mr-1" />Invitation pending</>
+          ) : (
+            <><AlertTriangle className="h-3 w-3 mr-1" />No invitation</>
+          )}
+        </Badge>
+      </div>
+    );
   };
 
   const fetchAccount = async () => {
@@ -499,6 +530,26 @@ export default function AccountDetailsPage() {
                 </Card>
               </div>
 
+              {/* Parent Account */}
+              {account.parentAccount && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Parent Organization</CardTitle>
+                    <CardDescription>Primary account this subsidiary belongs to</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="p-4 border rounded-lg hover:bg-muted/50 cursor-pointer"
+                         onClick={() => router.push(`/accounts/${account.parentAccount.id}`)}>
+                      <div className="flex items-center space-x-2">
+                        {getAccountTypeIcon(account.parentAccount.accountType)}
+                        <span className="font-medium">{account.parentAccount.name}</span>
+                      </div>
+                      {getAccountTypeBadge(account.parentAccount.accountType)}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
               {/* Child Accounts */}
               {account.childAccounts.length > 0 && (
                 <Card>
@@ -544,28 +595,39 @@ export default function AccountDetailsPage() {
                 <CardContent>
                   <div className="space-y-4">
                     {account.accountUsers.map((accountUser) => {
-                      const status = getUserStatus(accountUser);
+                      const hasExpiredInvitation = accountUser.invitationExpiry && 
+                        new Date(accountUser.invitationExpiry) < new Date();
+                      
                       return (
-                        <div key={accountUser.id} className="flex items-center justify-between p-4 border rounded-lg">
-                          <div className="flex items-center space-x-4">
+                        <div key={accountUser.id} className="flex items-start justify-between p-4 border rounded-lg">
+                          <div className="flex items-start space-x-4">
                             <div className="relative">
                               <User className="h-8 w-8 p-2 bg-muted rounded-full" />
-                              {status === 'active' && (
+                              {accountUser.isActive && (
                                 <div className="absolute -bottom-1 -right-1 h-3 w-3 bg-green-500 rounded-full border-2 border-white"></div>
                               )}
+                              {!accountUser.isActive && (
+                                <div className="absolute -bottom-1 -right-1 h-3 w-3 bg-red-500 rounded-full border-2 border-white"></div>
+                              )}
                             </div>
-                            <div>
-                              <div className="flex items-center space-x-2">
+                            <div className="flex-1">
+                              <div className="flex items-center space-x-2 mb-2">
                                 <p className="font-medium">{accountUser.name}</p>
-                                {getUserStatusBadge(status)}
                               </div>
-                              <p className="text-sm text-muted-foreground">{accountUser.email}</p>
-                              {status === 'expired' && accountUser.invitationExpiry && (
+                              <p className="text-sm text-muted-foreground mb-2">{accountUser.email}</p>
+                              
+                              {/* Status Badges */}
+                              <div className="flex flex-wrap gap-2 mb-2">
+                                {getUserStatusBadges(accountUser)}
+                              </div>
+                              
+                              {/* Additional Status Info */}
+                              {hasExpiredInvitation && (
                                 <p className="text-xs text-red-600">
-                                  Invitation expired on {new Date(accountUser.invitationExpiry).toLocaleDateString()}
+                                  Invitation expired on {new Date(accountUser.invitationExpiry!).toLocaleDateString()}
                                 </p>
                               )}
-                              {status === 'invited' && accountUser.invitationExpiry && (
+                              {accountUser.invitationToken && !hasExpiredInvitation && accountUser.invitationExpiry && (
                                 <p className="text-xs text-muted-foreground">
                                   Invitation expires on {new Date(accountUser.invitationExpiry).toLocaleDateString()}
                                 </p>
@@ -580,7 +642,8 @@ export default function AccountDetailsPage() {
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
-                                {(status === 'invited' || status === 'expired') && canResendInvitations && (
+                                {/* Show resend invitation for users without login who have invitations */}
+                                {(!accountUser.hasLogin && accountUser.invitationToken) && canResendInvitations && (
                                   <DropdownMenuItem 
                                     onClick={() => handleResendInvitation(accountUser.id, accountUser.name)}
                                   >
@@ -588,6 +651,16 @@ export default function AccountDetailsPage() {
                                     Resend Invitation
                                   </DropdownMenuItem>
                                 )}
+                                {/* Add move to account option */}
+                                <DropdownMenuItem onClick={() => handleMoveUser(accountUser)}>
+                                  <ArrowLeft className="h-4 w-4 mr-2" />
+                                  Move to Account
+                                </DropdownMenuItem>
+                                {/* Add toggle assignment status option */}
+                                <DropdownMenuItem>
+                                  <Settings className="h-4 w-4 mr-2" />
+                                  {accountUser.isActive ? 'Disable Assignment' : 'Enable Assignment'}
+                                </DropdownMenuItem>
                                 <DropdownMenuItem>
                                   <Settings className="h-4 w-4 mr-2" />
                                   Manage Permissions
@@ -796,6 +869,73 @@ export default function AccountDetailsPage() {
         accountName={account?.name || ''}
         onUserCreated={fetchAccount}
       />
+
+      {/* Move User Dialog */}
+      <Dialog open={showMoveUserDialog} onOpenChange={setShowMoveUserDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Move User to Account</DialogTitle>
+            <DialogDescription>
+              Select the account to move {userToMove?.name} to. Users can be moved between the primary account and its child accounts.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {/* Current Account Option */}
+            {account && (
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium">Available Accounts</h4>
+                <div className="space-y-2">
+                  {/* Primary Account */}
+                  {account.parentAccount ? (
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start"
+                      onClick={() => account.parentAccount?.id && handleMoveUserToAccount(account.parentAccount.id)}
+                      disabled={userToMove?.account?.id === account.parentAccount?.id}
+                    >
+                      <Building className="h-4 w-4 mr-2" />
+                      {account.parentAccount.name} (Primary Account)
+                      {userToMove?.account?.id === account.parentAccount?.id && (
+                        <Badge variant="secondary" className="ml-auto">Current</Badge>
+                      )}
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start"
+                      onClick={() => handleMoveUserToAccount(account.id)}
+                      disabled={userToMove?.account?.id === account.id}
+                    >
+                      <Building className="h-4 w-4 mr-2" />
+                      {account.name} (Primary Account)
+                      {userToMove?.account?.id === account.id && (
+                        <Badge variant="secondary" className="ml-auto">Current</Badge>
+                      )}
+                    </Button>
+                  )}
+                  
+                  {/* Child Accounts */}
+                  {account.childAccounts.map((childAccount) => (
+                    <Button
+                      key={childAccount.id}
+                      variant="outline"
+                      className="w-full justify-start"
+                      onClick={() => handleMoveUserToAccount(childAccount.id)}
+                      disabled={userToMove?.account?.id === childAccount.id}
+                    >
+                      <Building2 className="h-4 w-4 mr-2" />
+                      {childAccount.name} ({childAccount.accountType})
+                      {userToMove?.account?.id === childAccount.id && (
+                        <Badge variant="secondary" className="ml-auto">Current</Badge>
+                      )}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

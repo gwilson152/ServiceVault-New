@@ -119,10 +119,20 @@ export async function GET(
       }
     };
 
-    return NextResponse.json({
+    // Add status information to account users
+    const accountWithStatus = {
       ...account,
+      accountUsers: account.accountUsers.map(accountUser => ({
+        ...accountUser,
+        hasLogin: !!accountUser.user,
+        canBeAssigned: accountUser.isActive,
+        invitationStatus: accountUser.user ? 'activated' : 
+                         accountUser.invitationToken ? 'pending' : 'none'
+      })),
       stats
-    });
+    };
+
+    return NextResponse.json(accountWithStatus);
 
   } catch (error) {
     console.error('Error fetching account:', error);

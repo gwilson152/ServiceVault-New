@@ -31,13 +31,11 @@ interface Ticket {
   timeEntriesCount: number;
   addonsCount: number;
 }
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AccountSelector } from "@/components/selectors/account-selector";
 import { TicketDetailModal } from "@/components/tickets/TicketDetailModal";
@@ -57,7 +55,9 @@ import {
   CheckCircle,
   Edit,
   Trash2,
-  Eye
+  Eye,
+  Search,
+  X
 } from "lucide-react";
 import { formatMinutes } from "@/lib/time-utils";
 
@@ -65,7 +65,6 @@ export default function TicketsPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("list");
   const { registerTimerLoggedCallback } = useTimeTracking();
 
   // Data state
@@ -80,23 +79,18 @@ export default function TicketsPage() {
     options?: string[];
   }>>([]);
 
-  // Form state for creating tickets
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [priority, setPriority] = useState("MEDIUM");
-  const [selectedAccount, setSelectedAccount] = useState("");
-  const [assignedTo, setAssignedTo] = useState("");
-  const [customFieldValues, setCustomFieldValues] = useState<Record<string, unknown>>({});
-  const [isCreating, setIsCreating] = useState(false);
 
   // Filter state
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterAccount, setFilterAccount] = useState("all");
   const [filterPriority, setFilterPriority] = useState("all");
+  const [filterAssignee, setFilterAssignee] = useState("all");
+  const [searchText, setSearchText] = useState("");
 
   // Modal state
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isCreateMode, setIsCreateMode] = useState(false);
 
   // Data fetching functions
   const fetchTickets = async () => {
@@ -203,47 +197,10 @@ export default function TicketsPage() {
   const canCreateTickets = isAdmin || isEmployee;
   const canEditAllTickets = isAdmin || isEmployee;
 
-  const handleCreateTicket = async () => {
-    if (isCreating) return;
-    
-    setIsCreating(true);
-    try {
-      const response = await fetch("/api/tickets", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          title,
-          description,
-          priority,
-          accountId: selectedAccount,
-          assigneeId: assignedTo === "unassigned" ? null : assignedTo,
-          customFields: Object.keys(customFieldValues).length > 0 ? customFieldValues : undefined,
-        }),
-      });
-
-      if (response.ok) {
-        // Reset form and refresh tickets
-        setTitle("");
-        setDescription("");
-        setPriority("MEDIUM");
-        setSelectedAccount("");
-        setAssignedTo("");
-        setCustomFieldValues({});
-        setActiveTab("list");
-        await fetchTickets();
-      } else {
-        const error = await response.json();
-        console.error("Error creating ticket:", error);
-        alert("Failed to create ticket: " + error.error);
-      }
-    } catch (error) {
-      console.error("Error creating ticket:", error);
-      alert("Failed to create ticket");
-    } finally {
-      setIsCreating(false);
-    }
+  const handleCreateTicket = () => {
+    setSelectedTicket(null);
+    setIsCreateMode(true);
+    setIsModalOpen(true);
   };
 
   const getStatusColor = (status: string): "default" | "secondary" | "destructive" | "outline" => {
@@ -283,16 +240,43 @@ export default function TicketsPage() {
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setSelectedTicket(null);
+    setIsCreateMode(false);
   };
 
   const handleUpdateTicket = (updatedTicket: Ticket) => {
     setTickets(prev => prev.map(t => t.id === updatedTicket.id ? updatedTicket : t));
   };
 
+  const handleCreateComplete = (newTicket: Ticket) => {
+    setTickets(prev => [newTicket, ...prev]);
+    setIsCreateMode(false);
+  };
+
   const filteredTickets = tickets.filter(ticket => {
+    // Status filter
     if (filterStatus !== "all" && ticket.status !== filterStatus) return false;
+    
+    // Account filter
     if (filterAccount !== "all" && ticket.accountId !== filterAccount) return false;
+    
+    // Priority filter
     if (filterPriority !== "all" && ticket.priority !== filterPriority) return false;
+    
+    // Assignee filter
+    if (filterAssignee !== "all") {
+      if (filterAssignee === "unassigned" && ticket.assigneeId) return false;
+      if (filterAssignee !== "unassigned" && ticket.assigneeId !== filterAssignee) return false;
+    }
+    
+    // Text search (title and description)
+    if (searchText.trim()) {
+      const searchLower = searchText.toLowerCase();
+      const titleMatch = ticket.title.toLowerCase().includes(searchLower);
+      const descMatch = ticket.description.toLowerCase().includes(searchLower);
+      const numberMatch = ticket.ticketNumber.toLowerCase().includes(searchLower);
+      if (!titleMatch && !descMatch && !numberMatch) return false;
+    }
+    
     return true;
   });
 
@@ -314,59 +298,6 @@ export default function TicketsPage() {
     );
   };
 
-  const renderCustomFieldInput = (field: { name: string; label: string; type: string; required?: boolean; options?: string[] }) => {
-    const value = customFieldValues[field.name] || "";
-    
-    switch (field.type) {
-      case "text":
-        return (
-          <Input
-            value={value}
-            onChange={(e) => setCustomFieldValues(prev => ({
-              ...prev,
-              [field.name]: e.target.value
-            }))}
-            placeholder={field.label}
-            required={field.required}
-          />
-        );
-      case "textarea":
-        return (
-          <Textarea
-            value={value}
-            onChange={(e) => setCustomFieldValues(prev => ({
-              ...prev,
-              [field.name]: e.target.value
-            }))}
-            placeholder={field.label}
-            required={field.required}
-          />
-        );
-      case "select":
-        return (
-          <Select 
-            value={value} 
-            onValueChange={(newValue) => setCustomFieldValues(prev => ({
-              ...prev,
-              [field.name]: newValue
-            }))}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder={`Select ${field.label}`} />
-            </SelectTrigger>
-            <SelectContent>
-              {field.options?.map((option: string) => (
-                <SelectItem key={option} value={option}>
-                  {option}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        );
-      default:
-        return null;
-    }
-  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -392,6 +323,13 @@ export default function TicketsPage() {
               {session.user?.name || session.user?.email}
             </span>
             <Badge variant="secondary">{session.user?.role}</Badge>
+            
+            {canCreateTickets && (
+              <Button onClick={handleCreateTicket}>
+                <Plus className="h-4 w-4 mr-2" />
+                Create Ticket
+              </Button>
+            )}
             
             <Button 
               variant="ghost" 
@@ -469,71 +407,194 @@ export default function TicketsPage() {
             </Card>
           </div>
 
-          {/* Main Content Tabs */}
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-            <TabsList className={`grid w-full ${canCreateTickets ? 'grid-cols-2' : 'grid-cols-1'}`}>
-              <TabsTrigger value="list">Ticket List</TabsTrigger>
-              {canCreateTickets && (
-                <TabsTrigger value="create">Create Ticket</TabsTrigger>
-              )}
-            </TabsList>
-
-            {/* Ticket List Tab */}
-            <TabsContent value="list" className="space-y-4">
+          {/* Main Content */}
+          <div className="space-y-4">
               {/* Filters */}
               <Card>
-                <CardHeader>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
                   <CardTitle className="text-lg">Filter Tickets</CardTitle>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => {
+                      setFilterStatus("all");
+                      setFilterAccount("all");
+                      setFilterPriority("all");
+                      setFilterAssignee("all");
+                      setSearchText("");
+                    }}
+                  >
+                    <X className="h-4 w-4 mr-1" />
+                    Clear All
+                  </Button>
                 </CardHeader>
                 <CardContent>
-                  <div className="flex flex-wrap gap-4">
+                  <div className="space-y-4">
+                    {/* Search */}
                     <div className="space-y-2">
-                      <Label htmlFor="status-filter">Status</Label>
-                      <Select value={filterStatus} onValueChange={setFilterStatus}>
-                        <SelectTrigger className="w-[150px]">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All Status</SelectItem>
-                          <SelectItem value="OPEN">Open</SelectItem>
-                          <SelectItem value="IN_PROGRESS">In Progress</SelectItem>
-                          <SelectItem value="RESOLVED">Resolved</SelectItem>
-                          <SelectItem value="CLOSED">Closed</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      <Label htmlFor="search-input">Search</Label>
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="search-input"
+                          value={searchText}
+                          onChange={(e) => setSearchText(e.target.value)}
+                          placeholder="Search tickets by title, description, or number..."
+                          className="pl-10"
+                        />
+                        {searchText && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0"
+                            onClick={() => setSearchText("")}
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </div>
                     </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="account-filter">Account</Label>
-                      <Select value={filterAccount} onValueChange={setFilterAccount}>
-                        <SelectTrigger className="w-[200px]">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All Accounts</SelectItem>
-                          {accounts.map(account => (
-                            <SelectItem key={account.id} value={account.id}>
-                              {account.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                    {/* Filter Row */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="status-filter">Status</Label>
+                        <Select value={filterStatus} onValueChange={setFilterStatus}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Status</SelectItem>
+                            <SelectItem value="OPEN">Open</SelectItem>
+                            <SelectItem value="IN_PROGRESS">In Progress</SelectItem>
+                            <SelectItem value="RESOLVED">Resolved</SelectItem>
+                            <SelectItem value="CLOSED">Closed</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="account-filter">Account</Label>
+                        <Select value={filterAccount} onValueChange={setFilterAccount}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Accounts</SelectItem>
+                            {accounts.map(account => (
+                              <SelectItem key={account.id} value={account.id}>
+                                {account.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="priority-filter">Priority</Label>
+                        <Select value={filterPriority} onValueChange={setFilterPriority}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Priority</SelectItem>
+                            <SelectItem value="HIGH">High</SelectItem>
+                            <SelectItem value="MEDIUM">Medium</SelectItem>
+                            <SelectItem value="LOW">Low</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="assignee-filter">Assignee</Label>
+                        <Select value={filterAssignee} onValueChange={setFilterAssignee}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Assignees</SelectItem>
+                            <SelectItem value="unassigned">Unassigned</SelectItem>
+                            {users.map(user => (
+                              <SelectItem key={user.id} value={user.id}>
+                                {user.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="priority-filter">Priority</Label>
-                      <Select value={filterPriority} onValueChange={setFilterPriority}>
-                        <SelectTrigger className="w-[150px]">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All Priority</SelectItem>
-                          <SelectItem value="HIGH">High</SelectItem>
-                          <SelectItem value="MEDIUM">Medium</SelectItem>
-                          <SelectItem value="LOW">Low</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    {/* Active Filters Display */}
+                    {(filterStatus !== "all" || filterAccount !== "all" || filterPriority !== "all" || filterAssignee !== "all" || searchText) && (
+                      <div className="flex flex-wrap gap-2">
+                        <span className="text-sm font-medium text-muted-foreground">Active filters:</span>
+                        {searchText && (
+                          <Badge variant="secondary" className="gap-1">
+                            Search: {searchText}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-4 w-4 p-0 hover:bg-transparent"
+                              onClick={() => setSearchText("")}
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </Badge>
+                        )}
+                        {filterStatus !== "all" && (
+                          <Badge variant="secondary" className="gap-1">
+                            Status: {filterStatus}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-4 w-4 p-0 hover:bg-transparent"
+                              onClick={() => setFilterStatus("all")}
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </Badge>
+                        )}
+                        {filterAccount !== "all" && (
+                          <Badge variant="secondary" className="gap-1">
+                            Account: {accounts.find(a => a.id === filterAccount)?.name || filterAccount}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-4 w-4 p-0 hover:bg-transparent"
+                              onClick={() => setFilterAccount("all")}
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </Badge>
+                        )}
+                        {filterPriority !== "all" && (
+                          <Badge variant="secondary" className="gap-1">
+                            Priority: {filterPriority}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-4 w-4 p-0 hover:bg-transparent"
+                              onClick={() => setFilterPriority("all")}
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </Badge>
+                        )}
+                        {filterAssignee !== "all" && (
+                          <Badge variant="secondary" className="gap-1">
+                            Assignee: {filterAssignee === "unassigned" ? "Unassigned" : users.find(u => u.id === filterAssignee)?.name || filterAssignee}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-4 w-4 p-0 hover:bg-transparent"
+                              onClick={() => setFilterAssignee("all")}
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </Badge>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -549,7 +610,7 @@ export default function TicketsPage() {
                         No tickets match the selected filters.
                       </p>
                       {canCreateTickets && (
-                        <Button onClick={() => setActiveTab("create")}>
+                        <Button onClick={handleCreateTicket}>
                           <Plus className="mr-2 h-4 w-4" />
                           Create First Ticket
                         </Button>
@@ -645,116 +706,7 @@ export default function TicketsPage() {
                   ))
                 )}
               </div>
-            </TabsContent>
-
-            {/* Create Ticket Tab */}
-            {canCreateTickets && (
-              <TabsContent value="create" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Create New Ticket</CardTitle>
-                  <CardDescription>
-                    Create a new support ticket for a customer.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="ticket-title">Title</Label>
-                      <Input
-                        id="ticket-title"
-                        value={title}
-                        onChange={(e) => setTitle(e.target.value)}
-                        placeholder="Brief description of the issue"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="ticket-priority">Priority</Label>
-                      <Select value={priority} onValueChange={setPriority}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="HIGH">High</SelectItem>
-                          <SelectItem value="MEDIUM">Medium</SelectItem>
-                          <SelectItem value="LOW">Low</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="ticket-account">Account</Label>
-                      <AccountSelector
-                        accounts={accounts}
-                        value={selectedAccount}
-                        onValueChange={setSelectedAccount}
-                        placeholder="Select an account"
-                        enableFilters={true}
-                        enableGrouping={true}
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="ticket-assigned">Assign To (Optional)</Label>
-                      <Select value={assignedTo} onValueChange={setAssignedTo}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select assignee" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="unassigned">Unassigned</SelectItem>
-                          {users.map(user => (
-                            <SelectItem key={user.id} value={user.id}>
-                              {user.name} ({user.email})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="ticket-description">Description</Label>
-                    <Textarea
-                      id="ticket-description"
-                      value={description}
-                      onChange={(e) => setDescription(e.target.value)}
-                      placeholder="Detailed description of the issue..."
-                      className="min-h-[120px]"
-                    />
-                  </div>
-
-                  {/* Custom Fields */}
-                  {customFields.length > 0 && (
-                    <div className="space-y-4">
-                      <h4 className="text-sm font-medium">Custom Fields</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {customFields.map((field) => (
-                          <div key={field.name} className="space-y-2">
-                            <Label htmlFor={`custom-${field.name}`}>
-                              {field.label}
-                              {field.required && <span className="text-red-500 ml-1">*</span>}
-                            </Label>
-                            {renderCustomFieldInput(field)}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <Button 
-                    onClick={handleCreateTicket}
-                    disabled={!title || !description || !selectedAccount || isCreating}
-                    className="w-full"
-                  >
-                    <Plus className="mr-2 h-4 w-4" />
-                    {isCreating ? "Creating..." : "Create Ticket"}
-                  </Button>
-                </CardContent>
-              </Card>
-              </TabsContent>
-            )}
-          </Tabs>
+          </div>
         </div>
       </main>
 
@@ -764,10 +716,12 @@ export default function TicketsPage() {
         isOpen={isModalOpen}
         onClose={handleCloseModal}
         onUpdate={handleUpdateTicket}
+        onCreate={handleCreateComplete}
         canEdit={canEditAllTickets}
         accounts={accounts}
         users={users}
         customFields={customFields}
+        isCreateMode={isCreateMode}
       />
     </div>
   );

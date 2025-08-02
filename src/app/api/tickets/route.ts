@@ -23,6 +23,8 @@ export async function GET(request: NextRequest) {
     const customerId = searchParams.get("customerId");
     const status = searchParams.get("status");
     const assignedTo = searchParams.get("assignedTo");
+    const priority = searchParams.get("priority");
+    const search = searchParams.get("search");
 
     // Build where clause based on user role and filters
     const whereClause: Record<string, unknown> = {};
@@ -50,7 +52,23 @@ export async function GET(request: NextRequest) {
       whereClause.status = status;
     }
     if (assignedTo) {
-      whereClause.assigneeId = assignedTo;
+      if (assignedTo === "unassigned") {
+        whereClause.assigneeId = null;
+      } else {
+        whereClause.assigneeId = assignedTo;
+      }
+    }
+    if (priority) {
+      whereClause.priority = priority;
+    }
+
+    // Handle search - search across title, description, and ticket number
+    if (search) {
+      whereClause.OR = [
+        { title: { contains: search, mode: "insensitive" } },
+        { description: { contains: search, mode: "insensitive" } },
+        { ticketNumber: { contains: search, mode: "insensitive" } }
+      ];
     }
 
     const tickets = await prisma.ticket.findMany({

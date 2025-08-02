@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    let results = [];
+    const results = [];
 
     if (type === "user-permissions") {
       // Assign multiple permissions to one user
