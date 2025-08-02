@@ -27,6 +27,12 @@ import {
   X
 } from "lucide-react";
 import { useToast } from "@/hooks/useToast";
+import { AccountSelector } from "@/components/selectors/account-selector";
+import { 
+  AccountWithHierarchy, 
+  buildAccountHierarchy, 
+  getHierarchyStats
+} from "@/utils/hierarchy";
 
 export default function BillingPage() {
   const { data: session, status } = useSession();
@@ -34,11 +40,23 @@ export default function BillingPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("invoices");
 
+  // Real data state
+  const [accounts, setAccounts] = useState<AccountWithHierarchy[]>([]);
+  const [invoices, setInvoices] = useState<any[]>([]);
+  const [billingRates, setBillingRates] = useState<any[]>([]);
+
   // Invoice generation state
-  const [selectedCustomer, setSelectedCustomer] = useState<string>("");
+  const [selectedAccount, setSelectedAccount] = useState<string>("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [includeUnbilledOnly, setIncludeUnbilledOnly] = useState(true);
+  const [includeSubsidiaries, setIncludeSubsidiaries] = useState(false);
+  
+  // Manual selection state
+  const [showItemSelection, setShowItemSelection] = useState(false);
+  const [previewData, setPreviewData] = useState<any>(null);
+  const [selectedTimeEntries, setSelectedTimeEntries] = useState<Set<string>>(new Set());
+  const [selectedAddons, setSelectedAddons] = useState<Set<string>>(new Set());
 
   // Billing rates state
   const [editingRate, setEditingRate] = useState<string | null>(null);
@@ -51,6 +69,43 @@ export default function BillingPage() {
 
   const { success, error } = useToast();
 
+  // Data fetching functions
+  const fetchAccounts = async () => {
+    try {
+      const response = await fetch('/api/accounts');
+      if (response.ok) {
+        const data = await response.json();
+        setAccounts(data.accounts || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch accounts:', err);
+    }
+  };
+
+  const fetchInvoices = async () => {
+    try {
+      const response = await fetch('/api/invoices');
+      if (response.ok) {
+        const data = await response.json();
+        setInvoices(data.invoices || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch invoices:', err);
+    }
+  };
+
+  const fetchBillingRates = async () => {
+    try {
+      const response = await fetch('/api/billing/rates');
+      if (response.ok) {
+        const data = await response.json();
+        setBillingRates(data || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch billing rates:', err);
+    }
+  };
+
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/");
@@ -60,7 +115,14 @@ export default function BillingPage() {
       if (role !== "ADMIN") {
         router.push("/dashboard");
       } else {
-        setIsLoading(false);
+        // Fetch initial data
+        Promise.all([
+          fetchAccounts(),
+          fetchInvoices(),
+          fetchBillingRates()
+        ]).finally(() => {
+          setIsLoading(false);
+        });
       }
     }
   }, [status, session, router]);
@@ -77,66 +139,105 @@ export default function BillingPage() {
     return null;
   }
 
-  // Mock data - will be replaced with real data from API
-  const customers = [
-    { id: "1", name: "Example Corp", email: "billing@example.com" },
-    { id: "2", name: "Tech Solutions", email: "accounts@techsolutions.com" },
-    { id: "3", name: "StartupXYZ", email: "finance@startupxyz.com" },
-  ];
+  // Get selected account details for hierarchy display
+  const selectedAccountDetails = accounts.find(account => account.id === selectedAccount);
+  const hierarchicalAccounts = buildAccountHierarchy(accounts);
 
-  const invoices = [
-    {
-      id: "1",
-      invoiceNumber: "INV-2024-001",
-      customer: "Example Corp",
-      customerId: "1",
-      total: 1875.00,
-      status: "DRAFT",
-      createdAt: "2024-01-26",
-      dueDate: "2024-02-26",
-      timeEntries: 3,
-      addons: 1
-    },
-    {
-      id: "2",
-      invoiceNumber: "INV-2024-002",
-      customer: "Tech Solutions",
-      customerId: "2",
-      total: 2250.00,
-      status: "SENT",
-      createdAt: "2024-01-25",
-      dueDate: "2024-02-25",
-      timeEntries: 5,
-      addons: 0
-    },
-    {
-      id: "3",
-      invoiceNumber: "INV-2024-003",
-      customer: "StartupXYZ",
-      customerId: "3",
-      total: 975.00,
-      status: "PAID",
-      createdAt: "2024-01-24",
-      dueDate: "2024-02-24",
-      timeEntries: 2,
-      addons: 2
-    },
-  ];
+  // Preview invoice items for manual selection
+  const handlePreviewInvoice = async () => {
+    if (!selectedAccount) {
+      error('Please select an account');
+      return;
+    }
 
-  const billingRates = [
-    { id: "1", name: "Standard Development", hourlyRate: 75.00, description: "General development work" },
-    { id: "2", name: "Senior Development", hourlyRate: 95.00, description: "Senior level development" },
-    { id: "3", name: "Consultation", hourlyRate: 125.00, description: "Technical consultation" },
-  ];
+    try {
+      const response = await fetch('/api/invoices/preview', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          accountId: selectedAccount,
+          startDate: startDate || undefined,
+          endDate: endDate || undefined,
+          includeUnbilledOnly,
+          includeSubsidiaries
+        }),
+      });
 
+      if (response.ok) {
+        const data = await response.json();
+        setPreviewData(data);
+        
+        // Pre-select all items by default
+        setSelectedTimeEntries(new Set(data.timeEntries?.map((te: any) => te.id) || []));
+        setSelectedAddons(new Set(data.ticketAddons?.map((addon: any) => addon.id) || []));
+        
+        setShowItemSelection(true);
+        setActiveTab("generate");
+      } else {
+        const errorData = await response.json();
+        error('Failed to preview invoice items', errorData.error);
+      }
+    } catch (err) {
+      console.error('Failed to preview invoice:', err);
+      error('Failed to preview invoice items');
+    }
+  };
+
+  // Generate invoice with selected items
   const handleGenerateInvoice = async () => {
-    // TODO: Implement API call to generate invoice
-    console.log("Generating invoice:", {
-      customerId: selectedCustomer,
-      startDate,
-      endDate,
-      includeUnbilledOnly
-    });
+    if (!selectedAccount) {
+      error('Please select an account');
+      return;
+    }
+
+    if (showItemSelection && selectedTimeEntries.size === 0 && selectedAddons.size === 0) {
+      error('Please select at least one item to include in the invoice');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/invoices/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          accountId: selectedAccount,
+          startDate: startDate || undefined,
+          endDate: endDate || undefined,
+          includeUnbilledOnly,
+          includeSubsidiaries,
+          // Manual selection support
+          selectedTimeEntryIds: showItemSelection ? Array.from(selectedTimeEntries) : undefined,
+          selectedAddonIds: showItemSelection ? Array.from(selectedAddons) : undefined,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        success('Invoice generated successfully');
+        
+        // Reset form and refresh invoices
+        setSelectedAccount("");
+        setStartDate("");
+        setEndDate("");
+        setShowItemSelection(false);
+        setPreviewData(null);
+        setSelectedTimeEntries(new Set());
+        setSelectedAddons(new Set());
+        
+        fetchInvoices();
+        setActiveTab("invoices");
+      } else {
+        const errorData = await response.json();
+        error('Failed to generate invoice', errorData.error);
+      }
+    } catch (err) {
+      console.error('Failed to generate invoice:', err);
+      error('Failed to generate invoice');
+    }
   };
 
   const handleAddRate = async () => {
@@ -158,7 +259,7 @@ export default function BillingPage() {
         success('Billing rate added successfully');
         setShowAddRate(false);
         setNewRate({ name: "", hourlyRate: 0, description: "" });
-        // TODO: Refresh billing rates list
+        fetchBillingRates();
       } else {
         const data = await response.json();
         error('Failed to add billing rate', data.error);
@@ -177,7 +278,7 @@ export default function BillingPage() {
 
       if (response.ok) {
         success('Billing rate deleted successfully');
-        // TODO: Refresh billing rates list
+        fetchBillingRates();
       } else {
         const data = await response.json();
         error('Failed to delete billing rate', data.error);
@@ -205,7 +306,7 @@ export default function BillingPage() {
       if (response.ok) {
         success('Billing rate updated successfully');
         setEditingRate(null);
-        // TODO: Refresh billing rates list
+        fetchBillingRates();
       } else {
         const data = await response.json();
         error('Failed to update billing rate', data.error);
@@ -226,11 +327,31 @@ export default function BillingPage() {
     }
   };
 
+  // Calculate statistics from real data
   const stats = {
     totalInvoices: invoices.length,
     draftInvoices: invoices.filter(i => i.status === "DRAFT").length,
-    totalRevenue: invoices.filter(i => i.status === "PAID").reduce((sum, i) => sum + i.total, 0),
-    pendingAmount: invoices.filter(i => i.status === "SENT").reduce((sum, i) => sum + i.total, 0)
+    totalRevenue: invoices.filter(i => i.status === "PAID").reduce((sum, i) => sum + (i.total || 0), 0),
+    pendingAmount: invoices.filter(i => i.status === "SENT").reduce((sum, i) => sum + (i.total || 0), 0)
+  };
+
+  // Calculate real-time totals for manual selection
+  const calculateSelectedTotals = () => {
+    if (!previewData) return { timeTotal: 0, addonTotal: 0, total: 0 };
+    
+    const timeTotal = previewData.timeEntries
+      ?.filter((te: any) => selectedTimeEntries.has(te.id))
+      .reduce((sum: number, te: any) => sum + ((te.minutes / 60) * (te.billingRateValue || 0)), 0) || 0;
+      
+    const addonTotal = previewData.ticketAddons
+      ?.filter((addon: any) => selectedAddons.has(addon.id))
+      .reduce((sum: number, addon: any) => sum + (addon.price * addon.quantity), 0) || 0;
+    
+    return {
+      timeTotal,
+      addonTotal,
+      total: timeTotal + addonTotal
+    };
   };
 
   // Billing Rate Card Component
@@ -525,34 +646,42 @@ export default function BillingPage() {
                 <CardContent className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="customer-select">Customer</Label>
-                      <Select value={selectedCustomer} onValueChange={setSelectedCustomer}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a customer" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {customers.map(customer => (
-                            <SelectItem key={customer.id} value={customer.id}>
-                              {customer.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <Label htmlFor="account-select">Account</Label>
+                      <AccountSelector
+                        accounts={hierarchicalAccounts}
+                        value={selectedAccount}
+                        onValueChange={setSelectedAccount}
+                        placeholder="Select an account"
+                      />
                     </div>
 
                     <div className="space-y-2">
-                      <Label>Include Items</Label>
-                      <div className="flex items-center space-x-2">
-                        <input
-                          type="checkbox"
-                          id="unbilled-only"
-                          checked={includeUnbilledOnly}
-                          onChange={(e) => setIncludeUnbilledOnly(e.target.checked)}
-                          className="rounded"
-                        />
-                        <Label htmlFor="unbilled-only" className="text-sm">
-                          Unbilled items only
-                        </Label>
+                      <Label>Options</Label>
+                      <div className="space-y-2">
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            id="unbilled-only"
+                            checked={includeUnbilledOnly}
+                            onChange={(e) => setIncludeUnbilledOnly(e.target.checked)}
+                            className="rounded"
+                          />
+                          <Label htmlFor="unbilled-only" className="text-sm">
+                            Unbilled items only
+                          </Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            id="include-subsidiaries"
+                            checked={includeSubsidiaries}
+                            onChange={(e) => setIncludeSubsidiaries(e.target.checked)}
+                            className="rounded"
+                          />
+                          <Label htmlFor="include-subsidiaries" className="text-sm">
+                            Include subsidiary accounts
+                          </Label>
+                        </div>
                       </div>
                     </div>
 
@@ -577,16 +706,229 @@ export default function BillingPage() {
                     </div>
                   </div>
 
-                  <Button 
-                    onClick={handleGenerateInvoice}
-                    disabled={!selectedCustomer}
-                    className="w-full"
-                  >
-                    <Plus className="mr-2 h-4 w-4" />
-                    Generate Invoice
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button 
+                      onClick={handlePreviewInvoice}
+                      disabled={!selectedAccount}
+                      variant="outline"
+                      className="flex-1"
+                    >
+                      <Eye className="mr-2 h-4 w-4" />
+                      Preview Items
+                    </Button>
+                    <Button 
+                      onClick={handleGenerateInvoice}
+                      disabled={!selectedAccount}
+                      className="flex-1"
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      Generate Invoice
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
+              
+              {/* Manual Item Selection Dialog */}
+              {showItemSelection && previewData && (
+                <Card className="mt-4">
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle>Select Invoice Items</CardTitle>
+                        <CardDescription>
+                          Choose which time entries and addons to include in the invoice for {selectedAccountDetails?.name}.
+                        </CardDescription>
+                      </div>
+                      <Button variant="ghost" size="sm" onClick={() => setShowItemSelection(false)}>
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    {/* Selection Summary */}
+                    <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
+                      <div className="space-y-1">
+                        <div className="font-medium">Selection Summary</div>
+                        <div className="text-sm text-muted-foreground">
+                          {selectedTimeEntries.size} time entries • {selectedAddons.size} addons
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-2xl font-bold text-green-600">
+                          ${calculateSelectedTotals().total.toFixed(2)}
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          Time: ${calculateSelectedTotals().timeTotal.toFixed(2)} • Addons: ${calculateSelectedTotals().addonTotal.toFixed(2)}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Time Entries Section */}
+                    {previewData.timeEntries && previewData.timeEntries.length > 0 && (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-medium">Time Entries ({previewData.timeEntries.length})</h4>
+                          <div className="flex gap-2">
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              onClick={() => {
+                                const allIds = new Set(previewData.timeEntries.map((te: any) => te.id));
+                                setSelectedTimeEntries(allIds);
+                              }}
+                            >
+                              Select All
+                            </Button>
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              onClick={() => setSelectedTimeEntries(new Set())}
+                            >
+                              Clear All
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="space-y-2 max-h-64 overflow-y-auto">
+                          {previewData.timeEntries.map((entry: any) => (
+                            <div key={entry.id} className="flex items-center space-x-3 p-3 border rounded-lg">
+                              <input
+                                type="checkbox"
+                                checked={selectedTimeEntries.has(entry.id)}
+                                onChange={(e) => {
+                                  const newSelected = new Set(selectedTimeEntries);
+                                  if (e.target.checked) {
+                                    newSelected.add(entry.id);
+                                  } else {
+                                    newSelected.delete(entry.id);
+                                  }
+                                  setSelectedTimeEntries(newSelected);
+                                }}
+                                className="rounded"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium">{entry.user?.name}</span>
+                                  <Badge variant="outline" className="text-xs">
+                                    {(entry.minutes / 60).toFixed(1)}h
+                                  </Badge>
+                                  {entry.billingRateValue && (
+                                    <Badge variant="secondary" className="text-xs">
+                                      ${entry.billingRateValue}/hr
+                                    </Badge>
+                                  )}
+                                </div>
+                                <div className="text-sm text-muted-foreground truncate">
+                                  {entry.description}
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  {entry.ticket ? `Ticket: ${entry.ticket.title}` : `Account: ${entry.account?.name}`} • 
+                                  {new Date(entry.date).toLocaleDateString()}
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <div className="font-medium">
+                                  ${((entry.minutes / 60) * (entry.billingRateValue || 0)).toFixed(2)}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Ticket Addons Section */}
+                    {previewData.ticketAddons && previewData.ticketAddons.length > 0 && (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-medium">Ticket Addons ({previewData.ticketAddons.length})</h4>
+                          <div className="flex gap-2">
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              onClick={() => {
+                                const allIds = new Set(previewData.ticketAddons.map((addon: any) => addon.id));
+                                setSelectedAddons(allIds);
+                              }}
+                            >
+                              Select All
+                            </Button>
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              onClick={() => setSelectedAddons(new Set())}
+                            >
+                              Clear All
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="space-y-2 max-h-64 overflow-y-auto">
+                          {previewData.ticketAddons.map((addon: any) => (
+                            <div key={addon.id} className="flex items-center space-x-3 p-3 border rounded-lg">
+                              <input
+                                type="checkbox"
+                                checked={selectedAddons.has(addon.id)}
+                                onChange={(e) => {
+                                  const newSelected = new Set(selectedAddons);
+                                  if (e.target.checked) {
+                                    newSelected.add(addon.id);
+                                  } else {
+                                    newSelected.delete(addon.id);
+                                  }
+                                  setSelectedAddons(newSelected);
+                                }}
+                                className="rounded"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium">{addon.name}</span>
+                                  <Badge variant="outline" className="text-xs">
+                                    Qty: {addon.quantity}
+                                  </Badge>
+                                  <Badge variant="secondary" className="text-xs">
+                                    ${addon.price.toFixed(2)} each
+                                  </Badge>
+                                </div>
+                                {addon.description && (
+                                  <div className="text-sm text-muted-foreground truncate">
+                                    {addon.description}
+                                  </div>
+                                )}
+                                <div className="text-xs text-muted-foreground">
+                                  Ticket: {addon.ticket?.title} • 
+                                  {new Date(addon.createdAt).toLocaleDateString()}
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <div className="font-medium">
+                                  ${(addon.price * addon.quantity).toFixed(2)}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Generation Actions */}
+                    <div className="flex gap-2 pt-4">
+                      <Button 
+                        onClick={handleGenerateInvoice}
+                        disabled={selectedTimeEntries.size === 0 && selectedAddons.size === 0}
+                        className="flex-1"
+                      >
+                        <Plus className="mr-2 h-4 w-4" />
+                        Generate Invoice (${calculateSelectedTotals().total.toFixed(2)})
+                      </Button>
+                      <Button 
+                        variant="outline"
+                        onClick={() => setShowItemSelection(false)}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
             </TabsContent>
 
             {/* Billing Rates Tab */}

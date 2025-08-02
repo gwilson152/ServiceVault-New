@@ -19,13 +19,31 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { accountId, startDate, endDate, includeUnbilledOnly = true } = body;
+    const { 
+      accountId, 
+      startDate, 
+      endDate, 
+      includeUnbilledOnly = true, 
+      includeSubsidiaries = false,
+      selectedTimeEntryIds,
+      selectedAddonIds 
+    } = body;
 
     if (!accountId) {
       return NextResponse.json(
         { error: "Account ID is required" },
         { status: 400 }
       );
+    }
+
+    // Get account hierarchy if including subsidiaries
+    let accountIds = [accountId];
+    if (includeSubsidiaries) {
+      const subsidiaries = await prisma.account.findMany({
+        where: { parentAccountId: accountId },
+        select: { id: true }
+      });
+      accountIds = [...accountIds, ...subsidiaries.map(s => s.id)];
     }
 
     // Build date filter
@@ -37,19 +55,36 @@ export async function POST(request: NextRequest) {
       dateFilter.lte = new Date(endDate);
     }
 
-    // Get unbilled time entries (only approved entries)
-    const timeEntryWhere: Record<string, unknown> = {
-      ticket: { accountId },
-      noCharge: false,
-      isApproved: true, // Only include approved time entries
-    };
+    // Get time entries - either specific IDs or filtered query
+    let timeEntryWhere: Record<string, unknown>;
+    
+    if (selectedTimeEntryIds && selectedTimeEntryIds.length > 0) {
+      // Manual selection mode - use specific IDs
+      timeEntryWhere = {
+        id: { in: selectedTimeEntryIds },
+        noCharge: false,
+        isApproved: true,
+      };
+    } else {
+      // Automatic mode - use filters
+      timeEntryWhere = {
+        OR: [
+          { ticket: { accountId: { in: accountIds } } },
+          { accountId: { in: accountIds } }
+        ],
+        noCharge: false,
+        isApproved: true, // Only include approved time entries
+      };
 
-    if (includeUnbilledOnly) {
-      timeEntryWhere.invoiceId = null;
-    }
+      if (includeUnbilledOnly) {
+        timeEntryWhere.invoiceItems = {
+          none: {}
+        };
+      }
 
-    if (Object.keys(dateFilter).length > 0) {
-      timeEntryWhere.date = dateFilter;
+      if (Object.keys(dateFilter).length > 0) {
+        timeEntryWhere.date = dateFilter;
+      }
     }
 
     const timeEntries = await prisma.timeEntry.findMany({
@@ -61,17 +96,29 @@ export async function POST(request: NextRequest) {
       orderBy: { date: "asc" },
     });
 
-    // Get unbilled ticket addons
-    const addonWhere: Record<string, unknown> = {
-      ticket: { accountId },
-    };
+    // Get ticket addons - either specific IDs or filtered query
+    let addonWhere: Record<string, unknown>;
+    
+    if (selectedAddonIds && selectedAddonIds.length > 0) {
+      // Manual selection mode - use specific IDs
+      addonWhere = {
+        id: { in: selectedAddonIds },
+      };
+    } else {
+      // Automatic mode - use filters
+      addonWhere = {
+        ticket: { accountId: { in: accountIds } },
+      };
 
-    if (includeUnbilledOnly) {
-      addonWhere.invoiceId = null;
-    }
+      if (includeUnbilledOnly) {
+        addonWhere.invoiceItems = {
+          none: {}
+        };
+      }
 
-    if (Object.keys(dateFilter).length > 0) {
-      addonWhere.createdAt = dateFilter;
+      if (Object.keys(dateFilter).length > 0) {
+        addonWhere.createdAt = dateFilter;
+      }
     }
 
     const ticketAddons = await prisma.ticketAddon.findMany({
@@ -91,7 +138,7 @@ export async function POST(request: NextRequest) {
 
     // Calculate totals
     const timeTotal = timeEntries.reduce((sum, entry) => {
-      return sum + ((entry.minutes / 60) * entry.billingRate);
+      return sum + ((entry.minutes / 60) * (entry.billingRateValue || 0));
     }, 0);
 
     const addonTotal = ticketAddons.reduce((sum, addon) => {

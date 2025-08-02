@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { useTimeEntryPermissions } from "@/hooks/usePermissions";
 import { formatMinutes } from "@/lib/time-utils";
 import { Edit, Trash2, Lock, FileText, Building } from "lucide-react";
+import Link from "next/link";
 
 interface TimeEntry {
   id: string;
@@ -125,9 +126,14 @@ export function TimeEntryCard({ entry, showBillingAmount = false, onEdit, onDele
                 </Badge>
               )}
               {entry.invoiceItems && entry.invoiceItems.length > 0 && (
-                <Badge variant="outline" className="text-blue-600 border-blue-300">
-                  Invoice #{entry.invoiceItems[0].invoice.invoiceNumber}
-                </Badge>
+                <Link href={`/invoices/${entry.invoiceItems[0].invoice.id}`}>
+                  <Badge 
+                    variant="outline" 
+                    className="text-blue-600 border-blue-300 hover:bg-blue-50 cursor-pointer transition-colors"
+                  >
+                    Invoice #{entry.invoiceItems[0].invoice.invoiceNumber}
+                  </Badge>
+                </Link>
               )}
             </div>
             
