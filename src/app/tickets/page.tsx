@@ -22,10 +22,16 @@ interface Ticket {
   priority: string;
   accountId: string;
   assigneeId?: string;
+  assignedAccountUserId?: string;
   createdAt: string;
   customFields?: Record<string, unknown>;
   account?: Account;
   assignee?: User;
+  assignedAccountUser?: {
+    id: string;
+    name: string;
+    email: string;
+  };
   totalTimeSpent: number;
   totalAddonCost: number;
   timeEntriesCount: number;
@@ -637,11 +643,35 @@ export default function TicketsPage() {
                             <h3 className="text-xl font-semibold">{ticket.title}</h3>
                             <p className="text-muted-foreground">{ticket.description}</p>
                             
-                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                            <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
                               <span><Users className="inline h-3 w-3 mr-1" />{ticket.account?.name}</span>
-                              {ticket.assignee && (
-                                <span>Assigned to: {ticket.assignee.name}</span>
+                              
+                              {/* Agent Assignment */}
+                              {ticket.assignee ? (
+                                <div className="flex items-center gap-1">
+                                  <span>Agent:</span>
+                                  <span className="font-medium">{ticket.assignee.name}</span>
+                                  <Badge variant="outline" className="text-xs ml-1 border-blue-300 text-blue-700">
+                                    Staff
+                                  </Badge>
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground">No agent assigned</span>
                               )}
+
+                              {/* Account User Assignment */}
+                              {ticket.assignedAccountUser ? (
+                                <div className="flex items-center gap-1">
+                                  <span>For:</span>
+                                  <span className="font-medium">{ticket.assignedAccountUser.name}</span>
+                                  <Badge variant="outline" className="text-xs ml-1 border-orange-300 text-orange-700">
+                                    Customer
+                                  </Badge>
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground text-xs">General issue</span>
+                              )}
+
                               <span>Created: {new Date(ticket.createdAt).toLocaleDateString()}</span>
                             </div>
 

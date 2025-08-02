@@ -2,7 +2,8 @@
 
 import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, use } from "react";
+import { useInvoicePermissions } from "@/hooks/usePermissions";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -17,7 +18,9 @@ import {
   User,
   Building2,
   DollarSign,
-  Clock
+  Clock,
+  X,
+  Trash2
 } from "lucide-react";
 import { formatMinutes } from "@/lib/time-utils";
 
@@ -72,30 +75,54 @@ interface Invoice {
   };
 }
 
-export default function InvoiceDetailPage({ params }: { params: { id: string } }) {
+export default function InvoiceDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [editMode, setEditMode] = useState(false);
+  const resolvedParams = use(params);
+
+  // Permission hooks
+  const {
+    canView,
+    canEdit,
+    canEditItems,
+    canDelete,
+    isEditable,
+    getStatusReason
+  } = useInvoicePermissions(invoice ? {
+    id: invoice.id,
+    status: invoice.status,
+    accountId: invoice.account.id,
+    creatorId: invoice.creator.id
+  } : undefined);
 
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/");
     } else if (status === "authenticated") {
-      // Only admins and employees can view invoices
-      const role = session.user?.role;
-      if (role !== "ADMIN" && role !== "EMPLOYEE") {
-        router.push("/dashboard");
-      } else {
-        fetchInvoice();
-      }
+      fetchInvoice();
     }
-  }, [status, session, router, params.id]);
+  }, [status, session, router, resolvedParams.id]);
+
+  // Check view permissions after invoice is loaded
+  useEffect(() => {
+    if (invoice && session?.user) {
+      const checkViewPermission = async () => {
+        const hasViewPermission = await canView();
+        if (!hasViewPermission) {
+          setError("You don't have permission to view this invoice");
+        }
+      };
+      checkViewPermission();
+    }
+  }, [invoice, session?.user, canView]);
 
   const fetchInvoice = async () => {
     try {
-      const response = await fetch(`/api/invoices/${params.id}`);
+      const response = await fetch(`/api/invoices/${resolvedParams.id}`);
       if (response.ok) {
         const data = await response.json();
         setInvoice(data);
@@ -110,6 +137,41 @@ export default function InvoiceDetailPage({ params }: { params: { id: string } }
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleRemoveItem = async (itemId: string) => {
+    if (!invoice || !confirm("Are you sure you want to remove this item from the invoice?")) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/invoices/${invoice.id}/items/${itemId}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        // Refresh invoice data
+        await fetchInvoice();
+      } else {
+        const errorData = await response.json();
+        setError("Failed to remove item: " + errorData.error);
+      }
+    } catch (err) {
+      console.error('Failed to remove item:', err);
+      setError("Failed to remove item");
+    }
+  };
+
+  const handleEditToggle = async () => {
+    if (!editMode) {
+      // Check permission before enabling edit mode
+      const hasEditPermission = await canEdit();
+      if (!hasEditPermission) {
+        setError("You don't have permission to edit this invoice");
+        return;
+      }
+    }
+    setEditMode(!editMode);
   };
 
   if (status === "loading" || isLoading) {
@@ -228,10 +290,14 @@ export default function InvoiceDetailPage({ params }: { params: { id: string } }
               Download PDF
             </Button>
             
-            {session.user?.role === "ADMIN" && (
-              <Button variant="outline" size="sm">
+            {isEditable() && (
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={handleEditToggle}
+              >
                 <Edit className="mr-2 h-4 w-4" />
-                Edit
+                {editMode ? 'Done Editing' : 'Edit Invoice'}
               </Button>
             )}
             
@@ -319,6 +385,26 @@ export default function InvoiceDetailPage({ params }: { params: { id: string } }
                   <p className="text-sm text-muted-foreground">{invoice.notes}</p>
                 </div>
               )}
+
+              {!isEditable() && getStatusReason() && (
+                <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-yellow-600" />
+                    <h4 className="font-medium text-yellow-800">Editing Restricted</h4>
+                  </div>
+                  <p className="text-sm text-yellow-700 mt-1">{getStatusReason()}</p>
+                </div>
+              )}
+
+              {editMode && (
+                <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <Edit className="h-4 w-4 text-blue-600" />
+                    <h4 className="font-medium text-blue-800">Edit Mode Active</h4>
+                  </div>
+                  <p className="text-sm text-blue-700 mt-1">Click the X button next to items to remove them from the invoice.</p>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -359,9 +445,22 @@ export default function InvoiceDetailPage({ params }: { params: { id: string } }
                           )} • {item.timeEntry?.date ? new Date(item.timeEntry.date).toLocaleDateString() : ''}
                         </div>
                       </div>
-                      <div className="text-right">
-                        <div className="font-medium">
-                          ${item.amount.toFixed(2)}
+                      <div className="flex items-center gap-2">
+                        {editMode && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleRemoveItem(item.id)}
+                            className="text-red-600 hover:text-red-700"
+                            title="Remove this item"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        )}
+                        <div className="text-right">
+                          <div className="font-medium">
+                            ${item.amount.toFixed(2)}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -404,9 +503,22 @@ export default function InvoiceDetailPage({ params }: { params: { id: string } }
                           Ticket {item.ticketAddon?.ticket.ticketNumber}: {item.ticketAddon?.ticket.title}
                         </div>
                       </div>
-                      <div className="text-right">
-                        <div className="font-medium">
-                          ${item.amount.toFixed(2)}
+                      <div className="flex items-center gap-2">
+                        {editMode && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleRemoveItem(item.id)}
+                            className="text-red-600 hover:text-red-700"
+                            title="Remove this item"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        )}
+                        <div className="text-right">
+                          <div className="font-medium">
+                            ${item.amount.toFixed(2)}
+                          </div>
                         </div>
                       </div>
                     </div>

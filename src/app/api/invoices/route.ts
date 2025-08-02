@@ -8,23 +8,23 @@ export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
 
-    if (!session) {
+    if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Check permission to view billing/invoices
-    const canViewBilling = await hasPermission(session.user.id, { resource: "billing", action: "view" });
-    if (!canViewBilling) {
+    // Check permission to view invoices
+    const canViewInvoices = await hasPermission(session.user.id, { resource: "invoices", action: "view" });
+    if (!canViewInvoices) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const searchParams = request.nextUrl.searchParams;
-    const customerId = searchParams.get("customerId");
+    const accountId = searchParams.get("accountId");
     const status = searchParams.get("status");
 
     const whereClause: Record<string, unknown> = {};
-    if (customerId) {
-      whereClause.customerId = customerId;
+    if (accountId) {
+      whereClause.accountId = accountId;
     }
     if (status) {
       whereClause.status = status;
@@ -33,18 +33,23 @@ export async function GET(request: NextRequest) {
     const invoices = await prisma.invoice.findMany({
       where: whereClause,
       include: {
-        customer: true,
-        timeEntries: {
+        account: true,
+        items: {
           include: {
-            ticket: true,
-            user: true,
+            timeEntry: {
+              include: {
+                ticket: true,
+                user: true,
+              },
+            },
+            ticketAddon: {
+              include: {
+                ticket: true,
+              },
+            },
           },
         },
-        ticketAddons: {
-          include: {
-            ticket: true,
-          },
-        },
+        creator: true,
       },
       orderBy: { createdAt: "desc" },
     });

@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -38,9 +38,12 @@ import {
   RefreshCw,
   AlertTriangle,
   CheckCircle,
-  Clock4
+  Clock4,
+  Trash2
 } from "lucide-react";
 import { CreateAccountUserDialog } from "@/components/accounts/CreateAccountUserDialog";
+import { EditAccountUserDialog } from "@/components/accounts/EditAccountUserDialog";
+import { AccountUserPermissionDialog } from "@/components/accounts/AccountUserPermissionDialog";
 import { AccountUserRoleManager } from "@/components/accounts/AccountUserRoleManager";
 import { usePermissions } from "@/hooks/usePermissions";
 import { AccountUserWithStatus, getAccountUserStatusDisplay } from "@/types/account-user";
@@ -106,14 +109,86 @@ export default function AccountDetailsPage() {
     phone: ''
   });
   const [isCreateUserDialogOpen, setIsCreateUserDialogOpen] = useState(false);
+  const [isEditUserDialogOpen, setIsEditUserDialogOpen] = useState(false);
+  const [isPermissionDialogOpen, setIsPermissionDialogOpen] = useState(false);
   const [showMoveUserDialog, setShowMoveUserDialog] = useState(false);
+  const [showDeleteUserDialog, setShowDeleteUserDialog] = useState(false);
   const [userToMove, setUserToMove] = useState<AccountUserWithStatus | null>(null);
+  const [userToEdit, setUserToEdit] = useState<AccountUserWithStatus | null>(null);
+  const [userToDelete, setUserToDelete] = useState<AccountUserWithStatus | null>(null);
   
-  const { canCreateUsers, canResendInvitations } = usePermissions();
+  const { canCreateUsers, canResendInvitations, canUpdateUsers, canDeleteUsers } = usePermissions();
 
   const handleMoveUser = (accountUser: AccountUserWithStatus) => {
     setUserToMove(accountUser);
     setShowMoveUserDialog(true);
+  };
+
+  const handleEditUser = (accountUser: AccountUserWithStatus) => {
+    setUserToEdit(accountUser);
+    setIsEditUserDialogOpen(true);
+  };
+
+  const handleManagePermissions = (accountUser: AccountUserWithStatus) => {
+    setUserToEdit(accountUser);
+    setIsPermissionDialogOpen(true);
+  };
+
+  const handleDeleteUser = (accountUser: AccountUserWithStatus) => {
+    setUserToDelete(accountUser);
+    setShowDeleteUserDialog(true);
+  };
+
+  const handleConfirmDeleteUser = async () => {
+    if (!userToDelete) return;
+
+    try {
+      const response = await fetch(`/api/account-users/${userToDelete.id}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        await fetchAccount();
+        setShowDeleteUserDialog(false);
+        setUserToDelete(null);
+      } else {
+        const error = await response.json();
+        alert(`Failed to delete user: ${error.error}`);
+      }
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      alert('Failed to delete user. Please try again.');
+    }
+  };
+
+  const handleToggleUserAssignment = async (accountUser: AccountUserWithStatus) => {
+    try {
+      const response = await fetch(`/api/account-users/${accountUser.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          isActive: !accountUser.isActive
+        }),
+      });
+
+      if (response.ok) {
+        await fetchAccount();
+      } else {
+        const error = await response.json();
+        alert(`Failed to update user: ${error.error}`);
+      }
+    } catch (error) {
+      console.error('Error updating user:', error);
+      alert('Failed to update user. Please try again.');
+    }
+  };
+
+  const handleSendEmail = (accountUser: AccountUserWithStatus) => {
+    const emailSubject = `Regarding ${account?.name} Account`;
+    const mailtoLink = `mailto:${accountUser.email}?subject=${encodeURIComponent(emailSubject)}`;
+    window.open(mailtoLink, '_blank');
   };
 
   const handleMoveUserToAccount = async (targetAccountId: string) => {
@@ -634,14 +709,38 @@ export default function AccountDetailsPage() {
                                 {getUserStatusBadges(accountUser)}
                               </div>
                               
+                              {/* User Statistics */}
+                              {accountUser.stats && (
+                                <div className="flex flex-wrap gap-3 text-xs text-muted-foreground mt-2">
+                                  <div className="flex items-center gap-1">
+                                    <FileText className="h-3 w-3" />
+                                    <span>Tickets: {accountUser.stats.tickets.created} created</span>
+                                    {accountUser.stats.tickets.assigned > 0 && (
+                                      <span>, {accountUser.stats.tickets.assigned} assigned</span>
+                                    )}
+                                  </div>
+                                  {accountUser.stats.timeEntries.total > 0 && (
+                                    <div className="flex items-center gap-1">
+                                      <Clock className="h-3 w-3" />
+                                      <span>Time: {Math.floor(accountUser.stats.timeEntries.totalMinutes / 60)}h {accountUser.stats.timeEntries.totalMinutes % 60}m</span>
+                                      {accountUser.stats.timeEntries.billableMinutes > 0 && (
+                                        <span className="text-green-600">
+                                          ({Math.floor(accountUser.stats.timeEntries.billableMinutes / 60)}h {accountUser.stats.timeEntries.billableMinutes % 60}m billable)
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
                               {/* Additional Status Info */}
                               {hasExpiredInvitation && (
-                                <p className="text-xs text-red-600">
+                                <p className="text-xs text-red-600 mt-2">
                                   Invitation expired on {new Date(accountUser.invitationExpiry!).toLocaleDateString()}
                                 </p>
                               )}
                               {accountUser.invitationToken && !hasExpiredInvitation && accountUser.invitationExpiry && (
-                                <p className="text-xs text-muted-foreground">
+                                <p className="text-xs text-muted-foreground mt-2">
                                   Invitation expires on {new Date(accountUser.invitationExpiry).toLocaleDateString()}
                                 </p>
                               )}
@@ -655,6 +754,30 @@ export default function AccountDetailsPage() {
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
+                                {/* Edit User */}
+                                {canUpdateUsers && (
+                                  <DropdownMenuItem onClick={() => handleEditUser(accountUser)}>
+                                    <Edit className="h-4 w-4 mr-2" />
+                                    Edit User
+                                  </DropdownMenuItem>
+                                )}
+
+                                {/* Manage Permissions */}
+                                {canUpdateUsers && (
+                                  <DropdownMenuItem onClick={() => handleManagePermissions(accountUser)}>
+                                    <Settings className="h-4 w-4 mr-2" />
+                                    Manage Permissions
+                                  </DropdownMenuItem>
+                                )}
+
+                                {/* Toggle Assignment Status */}
+                                {canUpdateUsers && (
+                                  <DropdownMenuItem onClick={() => handleToggleUserAssignment(accountUser)}>
+                                    <Settings className="h-4 w-4 mr-2" />
+                                    {accountUser.isActive ? 'Disable Assignment' : 'Enable Assignment'}
+                                  </DropdownMenuItem>
+                                )}
+
                                 {/* Show resend invitation for users without login who have invitations */}
                                 {(!accountUser.hasLogin && accountUser.invitationToken) && canResendInvitations && (
                                   <DropdownMenuItem 
@@ -664,24 +787,31 @@ export default function AccountDetailsPage() {
                                     Resend Invitation
                                   </DropdownMenuItem>
                                 )}
-                                {/* Add move to account option */}
-                                <DropdownMenuItem onClick={() => handleMoveUser(accountUser)}>
-                                  <ArrowLeft className="h-4 w-4 mr-2" />
-                                  Move to Account
-                                </DropdownMenuItem>
-                                {/* Add toggle assignment status option */}
-                                <DropdownMenuItem>
-                                  <Settings className="h-4 w-4 mr-2" />
-                                  {accountUser.isActive ? 'Disable Assignment' : 'Enable Assignment'}
-                                </DropdownMenuItem>
-                                <DropdownMenuItem>
-                                  <Settings className="h-4 w-4 mr-2" />
-                                  Manage Permissions
-                                </DropdownMenuItem>
-                                <DropdownMenuItem>
+
+                                {/* Move to Account */}
+                                {canUpdateUsers && (
+                                  <DropdownMenuItem onClick={() => handleMoveUser(accountUser)}>
+                                    <ArrowLeft className="h-4 w-4 mr-2" />
+                                    Move to Account
+                                  </DropdownMenuItem>
+                                )}
+
+                                {/* Send Email */}
+                                <DropdownMenuItem onClick={() => handleSendEmail(accountUser)}>
                                   <Mail className="h-4 w-4 mr-2" />
                                   Send Email
                                 </DropdownMenuItem>
+
+                                {/* Delete User */}
+                                {canDeleteUsers && (
+                                  <DropdownMenuItem 
+                                    onClick={() => handleDeleteUser(accountUser)}
+                                    className="text-red-600 focus:text-red-600"
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Remove User
+                                  </DropdownMenuItem>
+                                )}
                               </DropdownMenuContent>
                             </DropdownMenu>
                           </div>
@@ -882,6 +1012,22 @@ export default function AccountDetailsPage() {
         onUserCreated={fetchAccount}
       />
 
+      {/* Edit User Dialog */}
+      <EditAccountUserDialog
+        isOpen={isEditUserDialogOpen}
+        onOpenChange={setIsEditUserDialogOpen}
+        accountUser={userToEdit}
+        onUserUpdated={fetchAccount}
+      />
+
+      {/* Permission Dialog */}
+      <AccountUserPermissionDialog
+        isOpen={isPermissionDialogOpen}
+        onOpenChange={setIsPermissionDialogOpen}
+        accountUser={userToEdit}
+        onPermissionsUpdated={fetchAccount}
+      />
+
       {/* Move User Dialog */}
       <Dialog open={showMoveUserDialog} onOpenChange={setShowMoveUserDialog}>
         <DialogContent>
@@ -946,6 +1092,68 @@ export default function AccountDetailsPage() {
               </div>
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete User Confirmation Dialog */}
+      <Dialog open={showDeleteUserDialog} onOpenChange={setShowDeleteUserDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center space-x-2">
+              <AlertTriangle className="h-5 w-5 text-red-500" />
+              <span>Remove User</span>
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to remove <strong>{userToDelete?.name}</strong> from this account? 
+              This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {userToDelete && (
+            <div className="space-y-4">
+              <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-start space-x-3">
+                  <AlertTriangle className="h-5 w-5 text-red-500 mt-0.5" />
+                  <div className="text-sm">
+                    <p className="font-medium text-red-800">Warning</p>
+                    <p className="text-red-700 mt-1">
+                      Removing this user will:
+                    </p>
+                    <ul className="list-disc list-inside text-red-700 mt-2 ml-2">
+                      <li>Remove their access to this account</li>
+                      <li>Delete their account if this is their only account access</li>
+                      <li>Cannot be undone once confirmed</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="p-3 bg-muted/50 rounded-lg">
+                <div className="flex items-center space-x-3">
+                  <User className="h-8 w-8 p-2 bg-background rounded-full" />
+                  <div>
+                    <p className="font-medium">{userToDelete.name}</p>
+                    <p className="text-sm text-muted-foreground">{userToDelete.email}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setShowDeleteUserDialog(false)}
+            >
+              Cancel
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={handleConfirmDeleteUser}
+            >
+              Remove User
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

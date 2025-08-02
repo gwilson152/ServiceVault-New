@@ -135,8 +135,15 @@ export function usePermissions() {
   const canCreateUsers = () => hasPermission(PERMISSIONS.USERS.CREATE);
   const canInviteUsers = () => hasPermission(PERMISSIONS.USERS.INVITE);
   const canManageUsers = () => hasPermission(PERMISSIONS.USERS.MANAGE);
+  const canUpdateUsers = () => hasPermission(PERMISSIONS.USERS.UPDATE);
+  const canDeleteUsers = () => hasPermission(PERMISSIONS.USERS.DELETE);
   const canCreateUsersManually = () => hasPermission(PERMISSIONS.USERS.CREATE_MANUAL);
   const canResendInvitations = () => hasPermission(PERMISSIONS.USERS.RESEND_INVITATION);
+  const canViewInvoices = () => hasPermission(PERMISSIONS.INVOICES.VIEW);
+  const canCreateInvoices = () => hasPermission(PERMISSIONS.INVOICES.CREATE);
+  const canUpdateInvoices = () => hasPermission(PERMISSIONS.INVOICES.UPDATE);
+  const canDeleteInvoices = () => hasPermission(PERMISSIONS.INVOICES.DELETE);
+  const canEditInvoiceItems = () => hasPermission(PERMISSIONS.INVOICES.EDIT_ITEMS);
 
   // Clear cache when session changes
   useEffect(() => {
@@ -165,8 +172,15 @@ export function usePermissions() {
     canCreateUsers,
     canInviteUsers,
     canManageUsers,
+    canUpdateUsers,
+    canDeleteUsers,
     canCreateUsersManually,
     canResendInvitations,
+    canViewInvoices,
+    canCreateInvoices,
+    canUpdateInvoices,
+    canDeleteInvoices,
+    canEditInvoiceItems,
   };
 }
 
@@ -268,5 +282,225 @@ export function useTimeEntryPermissions(timeEntry?: {
     canApprove,
     isLocked,
     getLockReason,
+  };
+}
+
+// Hook for invoice-specific permissions with account context
+export function useInvoicePermissions(invoice?: {
+  id: string;
+  status: string;
+  accountId: string;
+  creatorId: string;
+}) {
+  const { hasPermission } = usePermissions();
+  const { data: session } = useSession();
+
+  const canView = async (): Promise<boolean> => {
+    if (!invoice || !session?.user) {
+      return false;
+    }
+
+    // Check base permission with account context
+    const hasViewPermission = await hasPermission({
+      resource: 'invoices',
+      action: 'view',
+      accountId: invoice.accountId
+    });
+
+    if (!hasViewPermission) {
+      return false;
+    }
+
+    // Check scope-based access
+    const canViewAll = await hasPermission({ 
+      resource: 'invoices', 
+      action: 'view', 
+      scope: 'subsidiary',
+      accountId: invoice.accountId 
+    });
+    
+    const canViewAccount = await hasPermission({ 
+      resource: 'invoices', 
+      action: 'view', 
+      scope: 'account',
+      accountId: invoice.accountId 
+    });
+    
+    const canViewOwn = await hasPermission({ 
+      resource: 'invoices', 
+      action: 'view', 
+      scope: 'own',
+      accountId: invoice.accountId 
+    });
+
+    return canViewAll || canViewAccount || (canViewOwn && invoice.creatorId === session.user.id);
+  };
+
+  const canEdit = async (): Promise<boolean> => {
+    if (!invoice || !session?.user) {
+      return false;
+    }
+
+    // Only DRAFT invoices can be edited
+    if (invoice.status !== 'DRAFT') {
+      return false;
+    }
+
+    // Check base permission
+    const hasUpdatePermission = await hasPermission({
+      resource: 'invoices',
+      action: 'update',
+      accountId: invoice.accountId
+    });
+
+    if (!hasUpdatePermission) {
+      return false;
+    }
+
+    // Check scope-based access
+    const canEditAll = await hasPermission({ 
+      resource: 'invoices', 
+      action: 'update', 
+      scope: 'subsidiary',
+      accountId: invoice.accountId 
+    });
+    
+    const canEditAccount = await hasPermission({ 
+      resource: 'invoices', 
+      action: 'update', 
+      scope: 'account',
+      accountId: invoice.accountId 
+    });
+    
+    const canEditOwn = await hasPermission({ 
+      resource: 'invoices', 
+      action: 'update', 
+      scope: 'own',
+      accountId: invoice.accountId 
+    });
+
+    return canEditAll || canEditAccount || (canEditOwn && invoice.creatorId === session.user.id);
+  };
+
+  const canEditItems = async (): Promise<boolean> => {
+    if (!invoice || !session?.user) {
+      return false;
+    }
+
+    // Only DRAFT invoices can have items edited
+    if (invoice.status !== 'DRAFT') {
+      return false;
+    }
+
+    // Check specific edit-items permission
+    const hasEditItemsPermission = await hasPermission({
+      resource: 'invoices',
+      action: 'edit-items',
+      accountId: invoice.accountId
+    });
+
+    if (!hasEditItemsPermission) {
+      return false;
+    }
+
+    // Check scope-based access
+    const canEditAll = await hasPermission({ 
+      resource: 'invoices', 
+      action: 'edit-items', 
+      scope: 'subsidiary',
+      accountId: invoice.accountId 
+    });
+    
+    const canEditAccount = await hasPermission({ 
+      resource: 'invoices', 
+      action: 'edit-items', 
+      scope: 'account',
+      accountId: invoice.accountId 
+    });
+    
+    const canEditOwn = await hasPermission({ 
+      resource: 'invoices', 
+      action: 'edit-items', 
+      scope: 'own',
+      accountId: invoice.accountId 
+    });
+
+    return canEditAll || canEditAccount || (canEditOwn && invoice.creatorId === session.user.id);
+  };
+
+  const canDelete = async (): Promise<boolean> => {
+    if (!invoice || !session?.user) {
+      return false;
+    }
+
+    // Only DRAFT invoices can be deleted
+    if (invoice.status !== 'DRAFT') {
+      return false;
+    }
+
+    // Check base permission
+    const hasDeletePermission = await hasPermission({
+      resource: 'invoices',
+      action: 'delete',
+      accountId: invoice.accountId
+    });
+
+    if (!hasDeletePermission) {
+      return false;
+    }
+
+    // Check scope-based access
+    const canDeleteAll = await hasPermission({ 
+      resource: 'invoices', 
+      action: 'delete', 
+      scope: 'subsidiary',
+      accountId: invoice.accountId 
+    });
+    
+    const canDeleteAccount = await hasPermission({ 
+      resource: 'invoices', 
+      action: 'delete', 
+      scope: 'account',
+      accountId: invoice.accountId 
+    });
+    
+    const canDeleteOwn = await hasPermission({ 
+      resource: 'invoices', 
+      action: 'delete', 
+      scope: 'own',
+      accountId: invoice.accountId 
+    });
+
+    return canDeleteAll || canDeleteAccount || (canDeleteOwn && invoice.creatorId === session.user.id);
+  };
+
+  const isEditable = (): boolean => {
+    if (!invoice) {
+      return false;
+    }
+
+    // Only DRAFT invoices are editable
+    return invoice.status === 'DRAFT';
+  };
+
+  const getStatusReason = (): string | null => {
+    if (!invoice) {
+      return null;
+    }
+
+    if (invoice.status !== 'DRAFT') {
+      return `This invoice is ${invoice.status.toLowerCase()} and cannot be modified.`;
+    }
+
+    return null;
+  };
+
+  return {
+    canView,
+    canEdit,
+    canEditItems,
+    canDelete,
+    isEditable,
+    getStatusReason,
   };
 }

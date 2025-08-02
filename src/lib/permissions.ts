@@ -298,4 +298,11 @@ export const PERMISSIONS = {
     SETTINGS: { resource: "email", action: "settings" },
     QUEUE: { resource: "email", action: "queue" },
   },
+  INVOICES: {
+    VIEW: { resource: "invoices", action: "view" },
+    CREATE: { resource: "invoices", action: "create" },
+    UPDATE: { resource: "invoices", action: "update" },
+    DELETE: { resource: "invoices", action: "delete" },
+    EDIT_ITEMS: { resource: "invoices", action: "edit-items" },
+  },
 } as const;

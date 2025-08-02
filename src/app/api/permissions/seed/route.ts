@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { seedAllPermissions, PERMISSIONS_REGISTRY } from "@/lib/permissions-registry";
+import { PERMISSIONS_REGISTRY } from "@/lib/permissions-registry";
 import { prisma } from "@/lib/prisma";
 
 export async function POST(request: NextRequest) {

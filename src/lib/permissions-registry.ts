@@ -189,6 +189,33 @@ export const PERMISSIONS_REGISTRY = {
       description: "View and manage email queue"
     }
   },
+  INVOICES: {
+    VIEW: {
+      resource: "invoices",
+      action: "view",
+      description: "View invoices"
+    },
+    CREATE: {
+      resource: "invoices",
+      action: "create",
+      description: "Create new invoices"
+    },
+    UPDATE: {
+      resource: "invoices",
+      action: "update",
+      description: "Edit existing invoices"
+    },
+    DELETE: {
+      resource: "invoices",
+      action: "delete",
+      description: "Delete invoices"
+    },
+    EDIT_ITEMS: {
+      resource: "invoices",
+      action: "edit-items",
+      description: "Edit invoice line items"
+    }
+  },
   SETTINGS: {
     VIEW: {
       resource: "settings",
@@ -287,7 +314,11 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     PERMISSIONS_REGISTRY.TICKETS.UPDATE,
     PERMISSIONS_REGISTRY.ACCOUNTS.VIEW,
     PERMISSIONS_REGISTRY.REPORTS.VIEW,
-    PERMISSIONS_REGISTRY.USERS.VIEW
+    PERMISSIONS_REGISTRY.USERS.VIEW,
+    PERMISSIONS_REGISTRY.INVOICES.VIEW,
+    PERMISSIONS_REGISTRY.INVOICES.CREATE,
+    PERMISSIONS_REGISTRY.INVOICES.UPDATE,
+    PERMISSIONS_REGISTRY.INVOICES.EDIT_ITEMS
   ],
   ACCOUNT_USER: [
     // Account users have limited permissions
@@ -309,7 +340,8 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     PERMISSIONS_REGISTRY.USERS.CREATE_MANUAL,
     PERMISSIONS_REGISTRY.USERS.RESEND_INVITATION,
     PERMISSIONS_REGISTRY.TIME_ENTRIES.VIEW,
-    PERMISSIONS_REGISTRY.BILLING.VIEW
+    PERMISSIONS_REGISTRY.BILLING.VIEW,
+    PERMISSIONS_REGISTRY.INVOICES.VIEW
   ],
   SUBSIDIARY_MANAGER: [
     // Account manager permissions plus subsidiary access
@@ -327,14 +359,17 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     PERMISSIONS_REGISTRY.USERS.RESEND_INVITATION,
     PERMISSIONS_REGISTRY.TIME_ENTRIES.VIEW,
     PERMISSIONS_REGISTRY.BILLING.VIEW,
-    PERMISSIONS_REGISTRY.REPORTS.VIEW
+    PERMISSIONS_REGISTRY.REPORTS.VIEW,
+    PERMISSIONS_REGISTRY.INVOICES.VIEW,
+    PERMISSIONS_REGISTRY.INVOICES.CREATE
   ],
   ACCOUNT_VIEWER: [
     // Read-only access to account information
     PERMISSIONS_REGISTRY.TICKETS.VIEW,
     PERMISSIONS_REGISTRY.ACCOUNTS.VIEW,
     PERMISSIONS_REGISTRY.TIME_ENTRIES.VIEW,
-    PERMISSIONS_REGISTRY.BILLING.VIEW
+    PERMISSIONS_REGISTRY.BILLING.VIEW,
+    PERMISSIONS_REGISTRY.INVOICES.VIEW
   ]
 } as const;
 

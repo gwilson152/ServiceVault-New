@@ -76,6 +76,7 @@ export async function GET(request: NextRequest) {
       include: {
         account: true,
         assignee: true,
+        assignedAccountUser: true,
         creator: true,
         accountUserCreator: true,
         timeEntries: {
@@ -128,6 +129,7 @@ export async function POST(request: NextRequest) {
       priority, 
       accountId, 
       assigneeId, 
+      assignedAccountUserId,
       customFields,
       addons 
     } = body;
@@ -166,6 +168,50 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Validate assignee (agent/employee) if provided
+    if (assigneeId && assigneeId !== "unassigned") {
+      const assignee = await prisma.user.findUnique({
+        where: { id: assigneeId }
+      });
+
+      if (!assignee) {
+        return NextResponse.json(
+          { error: "Assignee not found" },
+          { status: 400 }
+        );
+      }
+
+      // Assignee must be an employee or admin, not an account user
+      if (assignee.role === "ACCOUNT_USER") {
+        return NextResponse.json(
+          { error: "Only employees and admins can be assigned as agents to work on tickets" },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Validate assigned account user if provided
+    if (assignedAccountUserId && assignedAccountUserId !== "unassigned") {
+      const assignedAccountUser = await prisma.accountUser.findUnique({
+        where: { id: assignedAccountUserId }
+      });
+
+      if (!assignedAccountUser) {
+        return NextResponse.json(
+          { error: "Account user not found" },
+          { status: 400 }
+        );
+      }
+
+      // Assigned account user must belong to the same account as the ticket
+      if (assignedAccountUser.accountId !== finalAccountId) {
+        return NextResponse.json(
+          { error: "Account user must belong to the same account as the ticket" },
+          { status: 400 }
+        );
+      }
+    }
+
     // Start transaction
     const result = await prisma.$transaction(async (tx) => {
       // Get account name for ticket number generation
@@ -190,7 +236,8 @@ export async function POST(request: NextRequest) {
           status: "OPEN",
           ticketNumber,
           accountId: finalAccountId,
-          assigneeId: assigneeId || null,
+          assigneeId: assigneeId === "unassigned" ? null : assigneeId,
+          assignedAccountUserId: assignedAccountUserId === "unassigned" ? null : assignedAccountUserId,
           creatorId: creatorId,
           accountUserCreatorId: accountUserCreatorId,
           customFields: customFields || {},
@@ -219,6 +266,7 @@ export async function POST(request: NextRequest) {
       include: {
         account: true,
         assignee: true,
+        assignedAccountUser: true,
         creator: true,
         accountUserCreator: true,
         addons: true,

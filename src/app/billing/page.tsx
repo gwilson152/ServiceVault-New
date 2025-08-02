@@ -3,6 +3,7 @@
 import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { usePermissions } from "@/hooks/usePermissions";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -39,6 +40,17 @@ export default function BillingPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("invoices");
+
+  // Permission hooks
+  const {
+    canViewInvoices,
+    canCreateInvoices,
+    canUpdateInvoices,
+    canDeleteInvoices,
+    canEditInvoiceItems,
+    canViewBilling,
+    canUpdateBilling
+  } = usePermissions();
 
   // Real data state
   const [accounts, setAccounts] = useState<AccountWithHierarchy[]>([]);
@@ -87,7 +99,7 @@ export default function BillingPage() {
       const response = await fetch('/api/invoices');
       if (response.ok) {
         const data = await response.json();
-        setInvoices(data.invoices || []);
+        setInvoices(data || []);
       }
     } catch (err) {
       console.error('Failed to fetch invoices:', err);
@@ -110,11 +122,14 @@ export default function BillingPage() {
     if (status === "unauthenticated") {
       router.push("/");
     } else if (status === "authenticated") {
-      // Only admins can access billing
-      const role = session.user?.role;
-      if (role !== "ADMIN") {
-        router.push("/dashboard");
-      } else {
+      // Check permissions instead of hard-coded role
+      const checkPermissions = async () => {
+        const hasViewPermission = await canViewInvoices();
+        if (!hasViewPermission) {
+          router.push("/dashboard");
+          return;
+        }
+
         // Fetch initial data
         Promise.all([
           fetchAccounts(),
@@ -123,9 +138,11 @@ export default function BillingPage() {
         ]).finally(() => {
           setIsLoading(false);
         });
-      }
+      };
+
+      checkPermissions();
     }
-  }, [status, session, router]);
+  }, [status, session, router, canViewInvoices]);
 
   if (status === "loading" || isLoading) {
     return (
@@ -135,7 +152,7 @@ export default function BillingPage() {
     );
   }
 
-  if (!session || session.user?.role !== "ADMIN") {
+  if (!session) {
     return null;
   }
 
@@ -317,6 +334,29 @@ export default function BillingPage() {
     }
   };
 
+  const handleInvoiceDelete = async (invoiceId: string) => {
+    if (!confirm("Are you sure you want to delete this invoice? This action cannot be undone.")) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/invoices/${invoiceId}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        success('Invoice deleted successfully');
+        fetchInvoices();
+      } else {
+        const errorData = await response.json();
+        error('Failed to delete invoice', errorData.error);
+      }
+    } catch (err) {
+      console.error('Failed to delete invoice:', err);
+      error('Failed to delete invoice');
+    }
+  };
+
   const getStatusColor = (status: string): "default" | "secondary" | "destructive" | "outline" => {
     switch (status) {
       case "DRAFT": return "secondary";
@@ -352,6 +392,82 @@ export default function BillingPage() {
       addonTotal,
       total: timeTotal + addonTotal
     };
+  };
+
+  // Invoice Action Buttons Component
+  const InvoiceActionButtons = ({ 
+    invoice, 
+    canView, 
+    canEdit, 
+    canDelete, 
+    onView, 
+    onEdit, 
+    onDelete 
+  }: { 
+    invoice: any;
+    canView: () => Promise<boolean>;
+    canEdit: () => Promise<boolean>;
+    canDelete: () => Promise<boolean>;
+    onView: () => void;
+    onEdit: () => void;
+    onDelete: () => void;
+  }) => {
+    const [permissions, setPermissions] = useState({
+      view: false,
+      edit: false,
+      delete: false
+    });
+
+    useEffect(() => {
+      const checkPermissions = async () => {
+        const [view, edit, del] = await Promise.all([
+          canView(),
+          canEdit(),
+          canDelete()
+        ]);
+        setPermissions({ view, edit, delete: del });
+      };
+      checkPermissions();
+    }, [canView, canEdit, canDelete]);
+
+    return (
+      <div className="flex gap-2">
+        {permissions.view && (
+          <Button 
+            variant="ghost" 
+            size="sm"
+            onClick={onView}
+            title="View invoice details"
+          >
+            <Eye className="h-4 w-4" />
+          </Button>
+        )}
+        <Button variant="ghost" size="sm" title="Download PDF">
+          <Download className="h-4 w-4" />
+        </Button>
+        {permissions.edit && invoice.status === 'DRAFT' && (
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={onEdit}
+            title="Edit invoice"
+          >
+            <Edit className="h-4 w-4" />
+          </Button>
+        )}
+        {permissions.delete && invoice.status === 'DRAFT' && (
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="text-red-600 hover:text-red-700"
+            onClick={onDelete}
+            title="Delete invoice"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        )}
+      </div>
+    );
   };
 
   // Billing Rate Card Component
@@ -578,7 +694,11 @@ export default function BillingPage() {
                         <FileText className="mx-auto h-12 w-12 text-muted-foreground" />
                         <h3 className="mt-2 text-sm font-semibold">No invoices</h3>
                         <p className="text-sm text-muted-foreground">Generate your first invoice to get started.</p>
-                        <Button className="mt-4" onClick={() => setActiveTab("generate")}>
+                        <Button 
+                          className="mt-4" 
+                          onClick={() => setActiveTab("generate")}
+                          disabled={!canCreateInvoices}
+                        >
                           <Plus className="mr-2 h-4 w-4" />
                           Generate Invoice
                         </Button>
@@ -596,13 +716,13 @@ export default function BillingPage() {
                                   </Badge>
                                 </div>
                                 
-                                <p className="text-sm font-medium">{invoice.customer}</p>
+                                <p className="text-sm font-medium">{invoice.account?.name}</p>
                                 
                                 <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                                  <span>Created: {invoice.createdAt}</span>
-                                  <span>Due: {invoice.dueDate}</span>
-                                  <span>{invoice.timeEntries} time entries</span>
-                                  <span>{invoice.addons} addons</span>
+                                  <span>Created: {new Date(invoice.createdAt).toLocaleDateString()}</span>
+                                  <span>Due: {invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString() : 'N/A'}</span>
+                                  <span>{invoice.items?.filter((item: any) => item.timeEntry).length || 0} time entries</span>
+                                  <span>{invoice.items?.filter((item: any) => item.ticketAddon).length || 0} addons</span>
                                 </div>
                                 
                                 <div className="text-2xl font-bold text-green-600">
@@ -610,20 +730,15 @@ export default function BillingPage() {
                                 </div>
                               </div>
 
-                              <div className="flex gap-2">
-                                <Button variant="ghost" size="sm">
-                                  <Eye className="h-4 w-4" />
-                                </Button>
-                                <Button variant="ghost" size="sm">
-                                  <Download className="h-4 w-4" />
-                                </Button>
-                                <Button variant="ghost" size="sm">
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                                <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700">
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </div>
+                              <InvoiceActionButtons 
+                                invoice={invoice}
+                                canView={canViewInvoices}
+                                canEdit={canUpdateInvoices}
+                                canDelete={canDeleteInvoices}
+                                onView={() => router.push(`/invoices/${invoice.id}`)}
+                                onEdit={() => router.push(`/invoices/${invoice.id}`)}
+                                onDelete={() => handleInvoiceDelete(invoice.id)}
+                              />
                             </div>
                           </CardContent>
                         </Card>

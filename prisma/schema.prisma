@@ -144,6 +144,7 @@ model AccountUser {
   account Account @relation(fields: [accountId], references: [id])
   user    User?
   createdTickets Ticket[] @relation("AccountUserTicketCreator")
+  assignedTickets Ticket[] @relation("TicketAssignedAccountUser")
   accountUserRoles AccountUserRole[]
 }
 
@@ -160,12 +161,14 @@ model Ticket {
   accountId    String
   creatorId    String?
   accountUserCreatorId String?
-  assigneeId   String?
+  assigneeId   String?                // Agent/Employee who works on the ticket
+  assignedAccountUserId String?       // Account User this ticket is for
 
   account      Account      @relation(fields: [accountId], references: [id])
   creator      User?        @relation("TicketCreator", fields: [creatorId], references: [id])
   accountUserCreator AccountUser? @relation("AccountUserTicketCreator", fields: [accountUserCreatorId], references: [id])
   assignee     User?        @relation("TicketAssignee", fields: [assigneeId], references: [id])
+  assignedAccountUser AccountUser? @relation("TicketAssignedAccountUser", fields: [assignedAccountUserId], references: [id])
   
   timeEntries  TimeEntry[]
   addons       TicketAddon[]

@@ -9,10 +9,11 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { AccountSelector } from "@/components/selectors/account-selector";
-import { AccountUserSelector } from "@/components/selectors/account-user-selector";
+import { AgentSelector } from "@/components/selectors/agent-selector";
+import { AccountUserAssignmentSelector } from "@/components/selectors/account-user-assignment-selector";
 import { QuickTimeEntry } from "@/components/time/QuickTimeEntry";
 import { AddonsManagement } from "@/components/tickets/AddonsManagement";
 import { 
@@ -73,11 +74,17 @@ interface Ticket {
   priority: string;
   accountId: string;
   assigneeId?: string;
+  assignedAccountUserId?: string;
   createdAt: string;
   updatedAt: string;
   customFields?: Record<string, unknown>;
   account: Account;
   assignee?: User;
+  assignedAccountUser?: {
+    id: string;
+    name: string;
+    email: string;
+  };
   creator?: User;
   totalTimeSpent: number;
   totalAddonCost: number;
@@ -132,7 +139,8 @@ export function TicketDetailModal({
   const [editStatus, setEditStatus] = useState("");
   const [editPriority, setEditPriority] = useState("");
   const [editAccountId, setEditAccountId] = useState("");
-  const [editAssigneeId, setEditAssigneeId] = useState("");
+  const [editAssigneeId, setEditAssigneeId] = useState(""); // Agent/Employee
+  const [editAssignedAccountUserId, setEditAssignedAccountUserId] = useState(""); // Account User
   const [editCustomFields, setEditCustomFields] = useState<Record<string, unknown>>({});
 
   // Data state
@@ -181,6 +189,7 @@ export function TicketDetailModal({
       setEditPriority(ticket.priority);
       setEditAccountId(ticket.accountId);
       setEditAssigneeId(ticket.assigneeId || "unassigned");
+      setEditAssignedAccountUserId(ticket.assignedAccountUserId || "unassigned");
       setEditCustomFields(ticket.customFields || {});
       setIsEditing(false);
       setCurrentTicket(ticket);
@@ -193,6 +202,7 @@ export function TicketDetailModal({
       setEditPriority("MEDIUM");
       setEditAccountId("");
       setEditAssigneeId("unassigned");
+      setEditAssignedAccountUserId("unassigned");
       setEditCustomFields({});
       setIsEditing(true); // Always in edit mode when creating
       setCurrentTicket(null);
@@ -232,6 +242,7 @@ export function TicketDetailModal({
             priority: editPriority,
             accountId: editAccountId,
             assigneeId: editAssigneeId === "unassigned" ? null : editAssigneeId,
+            assignedAccountUserId: editAssignedAccountUserId === "unassigned" ? null : editAssignedAccountUserId,
             customFields: editCustomFields,
           }),
         });
@@ -265,6 +276,7 @@ export function TicketDetailModal({
             priority: editPriority,
             accountId: editAccountId,
             assigneeId: editAssigneeId === "unassigned" ? null : editAssigneeId,
+            assignedAccountUserId: editAssignedAccountUserId === "unassigned" ? null : editAssignedAccountUserId,
             customFields: editCustomFields,
           }),
         });
@@ -567,20 +579,67 @@ export function TicketDetailModal({
               {/* Assignment & Account */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">Assignment</CardTitle>
+                  <CardTitle className="text-lg">Assignment & Account</CardTitle>
+                  {(isEditing || internalCreateMode) && (
+                    <CardDescription>
+                      Choose the account, then specify who should work on it (agent) and who it's for (customer).
+                    </CardDescription>
+                  )}
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {isEditing || internalCreateMode ? (
-                    <AccountUserSelector
-                      accounts={accounts}
-                      employees={users}
-                      selectedAccountId={editAccountId}
-                      selectedAssigneeId={editAssigneeId}
-                      onAccountChange={setEditAccountId}
-                      onAssigneeChange={setEditAssigneeId}
-                      showAccountUsers={true}
-                      showEmployees={true}
-                    />
+                    <div className="space-y-4">
+                      {/* Account Selection */}
+                      <div className="space-y-2">
+                        <Label htmlFor="account-select">Account *</Label>
+                        <AccountSelector
+                          accounts={accounts}
+                          value={editAccountId}
+                          onValueChange={setEditAccountId}
+                          placeholder="Select an account"
+                          enableFilters={true}
+                          enableGrouping={true}
+                        />
+                      </div>
+                      
+                      {/* Agent Assignment */}
+                      <AgentSelector
+                        agents={users}
+                        selectedAgentId={editAssigneeId}
+                        onAgentChange={setEditAssigneeId}
+                        label="Assigned Agent"
+                        placeholder="Select agent to work on this"
+                      />
+                      
+                      {/* Account User Assignment */}
+                      <AccountUserAssignmentSelector
+                        selectedAccountId={editAccountId}
+                        selectedAccountUserId={editAssignedAccountUserId}
+                        onAccountUserChange={setEditAssignedAccountUserId}
+                        label="For Account User"
+                        placeholder="Select specific customer (optional)"
+                      />
+                      
+                      {editAccountId && (
+                        <div className="bg-muted/50 p-3 rounded-lg">
+                          <h4 className="text-sm font-medium mb-2">Assignment Explanation:</h4>
+                          <div className="space-y-1 text-xs text-muted-foreground">
+                            <div className="flex items-center gap-2">
+                              <User className="h-3 w-3 text-blue-600" />
+                              <span><strong>Assigned Agent:</strong> Internal staff member who will work on resolving this ticket</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Building className="h-3 w-3 text-orange-600" />
+                              <span><strong>For Account User:</strong> Specific customer this ticket relates to (optional)</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <User className="h-3 w-3 text-muted-foreground" />
+                              <span><strong>General Issues:</strong> Leave account user unspecified for account-wide problems</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   ) : displayTicket ? (
                     <>
                       <div className="space-y-2">
@@ -595,13 +654,57 @@ export function TicketDetailModal({
                       </div>
 
                       <div className="space-y-2">
-                        <Label>Assigned To</Label>
+                        <Label>Assigned Agent</Label>
                         <div className="flex items-center gap-2">
-                          <User className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-sm">
-                            {displayTicket.assignee ? displayTicket.assignee.name : "Unassigned"}
-                          </span>
+                          {displayTicket.assignee ? (
+                            <>
+                              <User className="h-4 w-4 text-blue-600" />
+                              <span className="text-sm">{displayTicket.assignee.name}</span>
+                              <Badge variant="secondary" className="text-xs">
+                                {displayTicket.assignee.role}
+                              </Badge>
+                            </>
+                          ) : (
+                            <>
+                              <User className="h-4 w-4 text-muted-foreground" />
+                              <span className="text-sm text-muted-foreground">Unassigned</span>
+                            </>
+                          )}
                         </div>
+                        {displayTicket.assignee && (
+                          <div className="text-xs text-muted-foreground ml-6">
+                            Internal staff member working on this ticket
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>For Account User</Label>
+                        <div className="flex items-center gap-2">
+                          {displayTicket.assignedAccountUser ? (
+                            <>
+                              <Building className="h-4 w-4 text-orange-600" />
+                              <span className="text-sm">{displayTicket.assignedAccountUser.name}</span>
+                              <Badge variant="outline" className="text-xs">
+                                Customer
+                              </Badge>
+                            </>
+                          ) : (
+                            <>
+                              <Building className="h-4 w-4 text-muted-foreground" />
+                              <span className="text-sm text-muted-foreground">General Account Issue</span>
+                            </>
+                          )}
+                        </div>
+                        {displayTicket.assignedAccountUser ? (
+                          <div className="text-xs text-muted-foreground ml-6">
+                            Specific customer this ticket relates to
+                          </div>
+                        ) : (
+                          <div className="text-xs text-muted-foreground ml-6">
+                            Account-wide issue not specific to any user
+                          </div>
+                        )}
                       </div>
                     </>
                   ) : null}
@@ -673,25 +776,25 @@ export function TicketDetailModal({
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div className="text-center">
                       <div className="text-2xl font-bold text-blue-600">
-                        {formatMinutes(displayTicket.totalTimeSpent)}
+                        {formatMinutes(displayTicket.totalTimeSpent || 0)}
                       </div>
                       <div className="text-sm text-muted-foreground">Total Time</div>
                     </div>
                     <div className="text-center">
                       <div className="text-2xl font-bold text-green-600">
-                        {displayTicket.timeEntriesCount}
+                        {displayTicket.timeEntriesCount || 0}
                       </div>
                       <div className="text-sm text-muted-foreground">Time Entries</div>
                     </div>
                     <div className="text-center">
                       <div className="text-2xl font-bold text-orange-600">
-                        ${displayTicket.totalAddonCost.toFixed(2)}
+                        ${(displayTicket.totalAddonCost || 0).toFixed(2)}
                       </div>
                       <div className="text-sm text-muted-foreground">Addon Cost</div>
                     </div>
                     <div className="text-center">
                       <div className="text-2xl font-bold text-purple-600">
-                        {displayTicket.addonsCount}
+                        {displayTicket.addonsCount || 0}
                       </div>
                       <div className="text-sm text-muted-foreground">Addons</div>
                     </div>

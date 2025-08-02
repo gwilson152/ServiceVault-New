@@ -128,15 +128,34 @@ export async function GET(
       }
     };
 
-    // Add status information to account users
-    const processAccountUser = (accountUser: any, sourceAccountName?: string) => ({
-      ...accountUser,
-      hasLogin: !!accountUser.user,
-      canBeAssigned: accountUser.isActive,
-      invitationStatus: accountUser.user ? 'activated' : 
-                       accountUser.invitationToken ? 'pending' : 'none',
-      sourceAccount: sourceAccountName || account.name
-    });
+    // Add status information and statistics to account users
+    const processAccountUser = (accountUser: any, sourceAccountName?: string) => {
+      const userStats = {
+        tickets: {
+          created: account.tickets.filter(t => t.accountUserCreator?.id === accountUser.id).length,
+          assigned: account.tickets.filter(t => t.assignedAccountUserId === accountUser.id).length,
+        },
+        timeEntries: {
+          total: account.timeEntries.filter(te => te.userId === accountUser.user?.id).length,
+          totalMinutes: account.timeEntries
+            .filter(te => te.userId === accountUser.user?.id)
+            .reduce((sum, te) => sum + te.minutes, 0),
+          billableMinutes: account.timeEntries
+            .filter(te => te.userId === accountUser.user?.id && !te.noCharge)
+            .reduce((sum, te) => sum + te.minutes, 0),
+        }
+      };
+
+      return {
+        ...accountUser,
+        hasLogin: !!accountUser.user,
+        canBeAssigned: accountUser.isActive,
+        invitationStatus: accountUser.user ? 'activated' : 
+                         accountUser.invitationToken ? 'pending' : 'none',
+        sourceAccount: sourceAccountName || account.name,
+        stats: userStats
+      };
+    };
 
     // Process direct account users
     const directAccountUsers = account.accountUsers.map(accountUser => 

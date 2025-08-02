@@ -19,6 +19,7 @@ export async function GET(
       include: {
         account: true,
         assignee: true,
+        assignedAccountUser: true,
         creator: true,
         accountUserCreator: true,
         timeEntries: {
@@ -88,6 +89,7 @@ export async function PATCH(
       status, 
       accountId,
       assigneeId, 
+      assignedAccountUserId,
       customFields 
     } = body;
 
@@ -118,6 +120,51 @@ export async function PATCH(
       }
     }
 
+    // Validate assignee (agent/employee) if being updated
+    if (assigneeId !== undefined && assigneeId !== null && assigneeId !== "unassigned") {
+      const assignee = await prisma.user.findUnique({
+        where: { id: assigneeId }
+      });
+
+      if (!assignee) {
+        return NextResponse.json(
+          { error: "Assignee not found" },
+          { status: 400 }
+        );
+      }
+
+      // Assignee must be an employee or admin, not an account user
+      if (assignee.role === "ACCOUNT_USER") {
+        return NextResponse.json(
+          { error: "Only employees and admins can be assigned as agents to work on tickets" },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Validate assigned account user if being updated
+    if (assignedAccountUserId !== undefined && assignedAccountUserId !== null && assignedAccountUserId !== "unassigned") {
+      const assignedAccountUser = await prisma.accountUser.findUnique({
+        where: { id: assignedAccountUserId }
+      });
+
+      if (!assignedAccountUser) {
+        return NextResponse.json(
+          { error: "Account user not found" },
+          { status: 400 }
+        );
+      }
+
+      // Assigned account user must belong to the same account as the ticket
+      const targetAccountId = accountId || existingTicket.accountId;
+      if (assignedAccountUser.accountId !== targetAccountId) {
+        return NextResponse.json(
+          { error: "Account user must belong to the same account as the ticket" },
+          { status: 400 }
+        );
+      }
+    }
+
     // Build update data object
     const updateData: Record<string, unknown> = {};
     if (title !== undefined) updateData.title = title;
@@ -125,7 +172,8 @@ export async function PATCH(
     if (priority !== undefined) updateData.priority = priority;
     if (status !== undefined) updateData.status = status;
     if (accountId !== undefined) updateData.accountId = accountId;
-    if (assigneeId !== undefined) updateData.assigneeId = assigneeId;
+    if (assigneeId !== undefined) updateData.assigneeId = assigneeId === "unassigned" ? null : assigneeId;
+    if (assignedAccountUserId !== undefined) updateData.assignedAccountUserId = assignedAccountUserId === "unassigned" ? null : assignedAccountUserId;
     if (customFields !== undefined) updateData.customFields = customFields;
 
     const ticket = await prisma.ticket.update({
@@ -137,6 +185,7 @@ export async function PATCH(
       include: {
         account: true,
         assignee: true,
+        assignedAccountUser: true,
         creator: true,
         accountUserCreator: true,
         timeEntries: {
