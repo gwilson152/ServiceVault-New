@@ -2,6 +2,52 @@
 
 This document tracks major feature implementations and system enhancements.
 
+## Enhanced Invoice Management System (2025-08-02)
+
+### Overview
+Complete invoice lifecycle management system with status tracking, PDF export, item management, and comprehensive ABAC permission integration.
+
+### Key Features
+- **Invoice Status Workflow**: Full DRAFT → SENT → PAID lifecycle with business rule enforcement
+- **Professional PDF Export**: Server-side PDF generation with jsPDF and automatic download
+- **Dynamic Item Management**: Add/remove time entries and addons from draft invoices
+- **ABAC Permission Integration**: Status-specific actions with granular permission control
+- **ActionBar Integration**: Context-sensitive actions in shared navigation header
+- **Shared Navigation**: Removed duplicate headers across all authenticated pages
+
+### Components Enhanced
+- `InvoiceDetailPage`: Complete overhaul with status management and ActionBar integration
+- `useInvoicePermissions`: Enhanced hook with status-specific permission methods
+- `ActionBarProvider`: Fixed infinite re-render issues with proper memoization
+- `AppNavigation`: Consistent navigation system across all pages
+
+### API Endpoints Created
+- `POST /api/invoices/[id]/items`: Add time entries and addons to invoices
+- `GET /api/invoices/[id]/available-items`: Fetch unbilled items for account
+- `GET /api/invoices/[id]/pdf`: Generate and download professional invoice PDFs
+- Enhanced `PUT /api/invoices/[id]`: Status management with transition validation
+- Enhanced `DELETE /api/invoices/[id]`: Draft invoice deletion with cleanup
+
+### Permission System Enhancements
+- **New Invoice Permissions**: `MARK_SENT`, `MARK_PAID`, `UNMARK_PAID`, `EXPORT_PDF`
+- **Enhanced Permission Registry**: Updated role-based permission templates
+- **Status-Based Validation**: Server-side status transition enforcement
+- **Account Scoping**: Proper account-based permission enforcement
+
+### UI/UX Improvements
+- **Status Indicators**: Clear status descriptions with color-coded badges
+- **Empty States**: Helpful messages for invoices without items
+- **Edit Mode**: Visual indicators for adding/removing items
+- **ActionBar Actions**: Dynamic buttons based on invoice status and permissions
+- **Error Handling**: Comprehensive error messages and loading states
+
+### Documentation Updates
+- **Invoice Workflow**: Documented status transitions and business rules
+- **API Documentation**: Complete endpoint specifications with examples
+- **Permission Guide**: Enhanced ABAC documentation with invoice-specific examples
+
+---
+
 ## Hierarchical Account Management System (2025-08-02)
 
 ### Overview

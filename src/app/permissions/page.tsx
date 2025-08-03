@@ -1,6 +1,6 @@
 "use client";
 
-import { useSession, signOut } from "next-auth/react";
+import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -15,8 +15,6 @@ import {
   Shield, 
   Plus, 
   Settings, 
-  LogOut, 
-  ArrowLeft,
   Users,
   Edit,
   Trash2,
@@ -665,48 +663,7 @@ export default function PermissionsPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="flex h-16 items-center px-4 max-w-7xl mx-auto">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => router.push("/dashboard")}
-            className="mr-2"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          
-          <div className="flex items-center space-x-2">
-            <Shield className="h-6 w-6" />
-            <h1 className="text-xl font-semibold">Permissions Management</h1>
-          </div>
-
-          <div className="ml-auto flex items-center space-x-4">
-            <span className="text-sm text-muted-foreground">
-              {session.user?.name || session.user?.email}
-            </span>
-            <Badge variant="secondary">{session.user?.role}</Badge>
-            
-            <Button 
-              variant="ghost" 
-              size="icon"
-              onClick={() => router.push("/settings")}
-            >
-              <Settings className="h-4 w-4" />
-            </Button>
-            
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => signOut()}
-            >
-              <LogOut className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      </header>
+    <>
 
       <main className="max-w-7xl mx-auto p-6">
         <div className="space-y-6">
@@ -1573,6 +1530,6 @@ export default function PermissionsPage() {
           </Tabs>
         </div>
       </main>
-    </div>
+    </>
   );
 }

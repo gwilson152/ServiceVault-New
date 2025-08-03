@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, ReactNode } from "react";
+import React, { createContext, useContext, useState, ReactNode, useMemo, useCallback } from "react";
 
 export interface ActionItem {
   id: string;
@@ -26,11 +26,11 @@ const ActionBarContext = createContext<ActionBarContextValue | undefined>(undefi
 export function ActionBarProvider({ children }: { children: ReactNode }) {
   const [actions, setActionsState] = useState<ActionItem[]>([]);
 
-  const setActions = (newActions: ActionItem[]) => {
+  const setActions = useCallback((newActions: ActionItem[]) => {
     setActionsState(newActions);
-  };
+  }, []);
 
-  const addAction = (action: ActionItem) => {
+  const addAction = useCallback((action: ActionItem) => {
     setActionsState(prev => {
       // Replace if action with same ID exists, otherwise add
       const existing = prev.findIndex(a => a.id === action.id);
@@ -41,24 +41,26 @@ export function ActionBarProvider({ children }: { children: ReactNode }) {
       }
       return [...prev, action];
     });
-  };
+  }, []);
 
-  const removeAction = (id: string) => {
+  const removeAction = useCallback((id: string) => {
     setActionsState(prev => prev.filter(action => action.id !== id));
-  };
+  }, []);
 
-  const clearActions = () => {
+  const clearActions = useCallback(() => {
     setActionsState([]);
-  };
+  }, []);
+
+  const contextValue = useMemo(() => ({
+    actions,
+    setActions,
+    addAction,
+    removeAction,
+    clearActions
+  }), [actions, setActions, addAction, removeAction, clearActions]);
 
   return (
-    <ActionBarContext.Provider value={{
-      actions,
-      setActions,
-      addAction,
-      removeAction,
-      clearActions
-    }}>
+    <ActionBarContext.Provider value={contextValue}>
       {children}
     </ActionBarContext.Provider>
   );

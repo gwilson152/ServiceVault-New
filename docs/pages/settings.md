@@ -6,14 +6,36 @@ The Settings Page (`/settings`) provides a comprehensive administrative interfac
 
 ## Authentication & Authorization
 
-### Access Control
-- **Admin-Only Access**: Only users with `ADMIN` role can access settings
-- **Route Protection**: Automatic redirect for non-admin users to dashboard
-- **Session Validation**: Continuous authentication state monitoring
+### ABAC Permission System
+The settings page uses comprehensive ABAC (Attribute-Based Access Control) with granular permissions:
 
-### Role Enforcement
+- **SETTINGS.VIEW** - View system settings and configuration
+- **SETTINGS.UPDATE** - Modify system settings and save changes
+
+### Permission Requirements
+- **Route Access**: Requires `SETTINGS.VIEW` permission to access settings page
+- **Modification Access**: Requires `SETTINGS.UPDATE` permission to save changes
+- **ActionBar Integration**: Dynamic save/reset buttons based on permissions
+- **Account Scoping**: Settings permissions typically granted with global scope
+
+### Permission-Based Features
+- **Read-Only Mode**: Users with only `SETTINGS.VIEW` can view but not modify settings
+- **Save Actions**: Save All and Reset buttons only appear for users with `SETTINGS.UPDATE`
+- **Section Access**: Each settings section respects permission requirements
+- **ActionBar Integration**: Uses shared ActionBar for consistent navigation
+
 ```typescript
-if (session.user?.role !== "ADMIN") {
+const canViewSettings = await hasPermission(userId, {
+  resource: 'settings',
+  action: 'view'
+});
+
+const canUpdateSettings = await hasPermission(userId, {
+  resource: 'settings', 
+  action: 'update'
+});
+
+if (!canViewSettings) {
   router.push("/dashboard");
 }
 ```

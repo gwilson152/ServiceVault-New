@@ -1,6 +1,6 @@
 "use client";
 
-import { useSession, signOut } from "next-auth/react";
+import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -51,9 +51,6 @@ import { useTimeTracking } from "@/components/time/TimeTrackingProvider";
 import { 
   FileText, 
   Plus, 
-  Settings, 
-  LogOut, 
-  ArrowLeft,
   Users,
   Clock,
   DollarSign,
@@ -66,12 +63,14 @@ import {
   X
 } from "lucide-react";
 import { formatMinutes } from "@/lib/time-utils";
+import { useActionBar } from "@/components/providers/ActionBarProvider";
 
 export default function TicketsPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
   const { registerTimerLoggedCallback } = useTimeTracking();
+  const { addAction, clearActions } = useActionBar();
 
   // Data state
   const [tickets, setTickets] = useState<Ticket[]>([]);
@@ -97,6 +96,13 @@ export default function TicketsPage() {
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isCreateMode, setIsCreateMode] = useState(false);
+
+  // Permission checks
+  const isAdmin = session?.user?.role === "ADMIN";
+  const isEmployee = session?.user?.role === "EMPLOYEE";
+  const canCreateTickets = isAdmin || isEmployee;
+  const canEditAllTickets = isAdmin;
+  const canDeleteTickets = isAdmin;
 
   // Data fetching functions
   const fetchTickets = async () => {
@@ -185,6 +191,30 @@ export default function TicketsPage() {
     return unregisterCallback;
   }, [registerTimerLoggedCallback]);
 
+  const handleCreateTicket = () => {
+    setSelectedTicket(null);
+    setIsCreateMode(true);
+    setIsModalOpen(true);
+  };
+
+  // Setup action bar
+  useEffect(() => {
+    if (canCreateTickets) {
+      addAction({
+        id: "create-ticket",
+        label: "Create Ticket",
+        icon: <Plus className="h-4 w-4" />,
+        onClick: handleCreateTicket,
+        variant: "default"
+      });
+    }
+
+    // Cleanup on unmount
+    return () => {
+      clearActions();
+    };
+  }, [canCreateTickets, addAction, clearActions]);
+
   if (status === "loading" || isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -196,18 +226,6 @@ export default function TicketsPage() {
   if (!session) {
     return null;
   }
-
-  const userRole = session.user?.role;
-  const isAdmin = userRole === "ADMIN";
-  const isEmployee = userRole === "EMPLOYEE";
-  const canCreateTickets = isAdmin || isEmployee;
-  const canEditAllTickets = isAdmin || isEmployee;
-
-  const handleCreateTicket = () => {
-    setSelectedTicket(null);
-    setIsCreateMode(true);
-    setIsModalOpen(true);
-  };
 
   const getStatusColor = (status: string): "default" | "secondary" | "destructive" | "outline" => {
     switch (status) {
@@ -306,56 +324,7 @@ export default function TicketsPage() {
 
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="flex h-16 items-center px-4 max-w-7xl mx-auto">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => router.push("/dashboard")}
-            className="mr-2"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          
-          <div className="flex items-center space-x-2">
-            <FileText className="h-6 w-6" />
-            <h1 className="text-xl font-semibold">Ticket Management</h1>
-          </div>
-
-          <div className="ml-auto flex items-center space-x-4">
-            <span className="text-sm text-muted-foreground">
-              {session.user?.name || session.user?.email}
-            </span>
-            <Badge variant="secondary">{session.user?.role}</Badge>
-            
-            {canCreateTickets && (
-              <Button onClick={handleCreateTicket}>
-                <Plus className="h-4 w-4 mr-2" />
-                Create Ticket
-              </Button>
-            )}
-            
-            <Button 
-              variant="ghost" 
-              size="icon"
-              onClick={() => router.push("/settings")}
-            >
-              <Settings className="h-4 w-4" />
-            </Button>
-            
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => signOut()}
-            >
-              <LogOut className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      </header>
-
+    <>
       <main className="max-w-7xl mx-auto p-6">
         <div className="space-y-6">
           {/* Page Header */}
@@ -753,6 +722,6 @@ export default function TicketsPage() {
         customFields={customFields}
         isCreateMode={isCreateMode}
       />
-    </div>
+    </>
   );
 }

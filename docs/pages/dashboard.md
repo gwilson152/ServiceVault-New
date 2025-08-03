@@ -1,69 +1,89 @@
-# Admin Dashboard Documentation
+# Dashboard Documentation
 
 ## Overview
 
-The admin dashboard (`/dashboard`) is the main interface for administrators and employees to manage tickets, time tracking, customers, and invoicing. The dashboard features role-based access control and a responsive design.
+The dashboard (`/dashboard`) is the main interface for administrators and employees to manage tickets, time tracking, customers, and invoicing. The dashboard features comprehensive ABAC permission-based access control, real-time statistics, and ActionBar integration for consistent navigation.
 
 ## Authentication & Authorization
 
-### Access Control
-- **Route Protection**: Automatically redirects unauthenticated users to login page
-- **Role-Based Features**: Different UI elements shown based on user role
-  - `ADMIN`: Full access to all features
-  - `EMPLOYEE`: Access to tickets and time tracking
-  - `CUSTOMER`: Redirected to customer portal (future implementation)
+### ABAC Permission System
+The dashboard uses the comprehensive ABAC (Attribute-Based Access Control) system with granular permissions:
 
-### User Roles
-```typescript
-const isAdmin = session.user?.role === "ADMIN";
-const isEmployee = session.user?.role === "EMPLOYEE" || isAdmin;
-```
+- **Route Protection**: Automatically redirects unauthenticated users to login page
+- **Permission-Based Features**: UI elements shown based on specific user permissions
+- **Account Scoping**: Permissions can be scoped to specific accounts or subsidiaries
+- **Dynamic Access**: Real-time permission checking for all dashboard features
+
+### Permission Requirements
+- **Dashboard Access**: Requires authentication (no specific permission needed)
+- **Statistics Display**: Uses aggregated data based on user's account access
+- **Feature Visibility**: Each section requires specific permissions:
+  - Tickets: `TICKETS.VIEW` permission
+  - Time Tracking: `TIME_ENTRIES.VIEW` permission  
+  - Billing: `BILLING.VIEW` permission
+  - Settings: `SETTINGS.VIEW` permission
+
+### Role-Based Defaults
+- **ADMIN**: All permissions with global scope
+- **EMPLOYEE**: Most operational permissions with account scope
+- **ACCOUNT_USER**: Limited permissions for specific accounts only
 
 ## Layout Structure
 
-### Header Navigation
-- **Brand**: Service Vault logo/title
-- **Mobile Menu**: Hamburger menu for mobile devices
-- **User Info**: Welcome message with user name/email
-- **Role Badge**: Shows current user role
-- **Action Icons**: Settings and logout buttons
+### ActionBar Integration
+The dashboard integrates with the shared ActionBar system for consistent navigation:
 
-### Sidebar Navigation
-- **Responsive**: Collapsible on mobile, fixed on desktop
-- **Role-Based Items**:
-  - All users: Overview
-  - Employees: Tickets, Time Tracking
-  - Admins: Customers, Invoicing, Settings
+- **Shared Header**: Uses ActionBarProvider for consistent navigation across all pages
+- **Dynamic Actions**: Context-sensitive action buttons based on current page and permissions
+- **User Information**: Role badge, account context, and logout functionality
+- **Settings Access**: Quick access to system settings (permission-based)
+
+### Navigation Structure
+- **Responsive Design**: Mobile-first approach with collapsible elements
+- **Permission-Based Menu**: Navigation items shown based on user permissions
+- **Account Context**: Shows current account scope when applicable
+- **Quick Actions**: Direct access to common operations
 
 ### Main Content Area
-- **Statistics Cards**: Key metrics overview
-- **Tabbed Interface**: Different views for content organization
-- **Responsive Grid**: Cards adapt to screen size
+- **Real-Time Statistics**: Live data from database with automatic updates
+- **Permission-Based Cards**: Statistics cards shown based on user access
+- **Responsive Grid**: Cards adapt to screen size and available data
+- **Loading States**: Progressive loading with skeleton screens
 
 ## Features
 
-### Statistics Dashboard
-Four key metric cards displayed at the top:
+### Real-Time Statistics Dashboard
+Live metrics cards with permission-based visibility:
 
-1. **Active Tickets**
-   - Shows count of open support tickets
-   - Icon: FileText
-   - Color: Blue
+1. **Active Tickets** (`TICKETS.VIEW` permission)
+   - Count of open support tickets scoped to user's access
+   - Includes account hierarchy for subsidiary managers
+   - Click-through to tickets page
+   - Icon: FileText, Color: Blue
 
-2. **Hours This Week**
-   - Total time logged for current week
-   - Icon: Clock
-   - Color: Green
+2. **Active Timers** (`TIME_ENTRIES.VIEW` permission)
+   - Count of currently running timers
+   - Shows user's own timers and managed account timers
+   - Click-through to time tracking page
+   - Icon: Clock, Color: Green
 
-3. **Total Customers**
-   - Active customer account count
-   - Icon: Users
-   - Color: Purple
+3. **Account Users** (`ACCOUNTS.VIEW` permission)
+   - Total account users the current user can access
+   - Scoped based on account hierarchy permissions
+   - Click-through to accounts page
+   - Icon: Users, Color: Purple
 
-4. **Monthly Revenue**
-   - Revenue generated this month
-   - Icon: DollarSign
-   - Color: Yellow
+4. **Monthly Revenue** (`BILLING.VIEW` permission)
+   - Revenue from paid invoices for current month
+   - Scoped to accounts user has billing access to
+   - Click-through to billing page
+   - Icon: DollarSign, Color: Yellow
+
+### Permission-Based Statistics
+- **Scoped Data**: All statistics respect user's permission scope (own/account/subsidiary)
+- **Real-Time Updates**: Statistics update automatically as data changes
+- **Click Navigation**: Cards provide quick navigation to relevant pages
+- **Loading States**: Skeleton loading for better user experience
 
 ### Tabbed Content
 

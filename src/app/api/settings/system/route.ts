@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
     // Check permission to view settings
     const canViewSettings = await hasPermission(session.user.id, {
       resource: 'settings',
-      action: 'read'
+      action: 'view'
     });
 
     if (!canViewSettings) {

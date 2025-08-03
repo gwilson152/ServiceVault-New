@@ -6,22 +6,42 @@ The Ticket Management System (`/tickets`) provides comprehensive support ticket 
 
 ## Authentication & Authorization
 
-### Access Control
-- **Admin & Employee Access**: Only users with `ADMIN` or `EMPLOYEE` roles can access ticket management
-- **Route Protection**: Automatic redirect for unauthorized users (customers redirected to portal)
-- **Session Validation**: Continuous authentication state monitoring
+### ABAC Permission System
+The ticket management system uses comprehensive ABAC (Attribute-Based Access Control) with granular permissions:
 
-### Role-Based Features
-- **Admins**: Full access to all tickets, can create/edit/delete any ticket
-- **Employees**: Can view and manage assigned tickets, create new tickets
-- **Customers**: Cannot access ticket management (use portal instead)
+- **TICKETS.VIEW** - View tickets and ticket details
+- **TICKETS.CREATE** - Create new tickets
+- **TICKETS.UPDATE** - Edit existing tickets
+- **TICKETS.DELETE** - Delete tickets
+- **TICKETS.ASSIGN** - Assign tickets to users
+- **ACCOUNTS.VIEW** - View account information for customer selection
+
+### Permission Requirements
+- **Route Access**: Requires `TICKETS.VIEW` permission to access ticket management
+- **Feature Access**: Each action requires specific permissions
+- **Account Scoping**: Permissions can be scoped to specific accounts or subsidiaries
+- **Customer Portal**: Account users without ticket permissions redirected to portal
+
+### Permission-Based Features
+- **Ticket Viewing**: Based on `TICKETS.VIEW` permission scope (own/account/subsidiary)
+- **Ticket Creation**: Requires `TICKETS.CREATE` permission
+- **Ticket Editing**: Requires `TICKETS.UPDATE` permission with scope validation
+- **Ticket Assignment**: Requires `TICKETS.ASSIGN` permission
+- **Ticket Deletion**: Requires `TICKETS.DELETE` permission (typically admin-only)
 
 ```typescript
-const role = session.user?.role;
-if (role === "CUSTOMER") {
-  router.push("/portal");
-} else if (role !== "EMPLOYEE" && role !== "ADMIN") {
-  router.push("/dashboard");
+const canViewTickets = await hasPermission(userId, {
+  resource: 'tickets',
+  action: 'view'
+});
+
+if (!canViewTickets) {
+  // Redirect based on user type
+  if (session.user?.role === "ACCOUNT_USER") {
+    router.push("/portal");
+  } else {
+    router.push("/dashboard");
+  }
 }
 ```
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useSession, signOut } from "next-auth/react";
+import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -10,8 +10,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
   Settings as SettingsIcon, 
-  LogOut, 
-  ArrowLeft,
   Save,
   RotateCcw,
   AlertCircle
@@ -23,6 +21,7 @@ import { TicketFieldsSection } from "@/components/settings/TicketFieldsSection";
 import { EmailSettingsSection } from "@/components/settings/EmailSettingsSection";
 import { LicenseSection } from "@/components/settings/LicenseSection";
 import { DangerZoneSection } from "@/components/settings/DangerZoneSection";
+import { useActionBar } from "@/components/providers/ActionBarProvider";
 
 export default function SettingsPage() {
   const { data: session, status } = useSession();
@@ -31,6 +30,7 @@ export default function SettingsPage() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [activeTab, setActiveTab] = useState("general");
   const { canViewSettings, canUpdateSettings, isLoading: permissionsLoading } = usePermissions();
+  const { addAction, removeAction, clearActions } = useActionBar();
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -44,6 +44,40 @@ export default function SettingsPage() {
       }
     }
   }, [status, session, router, canViewSettings, permissionsLoading]);
+
+  // Setup action bar with save/reset buttons
+  useEffect(() => {
+    const setupActions = async () => {
+      const canUpdate = await canUpdateSettings();
+      
+      if (hasUnsavedChanges && canUpdate) {
+        addAction({
+          id: "reset-settings",
+          label: "Reset",
+          icon: <RotateCcw className="h-4 w-4" />,
+          onClick: handleResetAll,
+          variant: "outline"
+        });
+        addAction({
+          id: "save-settings", 
+          label: "Save All",
+          icon: <Save className="h-4 w-4" />,
+          onClick: handleSaveAll,
+          variant: "default"
+        });
+      } else {
+        removeAction("reset-settings");
+        removeAction("save-settings");
+      }
+    };
+
+    setupActions();
+
+    // Cleanup on unmount
+    return () => {
+      clearActions();
+    };
+  }, [hasUnsavedChanges, addAction, removeAction, clearActions, canUpdateSettings]);
 
   // Warn user about unsaved changes
   useEffect(() => {
@@ -83,70 +117,16 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="flex h-16 items-center px-4 max-w-7xl mx-auto">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => router.push("/dashboard")}
-            className="mr-2"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          
-          <div className="flex items-center space-x-2">
-            <SettingsIcon className="h-6 w-6" />
-            <h1 className="text-xl font-semibold">System Settings</h1>
-          </div>
-
-          {hasUnsavedChanges && (
-            <div className="ml-4 flex items-center space-x-2">
-              <AlertCircle className="h-4 w-4 text-orange-500" />
-              <span className="text-sm text-orange-600">Unsaved changes</span>
-            </div>
-          )}
-
-          <div className="ml-auto flex items-center space-x-4">
-            {hasUnsavedChanges && (
-              <>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleResetAll}
-                >
-                  <RotateCcw className="mr-2 h-4 w-4" />
-                  Reset
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={handleSaveAll}
-                >
-                  <Save className="mr-2 h-4 w-4" />
-                  Save All
-                </Button>
-              </>
-            )}
-            
-            <span className="text-sm text-muted-foreground">
-              {session.user?.name || session.user?.email}
-            </span>
-            <Badge variant="secondary">
-              {canUpdateSettings ? "Settings Admin" : "Settings Viewer"}
-            </Badge>
-            
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => signOut()}
-            >
-              <LogOut className="h-4 w-4" />
-            </Button>
+    <>
+      {hasUnsavedChanges && (
+        <div className="bg-orange-50 border-b border-orange-200 px-4 py-2">
+          <div className="max-w-7xl mx-auto flex items-center space-x-2">
+            <AlertCircle className="h-4 w-4 text-orange-500" />
+            <span className="text-sm text-orange-600">You have unsaved changes</span>
           </div>
         </div>
-      </header>
-
+      )}
+      
       <main className="max-w-7xl mx-auto p-6">
         <div className="space-y-6">
           {/* Page Header */}
@@ -258,6 +238,6 @@ export default function SettingsPage() {
           </Card>
         </div>
       </main>
-    </div>
+    </>
   );
 }

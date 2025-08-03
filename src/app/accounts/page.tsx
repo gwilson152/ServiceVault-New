@@ -1,6 +1,6 @@
 "use client";
 
-import { useSession, signOut } from "next-auth/react";
+import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -9,8 +9,6 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { 
   Users, 
-  LogOut, 
-  ArrowLeft,
   Search,
   Plus
 } from "lucide-react";
@@ -24,6 +22,7 @@ import {
   searchAccountsInHierarchy,
   getHierarchyStats
 } from "@/utils/hierarchy";
+import { useActionBar } from "@/components/providers/ActionBarProvider";
 
 export default function AccountsPage() {
   const { data: session, status } = useSession();
@@ -35,6 +34,7 @@ export default function AccountsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [accountTypeFilter, setAccountTypeFilter] = useState("ALL");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const { addAction, clearActions } = useActionBar();
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     // Load view preference from localStorage
     if (typeof window !== 'undefined') {
@@ -101,6 +101,22 @@ export default function AccountsPage() {
     }
   }, [searchTerm, accountTypeFilter, currentPage, isLoading]);
 
+  // Setup action bar
+  useEffect(() => {
+    addAction({
+      id: "create-account",
+      label: "Create Account",
+      icon: <Plus className="h-4 w-4" />,
+      onClick: () => setShowCreateDialog(true),
+      variant: "default"
+    });
+
+    // Cleanup on unmount
+    return () => {
+      clearActions();
+    };
+  }, [addAction, clearActions]);
+
   if (status === "loading" || isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -115,41 +131,7 @@ export default function AccountsPage() {
 
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="flex h-16 items-center px-4 max-w-7xl mx-auto">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => router.push("/dashboard")}
-            className="mr-2"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          
-          <div className="flex items-center space-x-2">
-            <Users className="h-6 w-6" />
-            <h1 className="text-xl font-semibold">Account Management</h1>
-          </div>
-
-          <div className="ml-auto flex items-center space-x-4">
-            <span className="text-sm text-muted-foreground">
-              {session.user?.name || session.user?.email}
-            </span>
-            <Badge variant="secondary">Admin</Badge>
-            
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => signOut()}
-            >
-              <LogOut className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      </header>
-
+    <>
       <main className="max-w-7xl mx-auto p-6">
         <div className="space-y-6">
           {/* Page Header */}
@@ -248,14 +230,15 @@ export default function AccountsPage() {
             </Card>
           )}
 
-          {/* Create Account Dialog */}
-          <CreateAccountDialog
-            open={showCreateDialog}
-            onOpenChange={setShowCreateDialog}
-            onAccountCreated={fetchAccounts}
-          />
         </div>
       </main>
-    </div>
+
+      {/* Create Account Dialog */}
+      <CreateAccountDialog
+        open={showCreateDialog}
+        onOpenChange={setShowCreateDialog}
+        onAccountCreated={fetchAccounts}
+      />
+    </>
   );
 }

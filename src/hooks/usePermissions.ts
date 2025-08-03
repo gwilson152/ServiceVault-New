@@ -499,11 +499,209 @@ export function useInvoicePermissions(invoice?: {
     return null;
   };
 
+  const canMarkSent = async (): Promise<boolean> => {
+    if (!invoice || !session?.user) {
+      return false;
+    }
+
+    // Only DRAFT invoices can be marked as sent
+    if (invoice.status !== 'DRAFT') {
+      return false;
+    }
+
+    // Check base permission
+    const hasMarkSentPermission = await hasPermission({
+      resource: 'invoices',
+      action: 'mark-sent',
+      accountId: invoice.accountId
+    });
+
+    if (!hasMarkSentPermission) {
+      return false;
+    }
+
+    // Check scope-based access
+    const canMarkAll = await hasPermission({ 
+      resource: 'invoices', 
+      action: 'mark-sent', 
+      scope: 'subsidiary',
+      accountId: invoice.accountId 
+    });
+    
+    const canMarkAccount = await hasPermission({ 
+      resource: 'invoices', 
+      action: 'mark-sent', 
+      scope: 'account',
+      accountId: invoice.accountId 
+    });
+    
+    const canMarkOwn = await hasPermission({ 
+      resource: 'invoices', 
+      action: 'mark-sent', 
+      scope: 'own',
+      accountId: invoice.accountId 
+    });
+
+    return canMarkAll || canMarkAccount || (canMarkOwn && invoice.creatorId === session.user.id);
+  };
+
+  const canMarkPaid = async (): Promise<boolean> => {
+    if (!invoice || !session?.user) {
+      return false;
+    }
+
+    // Only SENT or OVERDUE invoices can be marked as paid
+    if (invoice.status !== 'SENT' && invoice.status !== 'OVERDUE') {
+      return false;
+    }
+
+    // Check base permission
+    const hasMarkPaidPermission = await hasPermission({
+      resource: 'invoices',
+      action: 'mark-paid',
+      accountId: invoice.accountId
+    });
+
+    if (!hasMarkPaidPermission) {
+      return false;
+    }
+
+    // Check scope-based access
+    const canMarkAll = await hasPermission({ 
+      resource: 'invoices', 
+      action: 'mark-paid', 
+      scope: 'subsidiary',
+      accountId: invoice.accountId 
+    });
+    
+    const canMarkAccount = await hasPermission({ 
+      resource: 'invoices', 
+      action: 'mark-paid', 
+      scope: 'account',
+      accountId: invoice.accountId 
+    });
+    
+    const canMarkOwn = await hasPermission({ 
+      resource: 'invoices', 
+      action: 'mark-paid', 
+      scope: 'own',
+      accountId: invoice.accountId 
+    });
+
+    return canMarkAll || canMarkAccount || (canMarkOwn && invoice.creatorId === session.user.id);
+  };
+
+  const canUnmarkPaid = async (): Promise<boolean> => {
+    if (!invoice || !session?.user) {
+      return false;
+    }
+
+    // Only PAID invoices can be unmarked
+    if (invoice.status !== 'PAID') {
+      return false;
+    }
+
+    // Check base permission
+    const hasUnmarkPaidPermission = await hasPermission({
+      resource: 'invoices',
+      action: 'unmark-paid',
+      accountId: invoice.accountId
+    });
+
+    if (!hasUnmarkPaidPermission) {
+      return false;
+    }
+
+    // Check scope-based access
+    const canUnmarkAll = await hasPermission({ 
+      resource: 'invoices', 
+      action: 'unmark-paid', 
+      scope: 'subsidiary',
+      accountId: invoice.accountId 
+    });
+    
+    const canUnmarkAccount = await hasPermission({ 
+      resource: 'invoices', 
+      action: 'unmark-paid', 
+      scope: 'account',
+      accountId: invoice.accountId 
+    });
+    
+    const canUnmarkOwn = await hasPermission({ 
+      resource: 'invoices', 
+      action: 'unmark-paid', 
+      scope: 'own',
+      accountId: invoice.accountId 
+    });
+
+    return canUnmarkAll || canUnmarkAccount || (canUnmarkOwn && invoice.creatorId === session.user.id);
+  };
+
+  const canExportPDF = async (): Promise<boolean> => {
+    if (!invoice || !session?.user) {
+      return false;
+    }
+
+    // Check base permission
+    const hasExportPermission = await hasPermission({
+      resource: 'invoices',
+      action: 'export-pdf',
+      accountId: invoice.accountId
+    });
+
+    if (!hasExportPermission) {
+      return false;
+    }
+
+    // Check scope-based access (PDF export available for all statuses)
+    const canExportAll = await hasPermission({ 
+      resource: 'invoices', 
+      action: 'export-pdf', 
+      scope: 'subsidiary',
+      accountId: invoice.accountId 
+    });
+    
+    const canExportAccount = await hasPermission({ 
+      resource: 'invoices', 
+      action: 'export-pdf', 
+      scope: 'account',
+      accountId: invoice.accountId 
+    });
+    
+    const canExportOwn = await hasPermission({ 
+      resource: 'invoices', 
+      action: 'export-pdf', 
+      scope: 'own',
+      accountId: invoice.accountId 
+    });
+
+    return canExportAll || canExportAccount || (canExportOwn && invoice.creatorId === session.user.id);
+  };
+
+  const canAddItems = async (): Promise<boolean> => {
+    if (!invoice || !session?.user) {
+      return false;
+    }
+
+    // Only DRAFT invoices can have items added
+    if (invoice.status !== 'DRAFT') {
+      return false;
+    }
+
+    // Use existing edit-items permission for adding items
+    return await canEditItems();
+  };
+
   return {
     canView,
     canEdit,
     canEditItems,
     canDelete,
+    canMarkSent,
+    canMarkPaid,
+    canUnmarkPaid,
+    canExportPDF,
+    canAddItems,
     isEditable,
     getStatusReason,
   };

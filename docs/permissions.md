@@ -75,6 +75,17 @@ Permissions follow the pattern: `{RESOURCE}:{ACTION}`
 - **`BILLING.UPDATE`** - Update billing rates
 - **`BILLING.DELETE`** - Delete billing rates
 
+### Invoices
+- **`INVOICES.VIEW`** - View invoices and invoice details
+- **`INVOICES.CREATE`** - Create new invoices from time entries and addons
+- **`INVOICES.UPDATE`** - Edit existing invoice details (notes, description)
+- **`INVOICES.DELETE`** - Delete draft invoices
+- **`INVOICES.EDIT_ITEMS`** - Add or remove items from draft invoices
+- **`INVOICES.MARK_SENT`** - Mark draft invoices as sent
+- **`INVOICES.MARK_PAID`** - Mark sent/overdue invoices as paid
+- **`INVOICES.UNMARK_PAID`** - Revert paid invoices back to sent status
+- **`INVOICES.EXPORT_PDF`** - Export invoices as PDF documents
+
 ### Reports
 - **`REPORTS.VIEW`** - View reports and analytics
 - **`REPORTS.EXPORT`** - Export reports and data
@@ -510,6 +521,60 @@ const result = await hasPermission("user123", {
 console.log("Permission result:", result);
 ```
 
+## Invoice Status Workflow
+
+### Status Transitions
+The invoice system enforces a specific workflow for status transitions:
+
+```
+DRAFT → SENT → PAID
+       ↓     ↗
+    OVERDUE ↗
+```
+
+#### Status-Specific Permissions and Actions
+
+**DRAFT Status:**
+- **Available Actions**: Edit items, mark as sent, delete invoice, export PDF
+- **Required Permissions**: `INVOICES.EDIT_ITEMS`, `INVOICES.MARK_SENT`, `INVOICES.DELETE`, `INVOICES.EXPORT_PDF`
+- **Restrictions**: Full editing capabilities, can add/remove time entries and addons
+
+**SENT Status:**
+- **Available Actions**: Mark as paid, export PDF
+- **Required Permissions**: `INVOICES.MARK_PAID`, `INVOICES.EXPORT_PDF`
+- **Restrictions**: Cannot edit items or invoice details, cannot delete
+
+**PAID Status:**
+- **Available Actions**: Unmark as paid (revert to sent), export PDF
+- **Required Permissions**: `INVOICES.UNMARK_PAID`, `INVOICES.EXPORT_PDF`
+- **Restrictions**: View-only except for status changes
+
+**OVERDUE Status:**
+- **Available Actions**: Mark as paid, export PDF
+- **Required Permissions**: `INVOICES.MARK_PAID`, `INVOICES.EXPORT_PDF`
+- **Restrictions**: Similar to SENT status
+
+### Invoice Item Management
+
+#### Adding Items to Invoices
+- **Permission Required**: `INVOICES.EDIT_ITEMS`
+- **Status Restriction**: Only DRAFT invoices
+- **Scope**: Account-based (can only add items from same account)
+- **Data Sources**: 
+  - Unbilled, approved time entries
+  - Unbilled ticket addons
+
+#### Removing Items from Invoices
+- **Permission Required**: `INVOICES.EDIT_ITEMS`
+- **Status Restriction**: Only DRAFT invoices
+- **Automatic Recalculation**: Invoice totals update automatically
+
+### PDF Export System
+- **Permission Required**: `INVOICES.EXPORT_PDF`
+- **Available for**: All invoice statuses
+- **Format**: Professional PDF with company branding
+- **Content**: Invoice details, line items, totals, and notes
+
 ## Security Considerations
 
 ### 1. Server-Side Validation
@@ -526,6 +591,9 @@ Be aware of how role-based default permissions interact with explicitly granted 
 
 ### 5. Scope Security
 Ensure scope restrictions are properly enforced in database queries.
+
+### 6. Invoice Status Integrity
+Status transitions are validated on both client and server side to prevent invalid state changes.
 
 ---
 

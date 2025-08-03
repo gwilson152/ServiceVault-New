@@ -1,6 +1,6 @@
 "use client";
 
-import { useSession, signOut } from "next-auth/react";
+import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, use } from "react";
 import { useInvoicePermissions } from "@/hooks/usePermissions";
@@ -8,9 +8,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
-  ArrowLeft,
-  Settings,
-  LogOut,
   FileText,
   Download,
   Edit,
@@ -20,9 +17,16 @@ import {
   DollarSign,
   Clock,
   X,
-  Trash2
+  Trash2,
+  Check,
+  Send,
+  Undo,
+  Plus
 } from "lucide-react";
 import { formatMinutes } from "@/lib/time-utils";
+import { useActionBar } from "@/components/providers/ActionBarProvider";
+import { AddTimeEntriesDialog } from "@/components/invoices/AddTimeEntriesDialog";
+import { AddAddonsDialog } from "@/components/invoices/AddAddonsDialog";
 
 interface Invoice {
   id: string;
@@ -82,7 +86,10 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editMode, setEditMode] = useState(false);
+  const [showAddTimeEntries, setShowAddTimeEntries] = useState(false);
+  const [showAddAddons, setShowAddAddons] = useState(false);
   const resolvedParams = use(params);
+  const { addAction, clearActions } = useActionBar();
 
   // Permission hooks
   const {
@@ -90,6 +97,11 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     canEdit,
     canEditItems,
     canDelete,
+    canMarkSent,
+    canMarkPaid,
+    canUnmarkPaid,
+    canExportPDF,
+    canAddItems,
     isEditable,
     getStatusReason
   } = useInvoicePermissions(invoice ? {
@@ -118,7 +130,87 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
       };
       checkViewPermission();
     }
-  }, [invoice, session?.user, canView]);
+  }, [invoice?.id, session?.user?.id]);
+
+  // Setup ActionBar with invoice-specific actions
+  useEffect(() => {
+    const setupActions = async () => {
+      if (!invoice) return;
+
+      clearActions();
+
+      // Always add PDF export if user has permission
+      if (await canExportPDF()) {
+        addAction({
+          id: "export-pdf",
+          label: "Export PDF",
+          icon: <Download className="h-4 w-4" />,
+          onClick: handleExportPDF,
+          variant: "outline"
+        });
+      }
+
+      // Status-specific actions
+      if (invoice.status === 'DRAFT') {
+        if (await canMarkSent()) {
+          addAction({
+            id: "mark-sent",
+            label: "Mark as Sent",
+            icon: <Send className="h-4 w-4" />,
+            onClick: () => handleStatusChange('SENT'),
+            variant: "default"
+          });
+        }
+
+        if (await canEdit()) {
+          addAction({
+            id: "edit-invoice",
+            label: editMode ? "Done Editing" : "Edit Invoice",
+            icon: <Edit className="h-4 w-4" />,
+            onClick: handleEditToggle,
+            variant: "outline"
+          });
+        }
+
+        if (await canDelete()) {
+          addAction({
+            id: "delete-invoice",
+            label: "Delete",
+            icon: <Trash2 className="h-4 w-4" />,
+            onClick: handleDeleteInvoice,
+            variant: "destructive"
+          });
+        }
+      } else if (invoice.status === 'SENT' || invoice.status === 'OVERDUE') {
+        if (await canMarkPaid()) {
+          addAction({
+            id: "mark-paid",
+            label: "Mark as Paid",
+            icon: <Check className="h-4 w-4" />,
+            onClick: () => handleStatusChange('PAID'),
+            variant: "default"
+          });
+        }
+      } else if (invoice.status === 'PAID') {
+        if (await canUnmarkPaid()) {
+          addAction({
+            id: "unmark-paid",
+            label: "Unmark as Paid",
+            icon: <Undo className="h-4 w-4" />,
+            onClick: () => handleStatusChange('SENT'),
+            variant: "outline"
+          });
+        }
+      }
+    };
+
+    setupActions();
+
+    // Cleanup on unmount
+    return () => {
+      clearActions();
+    };
+  }, [invoice?.id, invoice?.status, editMode, addAction, clearActions]);
 
   const fetchInvoice = async () => {
     try {
@@ -174,6 +266,77 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     setEditMode(!editMode);
   };
 
+  const handleStatusChange = async (newStatus: string) => {
+    if (!invoice) return;
+
+    try {
+      const response = await fetch(`/api/invoices/${invoice.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: newStatus }),
+      });
+
+      if (response.ok) {
+        await fetchInvoice(); // Refresh invoice data
+      } else {
+        const errorData = await response.json();
+        setError("Failed to update invoice status: " + errorData.error);
+      }
+    } catch (err) {
+      console.error('Failed to update status:', err);
+      setError("Failed to update invoice status");
+    }
+  };
+
+  const handleDeleteInvoice = async () => {
+    if (!invoice || !confirm(`Are you sure you want to delete invoice ${invoice.invoiceNumber}? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/invoices/${invoice.id}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        router.push('/billing');
+      } else {
+        const errorData = await response.json();
+        setError("Failed to delete invoice: " + errorData.error);
+      }
+    } catch (err) {
+      console.error('Failed to delete invoice:', err);
+      setError("Failed to delete invoice");
+    }
+  };
+
+  const handleExportPDF = async () => {
+    if (!invoice) return;
+
+    try {
+      const response = await fetch(`/api/invoices/${invoice.id}/pdf`);
+      
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `invoice-${invoice.invoiceNumber}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      } else {
+        setError("Failed to generate PDF");
+      }
+    } catch (err) {
+      console.error('Failed to export PDF:', err);
+      setError("Failed to export PDF");
+    }
+  };
+
   if (status === "loading" || isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -188,61 +351,17 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
 
   if (error) {
     return (
-      <div className="min-h-screen bg-background">
-        <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-          <div className="flex h-16 items-center px-4 max-w-7xl mx-auto">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => router.push("/billing")}
-              className="mr-2"
-            >
-              <ArrowLeft className="h-4 w-4" />
+      <div className="p-6">
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center">
+            <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <h3 className="text-lg font-semibold mb-2">Invoice Error</h3>
+            <p className="text-muted-foreground mb-4">{error}</p>
+            <Button onClick={() => router.push("/billing")}>
+              Back to Billing
             </Button>
-            
-            <div className="flex items-center space-x-2">
-              <FileText className="h-6 w-6" />
-              <h1 className="text-xl font-semibold">Invoice Details</h1>
-            </div>
-
-            <div className="ml-auto flex items-center space-x-4">
-              <span className="text-sm text-muted-foreground">
-                {session.user?.name || session.user?.email}
-              </span>
-              <Badge variant="secondary">{session.user?.role}</Badge>
-              
-              <Button 
-                variant="ghost" 
-                size="icon"
-                onClick={() => router.push("/settings")}
-              >
-                <Settings className="h-4 w-4" />
-              </Button>
-              
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => signOut()}
-              >
-                <LogOut className="h-4 w-4" />
-              </Button>
-            </div>
           </div>
-        </header>
-
-        <main className="max-w-7xl mx-auto p-6">
-          <div className="flex items-center justify-center py-12">
-            <div className="text-center">
-              <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-lg font-semibold mb-2">Invoice Not Found</h3>
-              <p className="text-muted-foreground mb-4">{error}</p>
-              <Button onClick={() => router.push("/billing")}>
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Back to Billing
-              </Button>
-            </div>
-          </div>
-        </main>
+        </div>
       </div>
     );
   }
@@ -261,71 +380,22 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     }
   };
 
+  const getStatusDescription = (status: string): string => {
+    switch (status) {
+      case "DRAFT": return "Draft - Can be edited and deleted";
+      case "SENT": return "Sent - Awaiting payment";
+      case "PAID": return "Paid - Invoice completed";
+      case "OVERDUE": return "Overdue - Payment is past due";
+      default: return "Unknown status";
+    }
+  };
+
   // Group items by type
   const timeEntryItems = invoice.items.filter(item => item.timeEntry);
   const addonItems = invoice.items.filter(item => item.ticketAddon);
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="flex h-16 items-center px-4 max-w-7xl mx-auto">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => router.push("/billing")}
-            className="mr-2"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          
-          <div className="flex items-center space-x-2">
-            <FileText className="h-6 w-6" />
-            <h1 className="text-xl font-semibold">Invoice {invoice.invoiceNumber}</h1>
-          </div>
-
-          <div className="ml-auto flex items-center space-x-4">
-            <Button variant="outline" size="sm">
-              <Download className="mr-2 h-4 w-4" />
-              Download PDF
-            </Button>
-            
-            {isEditable() && (
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={handleEditToggle}
-              >
-                <Edit className="mr-2 h-4 w-4" />
-                {editMode ? 'Done Editing' : 'Edit Invoice'}
-              </Button>
-            )}
-            
-            <span className="text-sm text-muted-foreground">
-              {session.user?.name || session.user?.email}
-            </span>
-            <Badge variant="secondary">{session.user?.role}</Badge>
-            
-            <Button 
-              variant="ghost" 
-              size="icon"
-              onClick={() => router.push("/settings")}
-            >
-              <Settings className="h-4 w-4" />
-            </Button>
-            
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => signOut()}
-            >
-              <LogOut className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      </header>
-
-      <main className="max-w-7xl mx-auto p-6">
+    <div className="p-6">
         <div className="space-y-6">
           {/* Invoice Header */}
           <Card>
@@ -334,12 +404,14 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                 <div>
                   <CardTitle className="text-2xl">Invoice {invoice.invoiceNumber}</CardTitle>
                   <CardDescription>
-                    Invoice details and line items
+                    {getStatusDescription(invoice.status)}
                   </CardDescription>
                 </div>
-                <Badge variant={getStatusColor(invoice.status)} className="text-sm">
-                  {invoice.status}
-                </Badge>
+                <div className="flex items-center gap-2">
+                  <Badge variant={getStatusColor(invoice.status)} className="text-sm">
+                    {invoice.status}
+                  </Badge>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
@@ -409,82 +481,119 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
           </Card>
 
           {/* Time Entry Items */}
-          {timeEntryItems.length > 0 && (
+          {(timeEntryItems.length > 0 || editMode) && (
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Clock className="h-5 w-5" />
-                  Time Entries ({timeEntryItems.length})
-                </CardTitle>
-                <CardDescription>
-                  Billable time entries included in this invoice
-                </CardDescription>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <Clock className="h-5 w-5" />
+                      Time Entries ({timeEntryItems.length})
+                    </CardTitle>
+                    <CardDescription>
+                      Billable time entries included in this invoice
+                    </CardDescription>
+                  </div>
+                  {editMode && (
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => setShowAddTimeEntries(true)}
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Time Entries
+                    </Button>
+                  )}
+                </div>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3">
-                  {timeEntryItems.map((item) => (
-                    <div key={item.id} className="flex items-center justify-between p-4 border rounded-lg">
-                      <div className="flex-1 space-y-1">
+                {timeEntryItems.length > 0 ? (
+                  <div className="space-y-3">
+                    {timeEntryItems.map((item) => (
+                      <div key={item.id} className="flex items-center justify-between p-4 border rounded-lg">
+                        <div className="flex-1 space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{item.timeEntry?.user.name}</span>
+                            <Badge variant="outline" className="text-xs">
+                              {formatMinutes(item.timeEntry?.minutes || 0)}
+                            </Badge>
+                            <Badge variant="secondary" className="text-xs">
+                              ${item.rate}/hr
+                            </Badge>
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            {item.description}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {item.timeEntry?.ticket ? (
+                              `Ticket ${item.timeEntry.ticket.ticketNumber}: ${item.timeEntry.ticket.title}`
+                            ) : (
+                              'Direct account time'
+                            )} • {item.timeEntry?.date ? new Date(item.timeEntry.date).toLocaleDateString() : ''}
+                          </div>
+                        </div>
                         <div className="flex items-center gap-2">
-                          <span className="font-medium">{item.timeEntry?.user.name}</span>
-                          <Badge variant="outline" className="text-xs">
-                            {formatMinutes(item.timeEntry?.minutes || 0)}
-                          </Badge>
-                          <Badge variant="secondary" className="text-xs">
-                            ${item.rate}/hr
-                          </Badge>
-                        </div>
-                        <div className="text-sm text-muted-foreground">
-                          {item.description}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {item.timeEntry?.ticket ? (
-                            `Ticket ${item.timeEntry.ticket.ticketNumber}: ${item.timeEntry.ticket.title}`
-                          ) : (
-                            'Direct account time'
-                          )} • {item.timeEntry?.date ? new Date(item.timeEntry.date).toLocaleDateString() : ''}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {editMode && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleRemoveItem(item.id)}
-                            className="text-red-600 hover:text-red-700"
-                            title="Remove this item"
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        )}
-                        <div className="text-right">
-                          <div className="font-medium">
-                            ${item.amount.toFixed(2)}
+                          {editMode && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleRemoveItem(item.id)}
+                              className="text-red-600 hover:text-red-700"
+                              title="Remove this item"
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          )}
+                          <div className="text-right">
+                            <div className="font-medium">
+                              ${item.amount.toFixed(2)}
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Clock className="mx-auto h-12 w-12 mb-4" />
+                    <p>No time entries on this invoice yet.</p>
+                    {editMode && <p className="text-sm mt-2">Click "Add Time Entries" to include billable time.</p>}
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
 
           {/* Addon Items */}
-          {addonItems.length > 0 && (
+          {(addonItems.length > 0 || editMode) && (
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <FileText className="h-5 w-5" />
-                  Ticket Addons ({addonItems.length})
-                </CardTitle>
-                <CardDescription>
-                  Additional items and parts included in this invoice
-                </CardDescription>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <FileText className="h-5 w-5" />
+                      Ticket Addons ({addonItems.length})
+                    </CardTitle>
+                    <CardDescription>
+                      Additional items and parts included in this invoice
+                    </CardDescription>
+                  </div>
+                  {editMode && (
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => setShowAddAddons(true)}
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Addons
+                    </Button>
+                  )}
+                </div>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3">
-                  {addonItems.map((item) => (
+                {addonItems.length > 0 ? (
+                  <div className="space-y-3">
+                    {addonItems.map((item) => (
                     <div key={item.id} className="flex items-center justify-between p-4 border rounded-lg">
                       <div className="flex-1 space-y-1">
                         <div className="flex items-center gap-2">
@@ -523,7 +632,14 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                       </div>
                     </div>
                   ))}
-                </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <FileText className="mx-auto h-12 w-12 mb-4" />
+                    <p>No addons on this invoice yet.</p>
+                    {editMode && <p className="text-sm mt-2">Click "Add Addons" to include ticket parts and extras.</p>}
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
@@ -553,7 +669,25 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
             </CardContent>
           </Card>
         </div>
-      </main>
+
+        {/* Dialogs */}
+        {invoice && (
+          <>
+            <AddTimeEntriesDialog
+              open={showAddTimeEntries}
+              onOpenChange={setShowAddTimeEntries}
+              invoiceId={invoice.id}
+              onSuccess={fetchInvoice}
+            />
+
+            <AddAddonsDialog
+              open={showAddAddons}
+              onOpenChange={setShowAddAddons}
+              invoiceId={invoice.id}
+              onSuccess={fetchInvoice}
+            />
+          </>
+        )}
     </div>
   );
 }

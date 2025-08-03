@@ -214,6 +214,26 @@ export const PERMISSIONS_REGISTRY = {
       resource: "invoices",
       action: "edit-items",
       description: "Edit invoice line items"
+    },
+    MARK_SENT: {
+      resource: "invoices",
+      action: "mark-sent",
+      description: "Mark invoices as sent"
+    },
+    MARK_PAID: {
+      resource: "invoices",
+      action: "mark-paid",
+      description: "Mark invoices as paid"
+    },
+    UNMARK_PAID: {
+      resource: "invoices",
+      action: "unmark-paid",
+      description: "Unmark invoices as paid (revert to sent)"
+    },
+    EXPORT_PDF: {
+      resource: "invoices",
+      action: "export-pdf",
+      description: "Export invoices as PDF"
     }
   },
   SETTINGS: {
@@ -322,7 +342,13 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     PERMISSIONS_REGISTRY.INVOICES.VIEW,
     PERMISSIONS_REGISTRY.INVOICES.CREATE,
     PERMISSIONS_REGISTRY.INVOICES.UPDATE,
-    PERMISSIONS_REGISTRY.INVOICES.EDIT_ITEMS
+    PERMISSIONS_REGISTRY.INVOICES.EDIT_ITEMS,
+    PERMISSIONS_REGISTRY.INVOICES.MARK_SENT,
+    PERMISSIONS_REGISTRY.INVOICES.MARK_PAID,
+    PERMISSIONS_REGISTRY.INVOICES.UNMARK_PAID,
+    PERMISSIONS_REGISTRY.INVOICES.EXPORT_PDF,
+    PERMISSIONS_REGISTRY.SETTINGS.VIEW,
+    PERMISSIONS_REGISTRY.SETTINGS.UPDATE
   ],
   ACCOUNT_USER: [
     // Account users have limited permissions
@@ -345,7 +371,8 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     PERMISSIONS_REGISTRY.USERS.RESEND_INVITATION,
     PERMISSIONS_REGISTRY.TIME_ENTRIES.VIEW,
     PERMISSIONS_REGISTRY.BILLING.VIEW,
-    PERMISSIONS_REGISTRY.INVOICES.VIEW
+    PERMISSIONS_REGISTRY.INVOICES.VIEW,
+    PERMISSIONS_REGISTRY.INVOICES.EXPORT_PDF
   ],
   SUBSIDIARY_MANAGER: [
     // Account manager permissions plus subsidiary access
@@ -365,7 +392,8 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     PERMISSIONS_REGISTRY.BILLING.VIEW,
     PERMISSIONS_REGISTRY.REPORTS.VIEW,
     PERMISSIONS_REGISTRY.INVOICES.VIEW,
-    PERMISSIONS_REGISTRY.INVOICES.CREATE
+    PERMISSIONS_REGISTRY.INVOICES.CREATE,
+    PERMISSIONS_REGISTRY.INVOICES.EXPORT_PDF
   ],
   ACCOUNT_VIEWER: [
     // Read-only access to account information
@@ -373,7 +401,8 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     PERMISSIONS_REGISTRY.ACCOUNTS.VIEW,
     PERMISSIONS_REGISTRY.TIME_ENTRIES.VIEW,
     PERMISSIONS_REGISTRY.BILLING.VIEW,
-    PERMISSIONS_REGISTRY.INVOICES.VIEW
+    PERMISSIONS_REGISTRY.INVOICES.VIEW,
+    PERMISSIONS_REGISTRY.INVOICES.EXPORT_PDF
   ]
 } as const;
 

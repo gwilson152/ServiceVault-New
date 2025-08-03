@@ -6,22 +6,25 @@ The Billing System (`/billing`) provides comprehensive invoice generation and bi
 
 ## Authentication & Authorization
 
-### Access Control
-- **Admin Only**: Only users with `ADMIN` role can access billing functionality
-- **Route Protection**: Automatic redirect for unauthorized users to dashboard
-- **Session Validation**: Continuous authentication state monitoring
+### ABAC Permission System
+The billing system now uses the comprehensive ABAC (Attribute-Based Access Control) system instead of simple role checks:
 
-### Role-Based Features
-- **Admins**: Full access to all billing features including invoice generation, rate management, and revenue tracking
-- **Employees**: No direct access to billing system (handled through time tracking)
-- **Customers**: No access to billing administration
+- **Permission-Based Access**: Uses `BILLING.VIEW`, `BILLING.CREATE`, `BILLING.UPDATE`, `BILLING.DELETE` permissions
+- **Account Scoping**: Permissions can be scoped to specific accounts or subsidiaries
+- **Role Templates**: Default permissions assigned based on user roles
+- **Dynamic Permissions**: Permissions can be granted/revoked individually
 
-```typescript
-const role = session.user?.role;
-if (role !== "ADMIN") {
-  router.push("/dashboard");
-}
-```
+### Permission Requirements
+- **View Billing**: `BILLING.VIEW` permission required
+- **Create Rates**: `BILLING.CREATE` permission required  
+- **Modify Rates**: `BILLING.UPDATE` permission required
+- **Delete Rates**: `BILLING.DELETE` permission required
+- **Invoice Access**: `INVOICES.VIEW` permission for invoice list integration
+
+### Role-Based Defaults
+- **ADMIN**: All billing permissions with global scope
+- **EMPLOYEE**: Billing view, create, update, and delete permissions
+- **Account Users**: No billing access by default (can be granted per account)
 
 ## Architecture
 

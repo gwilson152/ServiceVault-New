@@ -8,10 +8,13 @@ Service Vault is a comprehensive time management and invoicing system built with
 
 - **Admin Dashboard**: Comprehensive management interface with statistics and navigation
 - **Time Tracking System**: Real-time timer, manual entry, and comprehensive reporting
-- **Billing & Invoicing**: Automated invoice generation with billing rate management
+- **Advanced Invoicing**: Full invoice lifecycle management with status tracking, PDF export, and item management
+- **ABAC Permission System**: Attribute-Based Access Control with granular permissions and scope enforcement
 - **Customer Portal**: Self-service portal for ticket viewing and management
 - **Settings Management**: Modular configuration system with role-based access
-- **Role-Based Access Control**: Admin, Employee, and Customer roles with appropriate permissions
+- **Hierarchical Accounts**: Multi-level account structure with permission inheritance
+- **Email Integration**: Template-based email system with SMTP configuration
+- **Shared Navigation**: Consistent ActionBar system across all authenticated pages
 
 ## Technology Stack
 
@@ -41,31 +44,47 @@ Service Vault is a comprehensive time management and invoicing system built with
    - Manual time entry with form validation
    - Comprehensive time entry management and filtering
 
-4. **Billing System** (`/billing`)
+4. **Invoice Management** (`/invoices/[id]`)
+   - Complete invoice lifecycle management (DRAFT → SENT → PAID)
+   - Professional PDF export with automatic generation
+   - Dynamic item management (add/remove time entries and addons)
+   - Status-specific actions with ABAC permission enforcement
+   - ActionBar integration for consistent user experience
+
+5. **Billing System** (`/billing`)
    - Invoice generation from time entries and ticket addons
    - Billing rate management with customer overrides
    - Revenue tracking and payment monitoring
 
-5. **Customer Portal** (`/portal`)
+6. **Customer Portal** (`/portal`)
    - Customer-specific ticket viewing
    - Time visibility based on permissions
    - Self-service ticket creation (when permitted)
 
-6. **Settings Management** (`/settings`)
+7. **Settings Management** (`/settings`)
    - Modular configuration system
    - Billing rates, custom fields, and licensing
    - Change tracking with unsaved warnings
+
+8. **Permission System** (`/permissions`)
+   - ABAC (Attribute-Based Access Control) implementation
+   - Granular permission management with scope enforcement
+   - Role-based permission templates and inheritance
 
 ### Database Schema
 
 The application uses a comprehensive Prisma schema with the following key entities:
 
 - **Users**: Authentication and role management
-- **Customers**: Customer information with custom fields
-- **Tickets**: Support tickets with customizable fields
-- **TimeEntries**: Time tracking with billing integration
-- **Invoices**: Generated invoices with status tracking
-- **BillingRates**: System-wide and customer-specific rates
+- **Accounts**: Hierarchical customer accounts with custom fields
+- **AccountUsers**: Account-specific user management with status tracking
+- **Tickets**: Support tickets with dual assignment (staff + customer)
+- **TimeEntries**: Time tracking with approval workflow and billing integration
+- **Invoices**: Full lifecycle invoice management with status tracking
+- **InvoiceItems**: Line items linking time entries, addons, and custom items
+- **BillingRates**: System-wide and customer-specific rate management
+- **Permissions**: ABAC permission definitions and assignments
+- **Timer**: Persistent cross-device timer state management
 
 ## Documentation Structure
 
@@ -74,13 +93,21 @@ The application uses a comprehensive Prisma schema with the following key entiti
 - **[Dashboard](./pages/dashboard.md)**: Admin dashboard features and navigation
 - **[Time Tracking](./pages/time-tracking.md)**: Complete time management system
 - **[Billing](./pages/billing.md)**: Invoicing and billing rate management
+- **[Tickets](./pages/tickets.md)**: Ticket management with dual assignment system
 - **[Customer Portal](./pages/customer-portal.md)**: Customer-facing features
 - **[Settings](./pages/settings.md)**: Configuration management system
+- **[Permissions](./pages/permissions.md)**: ABAC permission system guide
 
 ### Technical Documentation
 
 - **[App Overview](./app-overview.md)**: Detailed workflow and system architecture
 - **[Database Schema](./database-schema.md)**: Complete database design and relationships
+- **[Permissions System](./permissions.md)**: ABAC implementation and usage guide
+- **[Timer System](./timer-system.md)**: Cross-device timer functionality
+- **[Hierarchical Accounts](./hierarchical-accounts.md)**: Multi-level account structure
+- **[Toast System](./toast-system.md)**: Application-wide notification system
+- **[ActionBar Components](./components/action-bar.md)**: Shared navigation system
+- **[Change Tracking](./change-tracking.md)**: Development history and changes
 - **[Development Todos](./todos.md)**: Implementation progress and future tasks
 
 ## Getting Started

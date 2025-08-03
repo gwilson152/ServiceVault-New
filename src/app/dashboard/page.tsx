@@ -1,13 +1,13 @@
 "use client";
 
-import { useSession, signOut } from "next-auth/react";
+import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Clock, Users, FileText, DollarSign, Plus, Settings, LogOut, Menu, Shield, Loader2, Timer } from "lucide-react";
+import { Clock, Users, FileText, DollarSign, Plus, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { RecentTimeEntries } from "@/components/dashboard/RecentTimeEntries";
 
@@ -40,7 +40,6 @@ interface ActivityItem {
 export default function Dashboard() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [stats, setStats] = useState<DashboardStats>({
     activeTickets: 0,
@@ -147,331 +146,207 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Navigation Header */}
-      <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="flex h-16 items-center px-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="md:hidden"
-            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          >
-            <Menu className="h-5 w-5" />
-          </Button>
-          
-          <div className="flex items-center space-x-2 ml-4 md:ml-0">
-            <h1 className="text-xl font-semibold">Service Vault</h1>
+    <div className="p-6">
+        <div className="space-y-6">
+          {/* Stats Cards */}
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            {statsCards.map((stat, index) => (
+              <Card key={index}>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">
+                    {stat.title}
+                  </CardTitle>
+                  <stat.icon className={`h-4 w-4 ${stat.color}`} />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    {isLoading ? (
+                      <Loader2 className="h-6 w-6 animate-spin" />
+                    ) : (
+                      stat.value
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {stat.description}
+                  </p>
+                </CardContent>
+              </Card>
+            ))}
           </div>
 
-          <div className="ml-auto flex items-center space-x-4">
-            <span className="text-sm text-muted-foreground">
-              Welcome, {session.user?.name || session.user?.email}
-            </span>
-            <Badge variant="secondary">{session.user?.role}</Badge>
-            
-            <Button 
-              variant="ghost" 
-              size="icon"
-              onClick={() => router.push("/settings")}
-            >
-              <Settings className="h-4 w-4" />
-            </Button>
-            
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => signOut()}
-            >
-              <LogOut className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      </header>
+          {/* Main Content Tabs */}
+          <Tabs defaultValue="overview" className="space-y-4">
+            <TabsList>
+              <TabsTrigger value="overview">Overview</TabsTrigger>
+              {isEmployee && (
+                <>
+                  <TabsTrigger value="tickets">Recent Tickets</TabsTrigger>
+                  <TabsTrigger value="time">Time Entries</TabsTrigger>
+                </>
+              )}
+            </TabsList>
 
-      <div className="flex">
-        {/* Sidebar */}
-        <aside className={`${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} fixed inset-y-0 left-0 z-50 w-64 border-r bg-background transition-transform duration-200 ease-in-out md:translate-x-0 md:static md:inset-0`}>
-          <div className="flex h-full flex-col">
-            <div className="p-6">
-              <nav className="space-y-2">
-                <Button variant="ghost" className="w-full justify-start">
-                  <FileText className="mr-2 h-4 w-4" />
-                  Overview
-                </Button>
-                {isEmployee && (
-                  <>
-                    <Button 
-                      variant="ghost" 
-                      className="w-full justify-start"
-                      onClick={() => router.push("/tickets")}
-                    >
-                      <FileText className="mr-2 h-4 w-4" />
-                      Tickets
-                    </Button>
-                    <Button 
-                      variant="ghost" 
-                      className="w-full justify-start"
-                      onClick={() => router.push("/time")}
-                    >
-                      <Clock className="mr-2 h-4 w-4" />
-                      Time Tracking
-                    </Button>
-                  </>
-                )}
-                {isAdmin && (
-                  <>
-                    <Button 
-                      variant="ghost" 
-                      className="w-full justify-start"
-                      onClick={() => router.push("/accounts")}
-                    >
-                      <Users className="mr-2 h-4 w-4" />
-                      Accounts
-                    </Button>
-                    <Button 
-                      variant="ghost" 
-                      className="w-full justify-start"
-                      onClick={() => router.push("/billing")}
-                    >
-                      <DollarSign className="mr-2 h-4 w-4" />
-                      Billing
-                    </Button>
-                    <Button 
-                      variant="ghost" 
-                      className="w-full justify-start"
-                      onClick={() => router.push("/reports")}
-                    >
-                      <FileText className="mr-2 h-4 w-4" />
-                      Reports
-                    </Button>
-                    <Button 
-                      variant="ghost" 
-                      className="w-full justify-start"
-                      onClick={() => router.push("/permissions")}
-                    >
-                      <Shield className="mr-2 h-4 w-4" />
-                      Permissions
-                    </Button>
-                    <Button 
-                      variant="ghost" 
-                      className="w-full justify-start"
-                      onClick={() => router.push("/settings")}
-                    >
-                      <Settings className="mr-2 h-4 w-4" />
-                      Settings
-                    </Button>
-                  </>
-                )}
-              </nav>
-            </div>
-          </div>
-        </aside>
-
-        {/* Main Content */}
-        <main className="flex-1 p-6">
-          <div className="space-y-6">
-            {/* Stats Cards */}
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              {statsCards.map((stat, index) => (
-                <Card key={index}>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">
-                      {stat.title}
-                    </CardTitle>
-                    <stat.icon className={`h-4 w-4 ${stat.color}`} />
+            <TabsContent value="overview" className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Recent Activity</CardTitle>
+                    <CardDescription>
+                      Latest updates and activities
+                    </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold">
-                      {isLoading ? (
+                    {isLoading ? (
+                      <div className="flex items-center justify-center py-8">
                         <Loader2 className="h-6 w-6 animate-spin" />
-                      ) : (
-                        stat.value
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      {stat.description}
-                    </p>
+                      </div>
+                    ) : recentActivity.length > 0 ? (
+                      <div className="space-y-4">
+                        {recentActivity.map((activity, index) => (
+                          <div key={index} className="flex items-center space-x-2">
+                            <div className={`w-2 h-2 ${getActivityIcon(activity.type)} rounded-full`}></div>
+                            <div className="flex-1">
+                              <span className="text-sm">{activity.message}</span>
+                              {activity.minutes && (
+                                <span className="text-xs text-muted-foreground ml-1">
+                                  ({activity.minutes}m)
+                                </span>
+                              )}
+                              <span className="text-xs text-muted-foreground ml-2">
+                                {format(new Date(activity.timestamp), 'MMM d, h:mm a')}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-muted-foreground">
+                        No recent activity
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
-              ))}
-            </div>
 
-            {/* Main Content Tabs */}
-            <Tabs defaultValue="overview" className="space-y-4">
-              <TabsList>
-                <TabsTrigger value="overview">Overview</TabsTrigger>
-                {isEmployee && (
-                  <>
-                    <TabsTrigger value="tickets">Recent Tickets</TabsTrigger>
-                    <TabsTrigger value="time">Time Entries</TabsTrigger>
-                  </>
-                )}
-              </TabsList>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Quick Actions</CardTitle>
+                    <CardDescription>
+                      Common tasks and shortcuts
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    {isEmployee && (
+                      <>
+                        <Button 
+                          className="w-full justify-start"
+                          onClick={() => router.push("/tickets/new")}
+                        >
+                          <Plus className="mr-2 h-4 w-4" />
+                          Create New Ticket
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          className="w-full justify-start"
+                          onClick={() => router.push("/time")}
+                        >
+                          <Clock className="mr-2 h-4 w-4" />
+                          Log Time Entry
+                        </Button>
+                      </>
+                    )}
+                    {isAdmin && (
+                      <>
+                        <Button 
+                          variant="outline" 
+                          className="w-full justify-start"
+                          onClick={() => router.push("/accounts/new")}
+                        >
+                          <Users className="mr-2 h-4 w-4" />
+                          Add New Account
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          className="w-full justify-start"
+                          onClick={() => router.push("/invoices/generate")}
+                        >
+                          <DollarSign className="mr-2 h-4 w-4" />
+                          Generate Invoice
+                        </Button>
+                      </>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            </TabsContent>
 
-              <TabsContent value="overview" className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Recent Activity</CardTitle>
-                      <CardDescription>
-                        Latest updates and activities
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      {isLoading ? (
-                        <div className="flex items-center justify-center py-8">
-                          <Loader2 className="h-6 w-6 animate-spin" />
-                        </div>
-                      ) : recentActivity.length > 0 ? (
-                        <div className="space-y-4">
-                          {recentActivity.map((activity, index) => (
-                            <div key={index} className="flex items-center space-x-2">
-                              <div className={`w-2 h-2 ${getActivityIcon(activity.type)} rounded-full`}></div>
-                              <div className="flex-1">
-                                <span className="text-sm">{activity.message}</span>
-                                {activity.minutes && (
-                                  <span className="text-xs text-muted-foreground ml-1">
-                                    ({activity.minutes}m)
-                                  </span>
-                                )}
-                                <span className="text-xs text-muted-foreground ml-2">
-                                  {format(new Date(activity.timestamp), 'MMM d, h:mm a')}
-                                </span>
+            {isEmployee && (
+              <TabsContent value="tickets" className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Recent Tickets</CardTitle>
+                    <CardDescription>
+                      Latest support tickets and their status
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {isLoading ? (
+                      <div className="flex items-center justify-center py-8">
+                        <Loader2 className="h-6 w-6 animate-spin" />
+                      </div>
+                    ) : recentTickets.length > 0 ? (
+                      <div className="space-y-4">
+                        {recentTickets.map((ticket) => (
+                          <div 
+                            key={ticket.id} 
+                            className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/50 cursor-pointer transition-colors"
+                            onClick={() => router.push(`/tickets/${ticket.id}`)}
+                          >
+                            <div className="space-y-1">
+                              <div className="flex items-center space-x-2">
+                                <span className="font-medium">{ticket.ticketNumber}</span>
+                                <Badge variant={
+                                  ticket.priority === "HIGH" ? "destructive" :
+                                  ticket.priority === "MEDIUM" ? "default" : "secondary"
+                                }>
+                                  {ticket.priority}
+                                </Badge>
                               </div>
+                              <p className="text-sm font-medium">{ticket.title}</p>
+                              <p className="text-sm text-muted-foreground">{ticket.accountName}</p>
                             </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="text-center py-8 text-muted-foreground">
-                          No recent activity
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Quick Actions</CardTitle>
-                      <CardDescription>
-                        Common tasks and shortcuts
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-2">
-                      {isEmployee && (
-                        <>
-                          <Button 
-                            className="w-full justify-start"
-                            onClick={() => router.push("/tickets/new")}
-                          >
-                            <Plus className="mr-2 h-4 w-4" />
-                            Create New Ticket
-                          </Button>
-                          <Button 
-                            variant="outline" 
-                            className="w-full justify-start"
-                            onClick={() => router.push("/time")}
-                          >
-                            <Clock className="mr-2 h-4 w-4" />
-                            Log Time Entry
-                          </Button>
-                        </>
-                      )}
-                      {isAdmin && (
-                        <>
-                          <Button 
-                            variant="outline" 
-                            className="w-full justify-start"
-                            onClick={() => router.push("/accounts/new")}
-                          >
-                            <Users className="mr-2 h-4 w-4" />
-                            Add New Account
-                          </Button>
-                          <Button 
-                            variant="outline" 
-                            className="w-full justify-start"
-                            onClick={() => router.push("/invoices/generate")}
-                          >
-                            <DollarSign className="mr-2 h-4 w-4" />
-                            Generate Invoice
-                          </Button>
-                        </>
-                      )}
-                    </CardContent>
-                  </Card>
-                </div>
+                            <div className="flex flex-col items-end gap-1">
+                              <Badge variant="outline">{ticket.status.replace('_', ' ')}</Badge>
+                              <span className="text-xs text-muted-foreground">{ticket.assigneeName}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8">
+                        <FileText className="mx-auto h-12 w-12 text-muted-foreground" />
+                        <h3 className="mt-2 text-sm font-semibold">No tickets yet</h3>
+                        <p className="text-sm text-muted-foreground">Create your first ticket to get started.</p>
+                        <Button 
+                          className="mt-4"
+                          onClick={() => router.push("/tickets/new")}
+                        >
+                          <Plus className="mr-2 h-4 w-4" />
+                          Create Ticket
+                        </Button>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
               </TabsContent>
+            )}
 
-              {isEmployee && (
-                <TabsContent value="tickets" className="space-y-4">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Recent Tickets</CardTitle>
-                      <CardDescription>
-                        Latest support tickets and their status
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      {isLoading ? (
-                        <div className="flex items-center justify-center py-8">
-                          <Loader2 className="h-6 w-6 animate-spin" />
-                        </div>
-                      ) : recentTickets.length > 0 ? (
-                        <div className="space-y-4">
-                          {recentTickets.map((ticket) => (
-                            <div 
-                              key={ticket.id} 
-                              className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/50 cursor-pointer transition-colors"
-                              onClick={() => router.push(`/tickets/${ticket.id}`)}
-                            >
-                              <div className="space-y-1">
-                                <div className="flex items-center space-x-2">
-                                  <span className="font-medium">{ticket.ticketNumber}</span>
-                                  <Badge variant={
-                                    ticket.priority === "HIGH" ? "destructive" :
-                                    ticket.priority === "MEDIUM" ? "default" : "secondary"
-                                  }>
-                                    {ticket.priority}
-                                  </Badge>
-                                </div>
-                                <p className="text-sm font-medium">{ticket.title}</p>
-                                <p className="text-sm text-muted-foreground">{ticket.accountName}</p>
-                              </div>
-                              <div className="flex flex-col items-end gap-1">
-                                <Badge variant="outline">{ticket.status.replace('_', ' ')}</Badge>
-                                <span className="text-xs text-muted-foreground">{ticket.assigneeName}</span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="text-center py-8">
-                          <FileText className="mx-auto h-12 w-12 text-muted-foreground" />
-                          <h3 className="mt-2 text-sm font-semibold">No tickets yet</h3>
-                          <p className="text-sm text-muted-foreground">Create your first ticket to get started.</p>
-                          <Button 
-                            className="mt-4"
-                            onClick={() => router.push("/tickets/new")}
-                          >
-                            <Plus className="mr-2 h-4 w-4" />
-                            Create Ticket
-                          </Button>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                </TabsContent>
-              )}
-
-              {isEmployee && (
-                <TabsContent value="time" className="space-y-4">
-                  <RecentTimeEntries userId={session.user?.id} limit={10} />
-                </TabsContent>
-              )}
-            </Tabs>
-          </div>
-        </main>
-      </div>
+            {isEmployee && (
+              <TabsContent value="time" className="space-y-4">
+                <RecentTimeEntries userId={session.user?.id} limit={10} />
+              </TabsContent>
+            )}
+          </Tabs>
+        </div>
     </div>
   );
 }
