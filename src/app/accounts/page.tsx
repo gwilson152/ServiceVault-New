@@ -2,7 +2,7 @@
 
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -51,7 +51,7 @@ export default function AccountsPage() {
     }
   };
 
-  const fetchAccounts = async () => {
+  const fetchAccounts = useCallback(async () => {
     try {
       const params = new URLSearchParams({
         page: currentPage.toString(),
@@ -79,7 +79,7 @@ export default function AccountsPage() {
       console.error('Error fetching accounts:', error);
       setAccounts([]);
     }
-  };
+  }, [currentPage, searchTerm, accountTypeFilter]);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -93,13 +93,14 @@ export default function AccountsPage() {
         fetchAccounts();
       }
     }
-  }, [status, session, router]);
+  }, [status, session, router, fetchAccounts]);
 
+  // Trigger fetchAccounts when filters change (handled by useCallback dependencies)
   useEffect(() => {
     if (!isLoading) {
       fetchAccounts();
     }
-  }, [searchTerm, accountTypeFilter, currentPage, isLoading]);
+  }, [fetchAccounts, isLoading]);
 
   // Setup action bar
   useEffect(() => {

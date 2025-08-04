@@ -14,7 +14,7 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const ticketId = params.id;
+    const { id: ticketId } = await params;
 
     // First verify the ticket exists and user has access to it
     const ticket = await prisma.ticket.findUnique({

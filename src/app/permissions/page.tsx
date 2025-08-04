@@ -735,15 +735,17 @@ export default function PermissionsPage() {
 
           {/* Main Content Tabs */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-            <TabsList className="grid w-full grid-cols-7">
-              <TabsTrigger value="system">System Permissions</TabsTrigger>
-              <TabsTrigger value="roles">Role Templates</TabsTrigger>
-              <TabsTrigger value="assignments">Role Assignments</TabsTrigger>
-              <TabsTrigger value="account-roles">Account Roles</TabsTrigger>
-              <TabsTrigger value="users">User Permissions</TabsTrigger>
-              <TabsTrigger value="account">Account Permissions</TabsTrigger>
-              <TabsTrigger value="create">Create Permission</TabsTrigger>
-            </TabsList>
+            <div className="w-full overflow-x-auto pb-2">
+              <TabsList className="inline-flex h-10 items-center justify-start rounded-md bg-muted p-1 text-muted-foreground w-max min-w-full">
+                <TabsTrigger value="system" className="whitespace-nowrap">System Permissions</TabsTrigger>
+                <TabsTrigger value="roles" className="whitespace-nowrap">Role Templates</TabsTrigger>
+                <TabsTrigger value="assignments" className="whitespace-nowrap">Role Assignments</TabsTrigger>
+                <TabsTrigger value="account-roles" className="whitespace-nowrap">Account Roles</TabsTrigger>
+                <TabsTrigger value="users" className="whitespace-nowrap">User Permissions</TabsTrigger>
+                <TabsTrigger value="account" className="whitespace-nowrap">Account Permissions</TabsTrigger>
+                <TabsTrigger value="create" className="whitespace-nowrap">Create Permission</TabsTrigger>
+              </TabsList>
+            </div>
 
             {/* System Permissions Tab */}
             <TabsContent value="system" className="space-y-4">

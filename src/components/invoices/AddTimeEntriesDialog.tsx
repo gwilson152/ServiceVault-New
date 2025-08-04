@@ -32,7 +32,7 @@ interface TimeEntry {
   billingRate: {
     id: string;
     name: string;
-    hourlyRate: number;
+    rate: number;
   };
   estimatedAmount: number;
 }
@@ -256,7 +256,7 @@ export function AddTimeEntriesDialog({
                             </div>
                             <div className="flex items-center gap-1">
                               <DollarSign className="h-3 w-3" />
-                              {entry.billingRate.name} (${entry.billingRate.hourlyRate || 0}/hr)
+                              {entry.billingRate.name} (${entry.billingRate.rate || 0}/hr)
                             </div>
                           </div>
                         </div>

@@ -32,7 +32,7 @@ This is a **time management and invoicing system** built with Next.js 15, Prisma
 
 ## Development Commands
 
-- `npm run dev` - Start development server - Do not attempt to launch. This will be done manually, and the server is generally running with HMR already.
+- `npm run dev` - Start development server - **NEVER START THIS COMMAND**. User will always start it manually, and the server is generally running with HMR already.
 - `npm run build` - Build for production
 - `npm run start` - Start production server
 - `npm run lint` - Run ESLint
@@ -67,6 +67,11 @@ This is a **time management and invoicing system** built with Next.js 15, Prisma
       AccountTreeView.tsx         # Tree-style hierarchical account display
       AccountHierarchyCard.tsx    # Enhanced cards with hierarchy indicators
       AccountViewToggle.tsx       # Grid/Tree view switcher
+  /hooks
+    useUserPreferences.ts    # User preferences management hook
+    usePermissions.ts        # ABAC permission checking hooks
+    useTimeEntryPermissions.ts # Time entry specific permissions
+    useInvoicePermissions.ts   # Invoice-specific permission hooks
   /lib
     /licensing          # Licensing platform integration
   /utils
@@ -144,6 +149,17 @@ This is a **time management and invoicing system** built with Next.js 15, Prisma
 - ABAC (Attribute-Based Access Control) for time entry editing
 - Enhanced permission checks for time tracking operations
 - License tier may restrict certain features
+- Invoice status management with granular permissions
+- Date field editing permissions for invoices
+
+### User Preferences System
+
+- Database-backed user preferences with JSON storage
+- Persistent filter settings across sessions
+- Type-safe preference management with TypeScript
+- Debounced auto-save to reduce API overhead
+- Extensible system for adding new preference types
+- User-specific defaults with fallback handling
 
 ### Timer System
 
@@ -183,6 +199,9 @@ This is a **time management and invoicing system** built with Next.js 15, Prisma
 - Use Prisma transactions for complex operations
 - Index JSONB fields for custom field performance
 - Document UI patterns for maintainability
+- Implement debounced API calls for user preferences (500ms)
+- Use proper useEffect dependency management to prevent infinite re-renders
+- Leverage TypeScript for type-safe preference and permission systems
 
 ### UI Component Guidelines
 
@@ -213,5 +232,31 @@ This is a **time management and invoicing system** built with Next.js 15, Prisma
 
 - Create page-specific docs if appropriate in /docs/pages/{pageName.md}
 - Create/update/refactor /docs/change-tracking.md as changes are implemented
-- **Timer System**: Comprehensive documentation at `/docs/timer-system.md` covering usage, API, and integration patterns
-- **Hierarchical Accounts**: Complete system documentation at `/docs/hierarchical-accounts.md`
+
+**Core System Documentation:**
+- **Timer System**: `/docs/timer-system.md` - Timer usage, API, and integration patterns
+- **Hierarchical Accounts**: `/docs/hierarchical-accounts.md` - Account hierarchy system
+- **Permissions**: `/docs/permissions.md` - Permission system architecture
+- **Database Schema**: `/docs/database-schema.md` - Database structure and relationships
+- **User Preferences**: `/docs/user-preferences.md` - User preference management system
+- **Toast System**: `/docs/toast-system.md` - Notification system implementation
+- **Setup Wizard**: `/docs/setup-wizard.md` - Initial system setup process
+
+**Page-Specific Documentation:**
+- **Dashboard**: `/docs/pages/dashboard.md`
+- **Time Tracking**: `/docs/pages/time-tracking.md` & `/docs/pages/time.md`
+- **Invoices**: `/docs/pages/invoices.md`
+- **Billing**: `/docs/pages/billing.md`
+- **Tickets**: `/docs/pages/tickets.md`
+- **Settings**: `/docs/pages/settings.md`
+- **Customer Portal**: `/docs/pages/customer-portal.md`
+- **Permissions**: `/docs/pages/permissions.md`
+- **Licensing**: `/docs/pages/licensing.md`
+
+**Component Documentation:**
+- **Action Bar**: `/docs/components/action-bar.md`
+
+**Development Documentation:**
+- **App Overview**: `/docs/app-overview.md` - High-level application structure
+- **Change Tracking**: `/docs/change-tracking.md` - Recent changes and modifications
+- **TODOs**: `/docs/todos.md` - Outstanding tasks and improvements

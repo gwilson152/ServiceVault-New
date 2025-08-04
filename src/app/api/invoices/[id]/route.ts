@@ -107,24 +107,49 @@ export async function PUT(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // Only allow editing DRAFT invoices
-    if (invoiceForAuth.status !== 'DRAFT') {
+    const body = await request.json();
+    const { status, description, notes, issueDate, dueDate } = body;
+
+    // For date updates, check specific permission
+    if ((issueDate !== undefined || dueDate !== undefined)) {
+      const canUpdateDates = await hasPermission(session.user.id, {
+        resource: "invoices",
+        action: "update-dates",
+        accountId: invoiceForAuth.accountId
+      });
+
+      if (!canUpdateDates) {
+        return NextResponse.json({ 
+          error: "You don't have permission to update invoice dates" 
+        }, { status: 403 });
+      }
+    }
+
+    // For status, description, and notes updates, check if invoice is DRAFT
+    if ((status !== undefined || description !== undefined || notes !== undefined) && invoiceForAuth.status !== 'DRAFT') {
       return NextResponse.json({ 
         error: `Cannot modify invoice with status ${invoiceForAuth.status}` 
       }, { status: 400 });
     }
 
-    const body = await request.json();
-    const { status, description, notes } = body;
+    // Prepare update data
+    const updateData: any = {
+      updatedAt: new Date(),
+    };
+    
+    if (status !== undefined) updateData.status = status;
+    if (description !== undefined) updateData.description = description;
+    if (notes !== undefined) updateData.notes = notes;
+    if (issueDate !== undefined) {
+      updateData.issueDate = issueDate ? new Date(issueDate) : undefined;
+    }
+    if (dueDate !== undefined) {
+      updateData.dueDate = dueDate ? new Date(dueDate) : null;
+    }
 
     const invoice = await prisma.invoice.update({
       where: { id: resolvedParams.id },
-      data: {
-        status: status || undefined,
-        description: description !== undefined ? description : undefined,
-        notes: notes !== undefined ? notes : undefined,
-        updatedAt: new Date(),
-      },
+      data: updateData,
       include: {
         account: true,
         items: {

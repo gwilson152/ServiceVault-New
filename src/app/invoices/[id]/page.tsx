@@ -2,7 +2,7 @@
 
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, use } from "react";
+import { useEffect, useState, use, useCallback } from "react";
 import { useInvoicePermissions } from "@/hooks/usePermissions";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -27,12 +27,14 @@ import { formatMinutes } from "@/lib/time-utils";
 import { useActionBar } from "@/components/providers/ActionBarProvider";
 import { AddTimeEntriesDialog } from "@/components/invoices/AddTimeEntriesDialog";
 import { AddAddonsDialog } from "@/components/invoices/AddAddonsDialog";
+import { InvoiceDateField } from "@/components/invoices/InvoiceDateField";
 
 interface Invoice {
   id: string;
   invoiceNumber: string;
   status: string;
   createdAt: string;
+  issueDate: string;
   dueDate?: string;
   subtotal: number;
   tax: number;
@@ -88,28 +90,26 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   const [editMode, setEditMode] = useState(false);
   const [showAddTimeEntries, setShowAddTimeEntries] = useState(false);
   const [showAddAddons, setShowAddAddons] = useState(false);
+  const [canUpdateInvoiceDates, setCanUpdateInvoiceDates] = useState(false);
+  const [permissions, setPermissions] = useState({
+    canView: false,
+    canEdit: false,
+    canEditItems: false,
+    canDelete: false,
+    canMarkSent: false,
+    canMarkPaid: false,
+    canUnmarkPaid: false,
+    canExportPDF: false,
+    canAddItems: false,
+    canUpdateDates: false,
+    isEditable: false,
+    statusReason: null
+  });
   const resolvedParams = use(params);
   const { addAction, clearActions } = useActionBar();
 
-  // Permission hooks
-  const {
-    canView,
-    canEdit,
-    canEditItems,
-    canDelete,
-    canMarkSent,
-    canMarkPaid,
-    canUnmarkPaid,
-    canExportPDF,
-    canAddItems,
-    isEditable,
-    getStatusReason
-  } = useInvoicePermissions(invoice ? {
-    id: invoice.id,
-    status: invoice.status,
-    accountId: invoice.account.id,
-    creatorId: invoice.creator.id
-  } : undefined);
+  // Use base permissions hook for batch checking
+  const { hasPermission, checkPermissions } = usePermissions();
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -117,102 +117,162 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     } else if (status === "authenticated") {
       fetchInvoice();
     }
-  }, [status, session, router, resolvedParams.id]);
+  }, [status, session, router, resolvedParams.id, fetchInvoice]);
 
-  // Check view permissions after invoice is loaded
+  // Check all permissions after invoice is loaded
   useEffect(() => {
-    if (invoice && session?.user) {
-      const checkViewPermission = async () => {
-        const hasViewPermission = await canView();
-        if (!hasViewPermission) {
+    if (!invoice || !session?.user) return;
+    
+    const checkAllPermissions = async () => {
+      try {
+        // Define all permission checks we need
+        const permissionsToCheck = [
+          // Base permissions
+          { resource: 'invoices', action: 'view', accountId: invoice.account.id },
+          { resource: 'invoices', action: 'update', accountId: invoice.account.id },
+          { resource: 'invoices', action: 'edit-items', accountId: invoice.account.id },
+          { resource: 'invoices', action: 'delete', accountId: invoice.account.id },
+          { resource: 'invoices', action: 'mark-sent', accountId: invoice.account.id },
+          { resource: 'invoices', action: 'mark-paid', accountId: invoice.account.id },
+          { resource: 'invoices', action: 'unmark-paid', accountId: invoice.account.id },
+          { resource: 'invoices', action: 'export-pdf', accountId: invoice.account.id },
+          { resource: 'invoices', action: 'update-dates', accountId: invoice.account.id },
+          
+          // Scope-based permissions for view
+          { resource: 'invoices', action: 'view', scope: 'subsidiary', accountId: invoice.account.id },
+          { resource: 'invoices', action: 'view', scope: 'account', accountId: invoice.account.id },
+          { resource: 'invoices', action: 'view', scope: 'own', accountId: invoice.account.id },
+          
+          // Scope-based permissions for update
+          { resource: 'invoices', action: 'update', scope: 'subsidiary', accountId: invoice.account.id },
+          { resource: 'invoices', action: 'update', scope: 'account', accountId: invoice.account.id },
+          { resource: 'invoices', action: 'update', scope: 'own', accountId: invoice.account.id },
+        ];
+        
+        // Batch check all permissions
+        const results = await checkPermissions(permissionsToCheck);
+        
+        // Process results to determine final permissions
+        const canView = results['invoices:view:default'] || 
+                       results['invoices:view:subsidiary:' + invoice.account.id] ||
+                       results['invoices:view:account:' + invoice.account.id] ||
+                       (results['invoices:view:own:' + invoice.account.id] && invoice.creator.id === session?.user?.id);
+        
+        if (!canView) {
           setError("You don't have permission to view this invoice");
+          return;
         }
-      };
-      checkViewPermission();
-    }
-  }, [invoice?.id, session?.user?.id]);
+        
+        const canEdit = invoice.status === 'DRAFT' && (
+          results['invoices:update:subsidiary:' + invoice.account.id] ||
+          results['invoices:update:account:' + invoice.account.id] ||
+          (results['invoices:update:own:' + invoice.account.id] && invoice.creator.id === session?.user?.id)
+        );
+        
+        const canUpdateDates = results['invoices:update-dates:default'] || false;
+        
+        // Update all permissions at once
+        setPermissions({
+          canView,
+          canEdit,
+          canEditItems: canEdit, // Same logic as edit for items
+          canDelete: invoice.status === 'DRAFT' && canEdit,
+          canMarkSent: invoice.status === 'DRAFT' && canEdit,
+          canMarkPaid: (invoice.status === 'SENT' || invoice.status === 'OVERDUE') && canEdit,
+          canUnmarkPaid: invoice.status === 'PAID' && canEdit,
+          canExportPDF: canView, // If can view, can export
+          canAddItems: canEdit,
+          canUpdateDates,
+          isEditable: invoice.status === 'DRAFT',
+          statusReason: invoice.status !== 'DRAFT' ? `This invoice is ${invoice.status.toLowerCase()} and cannot be modified.` : null
+        });
+        
+        setCanUpdateInvoiceDates(canUpdateDates);
+      } catch (err) {
+        console.error('Permission checks failed:', err);
+      }
+    };
+    
+    checkAllPermissions();
+  }, [invoice?.id, invoice?.status, invoice?.creator?.id, invoice?.account?.id, session?.user?.id, checkPermissions]);
 
-  // Setup ActionBar with invoice-specific actions
+  // Setup ActionBar with invoice-specific actions using cached permissions
   useEffect(() => {
-    const setupActions = async () => {
-      if (!invoice) return;
+    if (!invoice || !session?.user) return;
 
-      clearActions();
+    clearActions();
 
-      // Always add PDF export if user has permission
-      if (await canExportPDF()) {
+    // Always add PDF export if user has permission
+    if (permissions.canExportPDF) {
+      addAction({
+        id: "export-pdf",
+        label: "Export PDF",
+        icon: <Download className="h-4 w-4" />,
+        onClick: handleExportPDF,
+        variant: "outline"
+      });
+    }
+
+    // Status-specific actions
+    if (invoice.status === 'DRAFT') {
+      if (permissions.canMarkSent) {
         addAction({
-          id: "export-pdf",
-          label: "Export PDF",
-          icon: <Download className="h-4 w-4" />,
-          onClick: handleExportPDF,
+          id: "mark-sent",
+          label: "Mark as Sent",
+          icon: <Send className="h-4 w-4" />,
+          onClick: () => handleStatusChange('SENT'),
+          variant: "default"
+        });
+      }
+
+      if (permissions.canEdit) {
+        addAction({
+          id: "edit-invoice",
+          label: editMode ? "Done Editing" : "Edit Invoice",
+          icon: <Edit className="h-4 w-4" />,
+          onClick: handleEditToggle,
           variant: "outline"
         });
       }
 
-      // Status-specific actions
-      if (invoice.status === 'DRAFT') {
-        if (await canMarkSent()) {
-          addAction({
-            id: "mark-sent",
-            label: "Mark as Sent",
-            icon: <Send className="h-4 w-4" />,
-            onClick: () => handleStatusChange('SENT'),
-            variant: "default"
-          });
-        }
-
-        if (await canEdit()) {
-          addAction({
-            id: "edit-invoice",
-            label: editMode ? "Done Editing" : "Edit Invoice",
-            icon: <Edit className="h-4 w-4" />,
-            onClick: handleEditToggle,
-            variant: "outline"
-          });
-        }
-
-        if (await canDelete()) {
-          addAction({
-            id: "delete-invoice",
-            label: "Delete",
-            icon: <Trash2 className="h-4 w-4" />,
-            onClick: handleDeleteInvoice,
-            variant: "destructive"
-          });
-        }
-      } else if (invoice.status === 'SENT' || invoice.status === 'OVERDUE') {
-        if (await canMarkPaid()) {
-          addAction({
-            id: "mark-paid",
-            label: "Mark as Paid",
-            icon: <Check className="h-4 w-4" />,
-            onClick: () => handleStatusChange('PAID'),
-            variant: "default"
-          });
-        }
-      } else if (invoice.status === 'PAID') {
-        if (await canUnmarkPaid()) {
-          addAction({
-            id: "unmark-paid",
-            label: "Unmark as Paid",
-            icon: <Undo className="h-4 w-4" />,
-            onClick: () => handleStatusChange('SENT'),
-            variant: "outline"
-          });
-        }
+      if (permissions.canDelete) {
+        addAction({
+          id: "delete-invoice",
+          label: "Delete",
+          icon: <Trash2 className="h-4 w-4" />,
+          onClick: handleDeleteInvoice,
+          variant: "destructive"
+        });
       }
-    };
+    } else if (invoice.status === 'SENT' || invoice.status === 'OVERDUE') {
+      if (permissions.canMarkPaid) {
+        addAction({
+          id: "mark-paid",
+          label: "Mark as Paid",
+          icon: <Check className="h-4 w-4" />,
+          onClick: () => handleStatusChange('PAID'),
+          variant: "default"
+        });
+      }
+    } else if (invoice.status === 'PAID') {
+      if (permissions.canUnmarkPaid) {
+        addAction({
+          id: "unmark-paid",
+          label: "Unmark as Paid",
+          icon: <Undo className="h-4 w-4" />,
+          onClick: () => handleStatusChange('SENT'),
+          variant: "outline"
+        });
+      }
+    }
 
-    setupActions();
-
-    // Cleanup on unmount
+    // Cleanup on unmount  
     return () => {
       clearActions();
     };
-  }, [invoice?.id, invoice?.status, editMode, addAction, clearActions]);
+  }, [invoice?.id, invoice?.status, editMode, session?.user?.id, permissions, addAction, clearActions, handleExportPDF, handleStatusChange, handleEditToggle, handleDeleteInvoice]);
 
-  const fetchInvoice = async () => {
+  const fetchInvoice = useCallback(async () => {
     try {
       const response = await fetch(`/api/invoices/${resolvedParams.id}`);
       if (response.ok) {
@@ -229,9 +289,9 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [resolvedParams.id]);
 
-  const handleRemoveItem = async (itemId: string) => {
+  const handleRemoveItem = useCallback(async (itemId: string) => {
     if (!invoice || !confirm("Are you sure you want to remove this item from the invoice?")) {
       return;
     }
@@ -252,9 +312,9 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
       console.error('Failed to remove item:', err);
       setError("Failed to remove item");
     }
-  };
+  }, [invoice, fetchInvoice]);
 
-  const handleEditToggle = async () => {
+  const handleEditToggle = useCallback(async () => {
     if (!editMode) {
       // Check permission before enabling edit mode
       const hasEditPermission = await canEdit();
@@ -264,9 +324,36 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
       }
     }
     setEditMode(!editMode);
-  };
+  }, [editMode, canEdit]);
 
-  const handleStatusChange = async (newStatus: string) => {
+  const handleDateUpdate = useCallback(async (field: 'issueDate' | 'dueDate', newDate: string | null) => {
+    if (!invoice) return;
+
+    try {
+      const response = await fetch(`/api/invoices/${invoice.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          [field]: newDate
+        }),
+      });
+
+      if (response.ok) {
+        // Refresh invoice data
+        await fetchInvoice();
+      } else {
+        const errorData = await response.json();
+        setError(`Failed to update ${field}: ${errorData.error}`);
+      }
+    } catch (err) {
+      console.error(`Failed to update ${field}:`, err);
+      setError(`Failed to update ${field}`);
+    }
+  }, [invoice, fetchInvoice]);
+
+  const handleStatusChange = useCallback(async (newStatus: string) => {
     if (!invoice) return;
 
     try {
@@ -288,9 +375,9 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
       console.error('Failed to update status:', err);
       setError("Failed to update invoice status");
     }
-  };
+  }, [invoice, fetchInvoice]);
 
-  const handleDeleteInvoice = async () => {
+  const handleDeleteInvoice = useCallback(async () => {
     if (!invoice || !confirm(`Are you sure you want to delete invoice ${invoice.invoiceNumber}? This action cannot be undone.`)) {
       return;
     }
@@ -310,9 +397,9 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
       console.error('Failed to delete invoice:', err);
       setError("Failed to delete invoice");
     }
-  };
+  }, [invoice, router]);
 
-  const handleExportPDF = async () => {
+  const handleExportPDF = useCallback(async () => {
     if (!invoice) return;
 
     try {
@@ -335,7 +422,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
       console.error('Failed to export PDF:', err);
       setError("Failed to export PDF");
     }
-  };
+  }, [invoice]);
 
   if (status === "loading" || isLoading) {
     return (
@@ -415,7 +502,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
               </div>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 group">
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                     <Building2 className="h-4 w-4" />
@@ -427,9 +514,14 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                     <Calendar className="h-4 w-4" />
-                    Created
+                    Issue Date
                   </div>
-                  <div>{new Date(invoice.createdAt).toLocaleDateString()}</div>
+                  <InvoiceDateField
+                    value={invoice.issueDate}
+                    type="issue"
+                    canUpdate={canUpdateInvoiceDates}
+                    onUpdate={(newDate) => handleDateUpdate('issueDate', newDate)}
+                  />
                 </div>
                 
                 <div className="space-y-2">
@@ -438,6 +530,19 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                     Created By
                   </div>
                   <div>{invoice.creator.name}</div>
+                </div>
+                
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                    <Calendar className="h-4 w-4" />
+                    Due Date
+                  </div>
+                  <InvoiceDateField
+                    value={invoice.dueDate}
+                    type="due"
+                    canUpdate={canUpdateInvoiceDates}
+                    onUpdate={(newDate) => handleDateUpdate('dueDate', newDate)}
+                  />
                 </div>
                 
                 <div className="space-y-2">
@@ -458,13 +563,13 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                 </div>
               )}
 
-              {!isEditable() && getStatusReason() && (
+              {!permissions.isEditable && permissions.statusReason && (
                 <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
                   <div className="flex items-center gap-2">
                     <FileText className="h-4 w-4 text-yellow-600" />
                     <h4 className="font-medium text-yellow-800">Editing Restricted</h4>
                   </div>
-                  <p className="text-sm text-yellow-700 mt-1">{getStatusReason()}</p>
+                  <p className="text-sm text-yellow-700 mt-1">{permissions.statusReason}</p>
                 </div>
               )}
 

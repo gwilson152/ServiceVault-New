@@ -2,7 +2,7 @@
 
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 
 import type { Account } from "@/components/selectors/account-selector";
 
@@ -105,7 +105,7 @@ export default function TicketsPage() {
   const canDeleteTickets = isAdmin;
 
   // Data fetching functions
-  const fetchTickets = async () => {
+  const fetchTickets = useCallback(async () => {
     try {
       const response = await fetch("/api/tickets");
       if (response.ok) {
@@ -115,9 +115,9 @@ export default function TicketsPage() {
     } catch (error) {
       console.error("Error fetching tickets:", error);
     }
-  };
+  }, []);
 
-  const fetchAccounts = async () => {
+  const fetchAccounts = useCallback(async () => {
     try {
       const response = await fetch("/api/accounts/all");
       if (response.ok) {
@@ -127,9 +127,9 @@ export default function TicketsPage() {
     } catch (error) {
       console.error("Error fetching accounts:", error);
     }
-  };
+  }, []);
 
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     try {
       const response = await fetch("/api/users/employees");
       if (response.ok) {
@@ -139,9 +139,9 @@ export default function TicketsPage() {
     } catch (error) {
       console.error("Error fetching users:", error);
     }
-  };
+  }, []);
 
-  const fetchCustomFields = async () => {
+  const fetchCustomFields = useCallback(async () => {
     try {
       const response = await fetch("/api/settings?category=SYSTEM");
       if (response.ok) {
@@ -155,7 +155,7 @@ export default function TicketsPage() {
     } catch (error) {
       console.error("Error fetching custom fields:", error);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -178,7 +178,7 @@ export default function TicketsPage() {
         router.push("/dashboard");
       }
     }
-  }, [status, session, router]);
+  }, [status, session, router, fetchTickets, fetchAccounts, fetchUsers, fetchCustomFields]);
 
   // Register for timer logged events to auto-refresh tickets
   useEffect(() => {
@@ -189,7 +189,7 @@ export default function TicketsPage() {
     });
 
     return unregisterCallback;
-  }, [registerTimerLoggedCallback]);
+  }, [registerTimerLoggedCallback, fetchTickets]);
 
   const handleCreateTicket = () => {
     setSelectedTicket(null);

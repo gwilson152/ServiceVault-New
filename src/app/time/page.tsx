@@ -1,6 +1,6 @@
 "use client";
 
-import { useSession, signOut } from "next-auth/react";
+import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useCallback } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -18,16 +18,14 @@ import { useTimeTracking } from "@/components/time/TimeTrackingProvider";
 import { TimeEntryEditDialog } from "@/components/time/TimeEntryEditDialog";
 import { TimeEntryApprovalWizard } from "@/components/time/TimeEntryApprovalWizard";
 import { TimeEntryCard } from "@/components/time/TimeEntryCard";
-import { usePermissions, useTimeEntryPermissions } from "@/hooks/usePermissions";
+import { usePermissions } from "@/hooks/usePermissions";
+import { useTimeEntryPermissions, useCanApproveTimeEntries } from "@/hooks/queries/useTimeEntryPermissions";
+import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { useActionBar } from "@/components/providers/ActionBarProvider";
-import { ActionBar } from "@/components/ui/ActionBar";
 import { formatMinutes } from "@/lib/time-utils";
 import { 
   Clock, 
   Plus, 
-  LogOut, 
-  Settings, 
-  ArrowLeft,
   Calendar,
   Timer,
   DollarSign,
@@ -38,8 +36,33 @@ import {
   Lock,
   AlertTriangle,
   CheckCircle2,
-  Users
+  Users,
+  Filter,
+  ChevronDown,
+  ChevronUp,
+  X
 } from "lucide-react";
+
+// Helper function to get start of week
+const getStartOfWeek = (date: Date, mondayFirst: boolean = true): Date => {
+  const startOfWeek = new Date(date);
+  const dayOfWeek = startOfWeek.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
+  
+  if (mondayFirst) {
+    // Calculate days to subtract to get to Monday
+    // If today is Monday (1), subtract 0 days
+    // If today is Tuesday (2), subtract 1 day
+    // If today is Sunday (0), subtract 6 days (go back to previous Monday)
+    const daysToSubtract = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    startOfWeek.setDate(startOfWeek.getDate() - daysToSubtract);
+  } else {
+    // Sunday-based week (JavaScript default)
+    startOfWeek.setDate(startOfWeek.getDate() - dayOfWeek);
+  }
+  
+  startOfWeek.setHours(0, 0, 0, 0); // Set to beginning of day
+  return startOfWeek;
+};
 
 export default function TimeTrackingPage() {
   const { data: session, status } = useSession();
@@ -51,11 +74,17 @@ export default function TimeTrackingPage() {
   const {
     canViewTimeEntries,
     canCreateTimeEntries,
-    canApproveTimeEntries,
     canViewBilling,
     canViewReports,
     isLoading: permissionsLoading
   } = usePermissions();
+  
+  // User preferences hook
+  const {
+    getTimePageFilters,
+    updateTimePageFilters,
+    isLoading: preferencesLoading
+  } = useUserPreferences();
   
   // Action bar management
   const { addAction, clearActions } = useActionBar();
@@ -93,6 +122,12 @@ export default function TimeTrackingPage() {
     totalTimeSpent?: number;
     timeEntriesCount?: number;
   }>>([]);
+  const [users, setUsers] = useState<Array<{
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+  }>>([]);
   const [timeEntries, setTimeEntries] = useState<Array<{
     id: string;
     ticketId?: string;
@@ -117,15 +152,27 @@ export default function TimeTrackingPage() {
     billableMinutes: number;
     billableAmount?: number;
   } | null>(null);
+  // Use TanStack Query-based permission checking to avoid infinite loops
+  const { permissions: timeEntryPermissions, isLoading: permissionsCheckLoading } = useTimeEntryPermissions(timeEntries);
+  const { canApprove: canApproveTimeEntriesValue, isLoading: approvalPermissionLoading } = useCanApproveTimeEntries();
 
   // Filter state
   const [filterPeriod, setFilterPeriod] = useState("week");
   const [filterTicket, setFilterTicket] = useState("all");
+  const [filterAccount, setFilterAccount] = useState("all");
+  const [filterUser, setFilterUser] = useState("all");
+  const [filterBillingStatus, setFilterBillingStatus] = useState("all"); // all/billable/non-billable
+  const [filterApprovalStatus, setFilterApprovalStatus] = useState("all"); // all/approved/pending
+  const [filterInvoiceStatus, setFilterInvoiceStatus] = useState("all"); // all/invoiced/not-invoiced
+  const [filterBillingRate, setFilterBillingRate] = useState("all");
+  const [filterDateStart, setFilterDateStart] = useState("");
+  const [filterDateEnd, setFilterDateEnd] = useState("");
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   
   // Permission-based visibility
   const [showBillingRates, setShowBillingRates] = useState(false);
 
-  const fetchAccounts = async () => {
+  const fetchAccounts = useCallback(async () => {
     try {
       const response = await fetch('/api/accounts?limit=100');
       if (response.ok) {
@@ -135,9 +182,9 @@ export default function TimeTrackingPage() {
     } catch (error) {
       console.error('Error fetching accounts:', error);
     }
-  };
+  }, []);
 
-  const fetchBillingRates = async () => {
+  const fetchBillingRates = useCallback(async () => {
     try {
       const response = await fetch('/api/billing/rates');
       if (response.ok) {
@@ -147,9 +194,9 @@ export default function TimeTrackingPage() {
     } catch (error) {
       console.error('Error fetching billing rates:', error);
     }
-  };
+  }, []);
 
-  const fetchTickets = async () => {
+  const fetchTickets = useCallback(async () => {
     try {
       const response = await fetch('/api/tickets?limit=100');
       if (response.ok) {
@@ -159,19 +206,25 @@ export default function TimeTrackingPage() {
     } catch (error) {
       console.error('Error fetching tickets:', error);
     }
-  };
+  }, []);
+
+  const fetchUsers = useCallback(async () => {
+    try {
+      const response = await fetch('/api/users');
+      if (response.ok) {
+        const data = await response.json();
+        setUsers(data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching users:', error);
+    }
+  }, []);
 
   const fetchTimeEntries = useCallback(async () => {
     try {
       const params = new URLSearchParams();
       
-      // Role-based filtering: EMPLOYEE users only see their own entries
-      if (session?.user?.role === 'EMPLOYEE') {
-        params.append('userId', session.user.id);
-      }
-      // ADMIN users see all entries (no userId filter)
-      
-      // Apply additional filters
+      // Apply filters - permission-based filtering is handled by the API
       if (filterTicket !== 'all') {
         params.append('ticketId', filterTicket);
       }
@@ -187,31 +240,56 @@ export default function TimeTrackingPage() {
         // Calculate statistics inline to avoid circular dependency
         const now = new Date();
         const today = now.toDateString();
-        const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay()));
+        // Calculate start of week (Monday-based for business context)
+        const startOfWeek = getStartOfWeek(now, true);
         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
         
         const todayMinutes = entries
-          .filter((entry: any) => new Date(entry.date).toDateString() === today)
+          .filter((entry: any) => {
+            const entryDate = new Date(entry.date);
+            return entryDate.toDateString() === today;
+          })
           .reduce((sum: number, entry: any) => sum + entry.minutes, 0);
         
+        // Use "Last 7 Days" for week statistics to be more intuitive
+        const sevenDaysAgo = new Date(now);
+        sevenDaysAgo.setDate(now.getDate() - 6); // 6 days ago + today = 7 days
+        sevenDaysAgo.setHours(0, 0, 0, 0);
+        
         const weekMinutes = entries
-          .filter((entry: any) => new Date(entry.date) >= startOfWeek)
+          .filter((entry: any) => {
+            const entryDate = new Date(entry.date);
+            entryDate.setHours(0, 0, 0, 0); // Normalize to start of day
+            return entryDate >= sevenDaysAgo;
+          })
           .reduce((sum: number, entry: any) => sum + entry.minutes, 0);
         
         const monthMinutes = entries
-          .filter((entry: any) => new Date(entry.date) >= startOfMonth)
+          .filter((entry: any) => {
+            const entryDate = new Date(entry.date);
+            entryDate.setHours(0, 0, 0, 0); // Normalize to start of day
+            return entryDate >= startOfMonth;
+          })
           .reduce((sum: number, entry: any) => sum + entry.minutes, 0);
         
         const billableEntries = entries.filter((entry: any) => !entry.noCharge);
         const billableMinutes = billableEntries
-          .filter((entry: any) => new Date(entry.date) >= startOfWeek)
+          .filter((entry: any) => {
+            const entryDate = new Date(entry.date);
+            entryDate.setHours(0, 0, 0, 0); // Normalize to start of day
+            return entryDate >= sevenDaysAgo;
+          })
           .reduce((sum: number, entry: any) => sum + entry.minutes, 0);
         
         // Calculate billable amount (only for ADMIN users)
         let billableAmount = undefined;
         if (session?.user?.role === 'ADMIN') {
           billableAmount = billableEntries
-            .filter((entry: any) => new Date(entry.date) >= startOfWeek)
+            .filter((entry: any) => {
+              const entryDate = new Date(entry.date);
+              entryDate.setHours(0, 0, 0, 0); // Normalize to start of day
+              return entryDate >= sevenDaysAgo;
+            })
             .reduce((sum: number, entry: any) => {
               const hours = entry.minutes / 60;
               const rate = entry.billingRateValue || 0;
@@ -226,6 +304,8 @@ export default function TimeTrackingPage() {
           billableMinutes,
           billableAmount
         });
+        
+        // Note: Batch permission check will be called separately to avoid circular dependency
       }
     } catch (error) {
       console.error('Error fetching time entries:', error);
@@ -233,11 +313,14 @@ export default function TimeTrackingPage() {
   }, [session?.user?.role, session?.user?.id, filterTicket]);
 
   // calculateStatistics function moved inline to fetchTimeEntries to avoid circular dependency
+  
+  // Permissions are now handled by useTimeEntryPermissions hook using TanStack Query
+  // This avoids the infinite loop caused by state updates in async functions
 
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/");
-    } else if (status === "authenticated" && !permissionsLoading) {
+    } else if (status === "authenticated" && !permissionsLoading && !preferencesLoading) {
       // Check if user has permission to view time entries
       const checkAccess = async () => {
         const hasAccess = await canViewTimeEntries();
@@ -247,16 +330,30 @@ export default function TimeTrackingPage() {
           return;
         }
         
-        console.log(`Access granted to /time page for user: ${session.user?.email}`);
+        // Access granted - continue with initialization
+        
+        // Restore user's saved filter preferences
+        const savedFilters = getTimePageFilters();
+        setFilterPeriod(savedFilters.filterPeriod);
+        setFilterTicket(savedFilters.filterTicket);
+        setFilterAccount(savedFilters.filterAccount);
+        setFilterUser(savedFilters.filterUser);
+        setFilterBillingStatus(savedFilters.filterBillingStatus);
+        setFilterApprovalStatus(savedFilters.filterApprovalStatus);
+        setFilterInvoiceStatus(savedFilters.filterInvoiceStatus);
+        setFilterBillingRate(savedFilters.filterBillingRate);
+        setFilterDateStart(savedFilters.filterDateStart);
+        setFilterDateEnd(savedFilters.filterDateEnd);
+        setShowAdvancedFilters(savedFilters.showAdvancedFilters);
+        
         setIsLoading(false);
         
         // Check billing permissions
         const billingPermission = await canViewBilling();
         setShowBillingRates(billingPermission);
         
-        // Setup action bar actions
-        const approvalPermission = await canApproveTimeEntries();
-        if (approvalPermission) {
+        // Setup action bar actions (use pre-fetched value)
+        if (canApproveTimeEntriesValue) {
           addAction({
             id: "approval-wizard",
             label: "Approval Wizard",
@@ -270,12 +367,13 @@ export default function TimeTrackingPage() {
         fetchAccounts();
         fetchBillingRates();
         fetchTickets();
+        fetchUsers();
         fetchTimeEntries();
       };
       
       checkAccess();
     }
-  }, [status, session?.user?.email, router, permissionsLoading]);
+  }, [status, session?.user?.email, router, permissionsLoading, preferencesLoading, canViewTimeEntries, canViewBilling, canApproveTimeEntriesValue, getTimePageFilters, updateTimePageFilters, addAction, fetchAccounts, fetchBillingRates, fetchTickets, fetchUsers, fetchTimeEntries]);
 
   // Cleanup actions when component unmounts
   useEffect(() => {
@@ -287,25 +385,181 @@ export default function TimeTrackingPage() {
   // Register for timer logged events to auto-refresh data
   useEffect(() => {
     const unregisterCallback = registerTimerLoggedCallback(() => {
-      console.log('Timer logged - refreshing time entries and statistics');
       fetchTimeEntries(); // Refresh time entries which will also recalculate statistics
     });
 
     return unregisterCallback;
   }, [registerTimerLoggedCallback, fetchTimeEntries]);
 
-  // Refresh time entries when filters change
+  // Refresh time entries when filters change (only for server-side filters)
   useEffect(() => {
     if (session?.user && !isLoading) {
       fetchTimeEntries();
     }
-  }, [filterTicket, session?.user, isLoading, fetchTimeEntries]);
+  }, [filterTicket, session?.user?.id, isLoading, fetchTimeEntries]);
+
+  // Handle custom date range and period filter interaction
+  useEffect(() => {
+    // If user sets custom dates, switch to custom period
+    if ((filterDateStart || filterDateEnd) && filterPeriod !== "custom") {
+      setFilterPeriod("custom");
+    }
+    // If user switches away from custom period, clear custom dates
+    else if (filterPeriod !== "custom" && (filterDateStart || filterDateEnd)) {
+      setFilterDateStart("");
+      setFilterDateEnd("");
+    }
+  }, [filterDateStart, filterDateEnd, filterPeriod]);
+
+  // Save filter preferences when they change (debounced)
+  useEffect(() => {
+    if (!isLoading && !preferencesLoading) {
+      const timeoutId = setTimeout(() => {
+        updateTimePageFilters({
+          filterPeriod,
+          filterTicket,
+          filterAccount,
+          filterUser,
+          filterBillingStatus,
+          filterApprovalStatus,
+          filterInvoiceStatus,
+          filterBillingRate,
+          filterDateStart,
+          filterDateEnd,
+          showAdvancedFilters
+        });
+      }, 500); // Debounce for 500ms to avoid too many API calls
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [
+    filterPeriod,
+    filterTicket,
+    filterAccount,
+    filterUser,
+    filterBillingStatus,
+    filterApprovalStatus,
+    filterInvoiceStatus,
+    filterBillingRate,
+    filterDateStart,
+    filterDateEnd,
+    showAdvancedFilters,
+    isLoading,
+    preferencesLoading,
+    updateTimePageFilters
+  ]);
+
+  // Handler functions - must be declared before early returns to maintain hooks order
+  const handleEditEntry = useCallback((entry: any) => {
+    setSelectedTimeEntry(entry);
+    setEditDialogOpen(true);
+  }, []);
+
+  const handleDeleteEntry = useCallback(async (entryId: string) => {
+    if (!confirm("Are you sure you want to delete this time entry? This action cannot be undone.")) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/time-entries/${entryId}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        fetchTimeEntries(); // Refresh the time entries list
+      } else {
+        alert("Failed to delete time entry");
+      }
+    } catch (error) {
+      console.error('Failed to delete time entry:', error);
+      alert("Failed to delete time entry");
+    }
+  }, [fetchTimeEntries]);
+
+  const handleOpenApprovalWizard = useCallback(() => {
+    // Use the pre-fetched permission value instead of async call
+    if (canApproveTimeEntriesValue) {
+      setApprovalWizardOpen(true);
+    } else {
+      alert("You don't have permission to approve time entries");
+    }
+  }, [canApproveTimeEntriesValue]);
+
+  const handleSubmitTimeEntry = useCallback(async () => {
+    // Validation
+    if (!minutes || !description.trim() || !date || !time) {
+      alert("Please fill in all required fields");
+      return;
+    }
+
+    if (entryType === "ticket" && !selectedTicket) {
+      alert("Please select a ticket");
+      return;
+    }
+
+    if (entryType === "account" && !selectedAccount) {
+      alert("Please select an account");
+      return;
+    }
+
+    const entryData = {
+      description: description.trim(),
+      minutes: parseInt(minutes),
+      date,
+      time,
+      noCharge,
+      billingRateId: selectedBillingRate !== "none" ? selectedBillingRate : null,
+      ...(entryType === "ticket" 
+        ? { ticketId: selectedTicket }
+        : { accountId: selectedAccount }
+      )
+    };
+
+    try {
+      const endpoint = entryType === "ticket" 
+        ? `/api/tickets/${selectedTicket}/time-entries`
+        : `/api/accounts/${selectedAccount}/time-entries`;
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(entryData),
+      });
+
+      if (response.ok) {
+        // Reset form
+        setSelectedTicket("");
+        setSelectedAccount("");
+        setMinutes("");
+        setDescription("");
+        setDate(new Date().toISOString().split('T')[0]);
+        setTime(new Date().toTimeString().slice(0, 5));
+        setNoCharge(false);
+        setSelectedBillingRate("none");
+        
+        // Refresh data
+        fetchTimeEntries();
+        setActiveTab("entries");
+      } else {
+        const errorData = await response.json();
+        alert(errorData.error || "Failed to create time entry");
+      }
+    } catch (error) {
+      console.error('Failed to submit time entry:', error);
+      alert("Failed to create time entry");
+    }
+  }, [
+    minutes, description, date, time, entryType, selectedTicket, selectedAccount,
+    noCharge, selectedBillingRate, fetchTimeEntries
+  ]);
 
   // Timer functions are now handled globally by MultiTimerWidget - removed from this page
 
 
-  // Show loading state while checking permissions
-  if (status === "loading" || isLoading || permissionsLoading) {
+  // Show loading state while checking permissions and preferences
+  if (status === "loading" || isLoading || permissionsLoading || preferencesLoading || permissionsCheckLoading || approvalPermissionLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-lg">Loading...</div>
@@ -330,174 +584,113 @@ export default function TimeTrackingPage() {
 
   // Timer functions removed - now handled by global MultiTimerWidget
 
-  const handleEditEntry = (entry: any) => {
-    setSelectedTimeEntry(entry);
-    setEditDialogOpen(true);
-  };
-
-  const handleDeleteEntry = async (entryId: string) => {
-    if (!confirm("Are you sure you want to delete this time entry? This action cannot be undone.")) {
-      return;
-    }
-
-    try {
-      const response = await fetch(`/api/time-entries/${entryId}`, {
-        method: 'DELETE',
-      });
-
-      if (response.ok) {
-        await fetchTimeEntries();
-      } else {
-        const errorData = await response.json();
-        alert("Failed to delete time entry: " + errorData.error);
-      }
-    } catch (error) {
-      console.error("Error deleting time entry:", error);
-      alert("Failed to delete time entry");
-    }
-  };
-
-  const handleOpenApprovalWizard = async () => {
-    const hasApprovalPermission = await canApproveTimeEntries();
-    if (hasApprovalPermission) {
-      setApprovalWizardOpen(true);
-    } else {
-      alert("You do not have permission to approve time entries.");
-    }
-  };
-
-  const handleSubmitTimeEntry = async () => {
-    // Validation
-    if (!minutes || !description.trim() || !date || !time) {
-      alert("Please fill in all required fields (minutes, description, date, and time)");
-      return;
-    }
-
-    if ((entryType === "ticket" && !selectedTicket) || (entryType === "account" && !selectedAccount)) {
-      alert("Please select a ticket or account");
-      return;
-    }
-
-    try {
-      const payload = {
-        ticketId: entryType === "ticket" ? selectedTicket : null,
-        accountId: entryType === "account" ? selectedAccount : null,
-        minutes: parseInt(minutes),
-        description,
-        date,
-        time,
-        noCharge,
-        billingRateId: selectedBillingRate === "none" ? null : selectedBillingRate
-      };
-
-      const response = await fetch('/api/time-entries', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (response.ok) {
-        // Reset form
-        setSelectedTicket("");
-        setSelectedAccount("");
-        setMinutes("");
-        setDescription("");
-        setDate(new Date().toISOString().split('T')[0]);
-        setTime(new Date().toTimeString().slice(0, 5));
-        setNoCharge(false);
-        setSelectedBillingRate("none");
-        
-        // Refresh data to show new entry
-        await fetchTimeEntries();
-        
-        console.log("Time entry created successfully");
-      } else {
-        const errorData = await response.json();
-        console.error("Failed to create time entry:", errorData.error);
-        alert("Failed to create time entry: " + errorData.error);
-      }
-    } catch (error) {
-      console.error("Error creating time entry:", error);
-      // Show error message (you could add a toast here)
-    }
-  };
 
   // Statistics are now calculated from real data in calculateStatistics()
 
   const filteredEntries = timeEntries.filter(entry => {
+    const entryDate = new Date(entry.date);
+    // Reset time to start of day for consistent date comparison
+    entryDate.setHours(0, 0, 0, 0);
+    const now = new Date();
+    
     // Apply ticket filter
     if (filterTicket !== "all" && entry.ticketId !== filterTicket) {
       return false;
     }
     
-    // Apply period filter (basic implementation)
-    const entryDate = new Date(entry.date);
-    const now = new Date();
-    
-    switch (filterPeriod) {
-      case "today":
-        return entryDate.toDateString() === now.toDateString();
-      case "week":
-        const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay()));
-        return entryDate >= startOfWeek;
-      case "month":
-        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-        return entryDate >= startOfMonth;
-      default:
-        return true;
+    // Apply account filter
+    if (filterAccount !== "all") {
+      const entryAccountId = entry.accountId || entry.ticket?.account?.id;
+      if (entryAccountId !== filterAccount) {
+        return false;
+      }
     }
+    
+    // Apply user filter
+    if (filterUser !== "all" && entry.userId !== filterUser) {
+      return false;
+    }
+    
+    // Apply billing status filter
+    if (filterBillingStatus !== "all") {
+      if (filterBillingStatus === "billable" && entry.noCharge) {
+        return false;
+      }
+      if (filterBillingStatus === "non-billable" && !entry.noCharge) {
+        return false;
+      }
+    }
+    
+    // Apply approval status filter
+    if (filterApprovalStatus !== "all") {
+      if (filterApprovalStatus === "approved" && !entry.isApproved) {
+        return false;
+      }
+      if (filterApprovalStatus === "pending" && entry.isApproved) {
+        return false;
+      }
+    }
+    
+    // Apply invoice status filter
+    if (filterInvoiceStatus !== "all") {
+      const isInvoiced = entry.invoiceItems && entry.invoiceItems.length > 0;
+      if (filterInvoiceStatus === "invoiced" && !isInvoiced) {
+        return false;
+      }
+      if (filterInvoiceStatus === "not-invoiced" && isInvoiced) {
+        return false;
+      }
+    }
+    
+    // Apply billing rate filter
+    if (filterBillingRate !== "all" && entry.billingRateName !== filterBillingRate) {
+      return false;
+    }
+    
+    // Apply custom date range filter
+    if (filterDateStart) {
+      const startDate = new Date(filterDateStart);
+      if (entryDate < startDate) {
+        return false;
+      }
+    }
+    if (filterDateEnd) {
+      const endDate = new Date(filterDateEnd);
+      endDate.setHours(23, 59, 59, 999); // Include the entire end date
+      if (entryDate > endDate) {
+        return false;
+      }
+    }
+    
+    // Apply period filter (only if no custom date range is set)
+    if (!filterDateStart && !filterDateEnd) {
+      switch (filterPeriod) {
+        case "today":
+          return entryDate.toDateString() === now.toDateString();
+        case "last7days":
+          // Last 7 days (rolling window)
+          const sevenDaysAgo = new Date(now);
+          sevenDaysAgo.setDate(now.getDate() - 6); // 6 days ago + today = 7 days
+          sevenDaysAgo.setHours(0, 0, 0, 0);
+          return entryDate >= sevenDaysAgo;
+        case "week":
+          // Calculate start of week (Monday-based for business context)
+          const startOfWeek = getStartOfWeek(now, true);
+          // Week filter: include entries from Monday onwards
+          return entryDate >= startOfWeek;
+        case "month":
+          const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+          return entryDate >= startOfMonth;
+        default:
+          return true;
+      }
+    }
+    
+    return true;
   });
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="flex h-16 items-center px-4 max-w-7xl mx-auto">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => router.push("/dashboard")}
-            className="mr-2"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          
-          <div className="flex items-center space-x-2">
-            <Clock className="h-6 w-6" />
-            <h1 className="text-xl font-semibold">Time Tracking</h1>
-          </div>
-
-          <div className="ml-auto flex items-center space-x-4">
-            {/* Action Bar */}
-            <ActionBar />
-            
-            <span className="text-sm text-muted-foreground">
-              {session.user?.name || session.user?.email}
-            </span>
-            <Badge variant="secondary">{session.user?.role}</Badge>
-            
-            <Button 
-              variant="ghost" 
-              size="icon"
-              onClick={() => router.push("/settings")}
-            >
-              <Settings className="h-4 w-4" />
-            </Button>
-            
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => signOut()}
-            >
-              <LogOut className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      </header>
-
-      <main className="max-w-7xl mx-auto p-6">
+    <div className="max-w-7xl mx-auto p-6">
         <div className="space-y-6">
           {/* Page Header */}
           <div className="space-y-2">
@@ -524,14 +717,14 @@ export default function TimeTrackingPage() {
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">This Week</CardTitle>
+                <CardTitle className="text-sm font-medium">Last 7 Days</CardTitle>
                 <Calendar className="h-4 w-4 text-green-600" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
                   {statistics ? formatMinutes(statistics.weekMinutes) : '-'}
                 </div>
-                <p className="text-xs text-muted-foreground">Time this week</p>
+                <p className="text-xs text-muted-foreground">Last 7 days</p>
               </CardContent>
             </Card>
 
@@ -560,7 +753,7 @@ export default function TimeTrackingPage() {
                   {statistics ? formatMinutes(statistics.billableMinutes) : '-'}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Billable this week
+                  Billable last 7 days
                 </p>
               </CardContent>
             </Card>
@@ -578,44 +771,300 @@ export default function TimeTrackingPage() {
               {/* Filters */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">Filter Time Entries</CardTitle>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <Filter className="h-5 w-5" />
+                      Filter Time Entries
+                    </CardTitle>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const defaultFilters = {
+                            filterPeriod: "last7days",
+                            filterTicket: "all",
+                            filterAccount: "all",
+                            filterUser: "all",
+                            filterBillingStatus: "all",
+                            filterApprovalStatus: "all",
+                            filterInvoiceStatus: "all",
+                            filterBillingRate: "all",
+                            filterDateStart: "",
+                            filterDateEnd: "",
+                            showAdvancedFilters: false
+                          };
+                          
+                          // Update state
+                          setFilterPeriod(defaultFilters.filterPeriod);
+                          setFilterTicket(defaultFilters.filterTicket);
+                          setFilterAccount(defaultFilters.filterAccount);
+                          setFilterUser(defaultFilters.filterUser);
+                          setFilterBillingStatus(defaultFilters.filterBillingStatus);
+                          setFilterApprovalStatus(defaultFilters.filterApprovalStatus);
+                          setFilterInvoiceStatus(defaultFilters.filterInvoiceStatus);
+                          setFilterBillingRate(defaultFilters.filterBillingRate);
+                          setFilterDateStart(defaultFilters.filterDateStart);
+                          setFilterDateEnd(defaultFilters.filterDateEnd);
+                          setShowAdvancedFilters(defaultFilters.showAdvancedFilters);
+                          
+                          // Save to preferences immediately
+                          updateTimePageFilters(defaultFilters);
+                        }}
+                        className="flex items-center gap-2"
+                      >
+                        <X className="h-4 w-4" />
+                        Clear All
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                        className="flex items-center gap-2"
+                      >
+                        Advanced Filters
+                        {showAdvancedFilters ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                  </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="flex flex-wrap gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="period-filter">Period</Label>
-                      <Select value={filterPeriod} onValueChange={setFilterPeriod}>
-                        <SelectTrigger className="w-[150px]">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="today">Today</SelectItem>
-                          <SelectItem value="week">This Week</SelectItem>
-                          <SelectItem value="month">This Month</SelectItem>
-                          <SelectItem value="all">All Time</SelectItem>
-                        </SelectContent>
-                      </Select>
+                  <div className="space-y-4">
+                    {/* Basic Filters - Always Visible */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="period-filter">Period</Label>
+                        <Select value={filterPeriod} onValueChange={setFilterPeriod}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="today">Today</SelectItem>
+                            <SelectItem value="last7days">Last 7 Days</SelectItem>
+                            <SelectItem value="week">This Week (Mon-Sun)</SelectItem>
+                            <SelectItem value="month">This Month</SelectItem>
+                            <SelectItem value="custom">Custom Range</SelectItem>
+                            <SelectItem value="all">All Time</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="billing-status-filter">Billing Status</Label>
+                        <Select value={filterBillingStatus} onValueChange={setFilterBillingStatus}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Entries</SelectItem>
+                            <SelectItem value="billable">Billable Only</SelectItem>
+                            <SelectItem value="non-billable">Non-Billable Only</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="approval-status-filter">Approval Status</Label>
+                        <Select value={filterApprovalStatus} onValueChange={setFilterApprovalStatus}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Entries</SelectItem>
+                            <SelectItem value="approved">Approved</SelectItem>
+                            <SelectItem value="pending">Pending Approval</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="invoice-status-filter">Invoice Status</Label>
+                        <Select value={filterInvoiceStatus} onValueChange={setFilterInvoiceStatus}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Entries</SelectItem>
+                            <SelectItem value="invoiced">Invoiced</SelectItem>
+                            <SelectItem value="not-invoiced">Not Invoiced</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="ticket-filter">Ticket</Label>
-                      <Select value={filterTicket} onValueChange={setFilterTicket}>
-                        <SelectTrigger className="w-[200px]">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All Tickets</SelectItem>
-                          {tickets.map(ticket => (
-                            <SelectItem key={ticket.id} value={ticket.id}>
-                              {ticket.ticketNumber} - {ticket.title}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    {/* Custom Date Range - Show when period is "custom" */}
+                    {filterPeriod === "custom" && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-muted rounded-lg">
+                        <div className="space-y-2">
+                          <Label htmlFor="date-start">Start Date</Label>
+                          <Input
+                            id="date-start"
+                            type="date"
+                            value={filterDateStart}
+                            onChange={(e) => setFilterDateStart(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="date-end">End Date</Label>
+                          <Input
+                            id="date-end"
+                            type="date"
+                            value={filterDateEnd}
+                            onChange={(e) => setFilterDateEnd(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Advanced Filters - Collapsible */}
+                    {showAdvancedFilters && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 p-4 bg-muted rounded-lg">
+                        <div className="space-y-2">
+                          <Label htmlFor="ticket-filter">Ticket</Label>
+                          <Select value={filterTicket} onValueChange={setFilterTicket}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="All Tickets" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">All Tickets</SelectItem>
+                              {tickets.map(ticket => (
+                                <SelectItem key={ticket.id} value={ticket.id}>
+                                  {ticket.ticketNumber} - {ticket.title.substring(0, 30)}{ticket.title.length > 30 ? '...' : ''}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="account-filter">Account</Label>
+                          <Select value={filterAccount} onValueChange={setFilterAccount}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="All Accounts" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">All Accounts</SelectItem>
+                              {accounts.map(account => (
+                                <SelectItem key={account.id} value={account.id}>
+                                  {account.name} ({account.accountType})
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="user-filter">User</Label>
+                          <Select value={filterUser} onValueChange={setFilterUser}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="All Users" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">All Users</SelectItem>
+                              {users.map(user => (
+                                <SelectItem key={user.id} value={user.id}>
+                                  {user.name} ({user.role})
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="billing-rate-filter">Billing Rate</Label>
+                          <Select value={filterBillingRate} onValueChange={setFilterBillingRate}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="All Rates" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">All Rates</SelectItem>
+                              {billingRates.map(rate => (
+                                <SelectItem key={rate.name} value={rate.name}>
+                                  {rate.name} - ${rate.rate}/hr
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Active Filters Summary */}
+                    {(filterBillingStatus !== "all" || filterApprovalStatus !== "all" || filterInvoiceStatus !== "all" || filterTicket !== "all" || filterAccount !== "all" || filterUser !== "all" || filterBillingRate !== "all" || filterDateStart || filterDateEnd) && (
+                      <div className="border-t pt-4">
+                        <Label className="text-sm font-medium mb-2 block">Active Filters:</Label>
+                        <div className="flex flex-wrap gap-2">
+                      {filterBillingStatus !== "all" && (
+                        <Badge variant="secondary" className="flex items-center gap-1">
+                          {filterBillingStatus === "billable" ? "Billable Only" : "Non-Billable Only"}
+                          <X className="h-3 w-3 cursor-pointer" onClick={() => setFilterBillingStatus("all")} />
+                        </Badge>
+                      )}
+                      {filterApprovalStatus !== "all" && (
+                        <Badge variant="secondary" className="flex items-center gap-1">
+                          {filterApprovalStatus === "approved" ? "Approved" : "Pending"}
+                          <X className="h-3 w-3 cursor-pointer" onClick={() => setFilterApprovalStatus("all")} />
+                        </Badge>
+                      )}
+                      {filterInvoiceStatus !== "all" && (
+                        <Badge variant="secondary" className="flex items-center gap-1">
+                          {filterInvoiceStatus === "invoiced" ? "Invoiced" : "Not Invoiced"}
+                          <X className="h-3 w-3 cursor-pointer" onClick={() => setFilterInvoiceStatus("all")} />
+                        </Badge>
+                      )}
+                      {filterTicket !== "all" && (
+                        <Badge variant="secondary" className="flex items-center gap-1">
+                          Ticket: {tickets.find(t => t.id === filterTicket)?.ticketNumber}
+                          <X className="h-3 w-3 cursor-pointer" onClick={() => setFilterTicket("all")} />
+                        </Badge>
+                      )}
+                      {filterAccount !== "all" && (
+                        <Badge variant="secondary" className="flex items-center gap-1">
+                          Account: {accounts.find(a => a.id === filterAccount)?.name}
+                          <X className="h-3 w-3 cursor-pointer" onClick={() => setFilterAccount("all")} />
+                        </Badge>
+                      )}
+                      {filterUser !== "all" && (
+                        <Badge variant="secondary" className="flex items-center gap-1">
+                          User: {users.find(u => u.id === filterUser)?.name}
+                          <X className="h-3 w-3 cursor-pointer" onClick={() => setFilterUser("all")} />
+                        </Badge>
+                      )}
+                      {filterBillingRate !== "all" && (
+                        <Badge variant="secondary" className="flex items-center gap-1">
+                          Rate: {filterBillingRate}
+                          <X className="h-3 w-3 cursor-pointer" onClick={() => setFilterBillingRate("all")} />
+                        </Badge>
+                      )}
+                      {(filterDateStart || filterDateEnd) && (
+                        <Badge variant="secondary" className="flex items-center gap-1">
+                          Custom Range: {filterDateStart || 'Start'} to {filterDateEnd || 'End'}
+                          <X className="h-3 w-3 cursor-pointer" onClick={() => { setFilterDateStart(""); setFilterDateEnd(""); setFilterPeriod("last7days"); }} />
+                        </Badge>
+                      )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
+
+              {/* Filter Results Summary */}
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-muted-foreground">
+                  Showing {filteredEntries.length} of {timeEntries.length} time entries
+                  {filteredEntries.length !== timeEntries.length && (
+                    <span className="ml-2 text-blue-600 font-medium">
+                      ({timeEntries.length - filteredEntries.length} filtered out)
+                    </span>
+                  )}
+                </div>
+                {filteredEntries.length > 0 && (
+                  <div className="text-sm text-muted-foreground">
+                    Total time: {formatMinutes(filteredEntries.reduce((sum, entry) => sum + entry.minutes, 0))}
+                  </div>
+                )}
+              </div>
 
               {/* Time Entries List */}
               <div className="space-y-4">
@@ -634,15 +1083,19 @@ export default function TimeTrackingPage() {
                     </CardContent>
                   </Card>
                 ) : (
-                  filteredEntries.map((entry) => (
-                    <TimeEntryCard
-                      key={entry.id}
-                      entry={entry}
-                      showBillingAmount={showBillingRates}
-                      onEdit={handleEditEntry}
-                      onDelete={handleDeleteEntry}
-                    />
-                  ))
+                  filteredEntries.map((entry) => {
+                    const permissions = timeEntryPermissions.get(entry.id) || { canEdit: false, canDelete: false };
+                    return (
+                      <TimeEntryCard
+                        key={entry.id}
+                        entry={entry}
+                        showBillingAmount={showBillingRates}
+                        permissions={permissions}
+                        onEdit={handleEditEntry}
+                        onDelete={handleDeleteEntry}
+                      />
+                    );
+                  })
                 )}
               </div>
 
@@ -864,7 +1317,6 @@ export default function TimeTrackingPage() {
 
           </Tabs>
         </div>
-      </main>
 
       {/* Dialogs */}
       <TimeEntryEditDialog

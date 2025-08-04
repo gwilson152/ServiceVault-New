@@ -234,6 +234,11 @@ export const PERMISSIONS_REGISTRY = {
       resource: "invoices",
       action: "export-pdf",
       description: "Export invoices as PDF"
+    },
+    UPDATE_DATES: {
+      resource: "invoices",
+      action: "update-dates",
+      description: "Update invoice issue date and due date"
     }
   },
   SETTINGS: {
@@ -347,6 +352,7 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     PERMISSIONS_REGISTRY.INVOICES.MARK_PAID,
     PERMISSIONS_REGISTRY.INVOICES.UNMARK_PAID,
     PERMISSIONS_REGISTRY.INVOICES.EXPORT_PDF,
+    PERMISSIONS_REGISTRY.INVOICES.UPDATE_DATES,
     PERMISSIONS_REGISTRY.SETTINGS.VIEW,
     PERMISSIONS_REGISTRY.SETTINGS.UPDATE
   ],

@@ -70,6 +70,7 @@ model User {
   password      String?
   role          Role      @default(ACCOUNT_USER)
   accountUserId String?   @unique
+  preferences   Json?     // User preferences (filters, UI settings, etc.)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 

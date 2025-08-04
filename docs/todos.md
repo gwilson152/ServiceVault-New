@@ -8,9 +8,11 @@ Service Vault is a comprehensive time management and invoicing system with all c
 
 ### ✅ Core System Architecture
 - **Authentication & Authorization**: NextAuth with role-based access control
-- **Database**: Prisma ORM with SQLite, comprehensive schema
+- **Database**: Prisma ORM with SQLite, comprehensive schema with user preferences
 - **UI Framework**: Next.js 15 with Shadcn/UI components
 - **Email System**: Complete email service with template management
+- **ABAC Permissions**: Attribute-Based Access Control with scope enforcement
+- **User Preferences**: Persistent user settings with JSON storage
 
 ### ✅ User Management
 - **Admin Dashboard**: Comprehensive admin interface
@@ -20,10 +22,16 @@ Service Vault is a comprehensive time management and invoicing system with all c
 - **Status Tracking**: Visual indicators for user invitation states
 
 ### ✅ Time Tracking & Billing
+- **Advanced Filtering**: 8 different filter types with smart combinations
+- **User Preferences**: Persistent filter settings with auto-save
 - **Timer System**: Cross-device synchronized timers
 - **Time Entries**: Manual entry with approval workflows
+- **Enhanced Statistics**: Real-time dashboard with Last 7 Days focus
+- **Date Logic**: Improved week calculations with Monday-first business weeks
 - **Billing Rates**: Account-specific rate overrides
 - **Invoicing**: Automated invoice generation with addons
+- **Status Management**: Invoice lifecycle with ABAC permissions
+- **Date Field Editing**: Inline editing for invoice dates with permissions
 
 ### ✅ Ticket Management
 - **Ticket System**: Full CRUD with custom fields

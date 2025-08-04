@@ -692,6 +692,47 @@ export function useInvoicePermissions(invoice?: {
     return await canEditItems();
   };
 
+  const canUpdateDates = async (): Promise<boolean> => {
+    if (!invoice || !session?.user) {
+      return false;
+    }
+
+    // Check base permission
+    const hasUpdateDatesPermission = await hasPermission({
+      resource: 'invoices',
+      action: 'update-dates',
+      accountId: invoice.accountId
+    });
+
+    if (!hasUpdateDatesPermission) {
+      return false;
+    }
+
+    // Check scope-based access
+    const canUpdateAll = await hasPermission({ 
+      resource: 'invoices', 
+      action: 'update-dates', 
+      scope: 'subsidiary',
+      accountId: invoice.accountId 
+    });
+    
+    const canUpdateAccount = await hasPermission({ 
+      resource: 'invoices', 
+      action: 'update-dates', 
+      scope: 'account',
+      accountId: invoice.accountId 
+    });
+    
+    const canUpdateOwn = await hasPermission({ 
+      resource: 'invoices', 
+      action: 'update-dates', 
+      scope: 'own',
+      accountId: invoice.accountId 
+    });
+
+    return canUpdateAll || canUpdateAccount || (canUpdateOwn && invoice.creatorId === session.user.id);
+  };
+
   return {
     canView,
     canEdit,
@@ -702,6 +743,7 @@ export function useInvoicePermissions(invoice?: {
     canUnmarkPaid,
     canExportPDF,
     canAddItems,
+    canUpdateDates,
     isEditable,
     getStatusReason,
   };

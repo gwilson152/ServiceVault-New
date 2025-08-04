@@ -14,8 +14,10 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const { id: ticketId } = await params;
+
     const ticket = await prisma.ticket.findUnique({
-      where: { id: params.id },
+      where: { id: ticketId },
       include: {
         account: true,
         assignee: true,
@@ -81,6 +83,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const { id: ticketId } = await params;
     const body = await request.json();
     const { 
       title, 
@@ -95,7 +98,7 @@ export async function PATCH(
 
     // Check if ticket exists and user has permission
     const existingTicket = await prisma.ticket.findUnique({
-      where: { id: params.id },
+      where: { id: ticketId },
       include: { account: true }
     });
 
@@ -177,7 +180,7 @@ export async function PATCH(
     if (customFields !== undefined) updateData.customFields = customFields;
 
     const ticket = await prisma.ticket.update({
-      where: { id: params.id },
+      where: { id: ticketId },
       data: {
         ...updateData,
         updatedAt: new Date(),
@@ -230,21 +233,23 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const { id: ticketId } = await params;
+
     // Start transaction to delete ticket and related data
     await prisma.$transaction(async (tx) => {
       // Delete time entries
       await tx.timeEntry.deleteMany({
-        where: { ticketId: params.id },
+        where: { ticketId: ticketId },
       });
 
       // Delete ticket addons
       await tx.ticketAddon.deleteMany({
-        where: { ticketId: params.id },
+        where: { ticketId: ticketId },
       });
 
       // Delete ticket
       await tx.ticket.delete({
-        where: { id: params.id },
+        where: { id: ticketId },
       });
     });
 

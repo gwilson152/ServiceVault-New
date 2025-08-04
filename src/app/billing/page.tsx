@@ -2,8 +2,18 @@
 
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useAllAccountsQuery } from "@/hooks/queries/useAccountsQuery";
+import { useBillingRatesQuery, useInvoicesQuery } from "@/hooks/queries/useBillingQuery";
+import { useCommonPermissionsQuery } from "@/hooks/queries/usePermissionsQuery";
+import { 
+  useGenerateInvoiceMutation, 
+  useCreateBillingRateMutation, 
+  useUpdateBillingRateMutation,
+  useDeleteBillingRateMutation,
+  useDeleteInvoiceMutation 
+} from "@/hooks/queries/useBillingMutations";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -36,7 +46,6 @@ import {
 export default function BillingPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("invoices");
 
   // Permission hooks
@@ -52,10 +61,14 @@ export default function BillingPage() {
     canDeleteBilling
   } = usePermissions();
 
-  // Real data state
-  const [accounts, setAccounts] = useState<AccountWithHierarchy[]>([]);
-  const [invoices, setInvoices] = useState<any[]>([]);
-  const [billingRates, setBillingRates] = useState<any[]>([]);
+  // TanStack Query hooks replace manual state management
+  const { data: accounts = [], isLoading: accountsLoading } = useAllAccountsQuery();
+  const { data: invoices = [], isLoading: invoicesLoading } = useInvoicesQuery();
+  const { data: billingRates = [], isLoading: billingRatesLoading } = useBillingRatesQuery();
+  const { data: commonPermissions = {}, isLoading: permissionsLoading } = useCommonPermissionsQuery();
+  
+  // Combined loading state from TanStack Query hooks
+  const isLoading = accountsLoading || invoicesLoading || billingRatesLoading || permissionsLoading;
   
   // Permission state
   const [permissions, setPermissions] = useState({
@@ -90,42 +103,12 @@ export default function BillingPage() {
   const { success, error } = useToast();
   const { addAction, clearActions } = useActionBar();
 
-  // Data fetching functions
-  const fetchAccounts = async () => {
-    try {
-      const response = await fetch('/api/accounts/all');
-      if (response.ok) {
-        const data = await response.json();
-        setAccounts(data || []);
-      }
-    } catch (err) {
-      console.error('Failed to fetch accounts:', err);
-    }
-  };
-
-  const fetchInvoices = async () => {
-    try {
-      const response = await fetch('/api/invoices');
-      if (response.ok) {
-        const data = await response.json();
-        setInvoices(data || []);
-      }
-    } catch (err) {
-      console.error('Failed to fetch invoices:', err);
-    }
-  };
-
-  const fetchBillingRates = async () => {
-    try {
-      const response = await fetch('/api/billing/rates');
-      if (response.ok) {
-        const data = await response.json();
-        setBillingRates(data || []);
-      }
-    } catch (err) {
-      console.error('Failed to fetch billing rates:', err);
-    }
-  };
+  // Mutation hooks for data modifications
+  const generateInvoiceMutation = useGenerateInvoiceMutation();
+  const createBillingRateMutation = useCreateBillingRateMutation();
+  const updateBillingRateMutation = useUpdateBillingRateMutation();
+  const deleteBillingRateMutation = useDeleteBillingRateMutation();
+  const deleteInvoiceMutation = useDeleteInvoiceMutation();
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -152,19 +135,12 @@ export default function BillingPage() {
           deleteBilling
         });
 
-        // Fetch initial data
-        Promise.all([
-          fetchAccounts(),
-          fetchInvoices(),
-          fetchBillingRates()
-        ]).finally(() => {
-          setIsLoading(false);
-        });
+        // Data fetching is now handled automatically by TanStack Query hooks
       };
 
       checkPermissions();
     }
-  }, [status, session, router]);
+  }, [status, session, router, canViewInvoices, canCreateInvoices, canUpdateInvoices, canDeleteInvoices, canViewBilling, canCreateBilling, canUpdateBilling, canDeleteBilling, addAction]);
 
   if (status === "loading" || isLoading) {
     return (
@@ -237,96 +213,61 @@ export default function BillingPage() {
     }
 
     try {
-      const response = await fetch('/api/invoices/generate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          accountId: selectedAccount,
-          startDate: startDate || undefined,
-          endDate: endDate || undefined,
-          includeUnbilledOnly,
-          includeSubsidiaries,
-          // Manual selection support
-          selectedTimeEntryIds: showItemSelection ? Array.from(selectedTimeEntries) : undefined,
-          selectedAddonIds: showItemSelection ? Array.from(selectedAddons) : undefined,
-        }),
+      await generateInvoiceMutation.mutateAsync({
+        accountId: selectedAccount,
+        startDate: startDate || '',
+        endDate: endDate || '',
+        includeUnbilledOnly,
+        includeSubsidiaries,
+        // Manual selection support
+        selectedTimeEntryIds: showItemSelection ? Array.from(selectedTimeEntries) : undefined,
+        selectedAddonIds: showItemSelection ? Array.from(selectedAddons) : undefined,
       });
-
-      if (response.ok) {
-        const data = await response.json();
-        success('Invoice generated successfully');
-        
-        // Reset form and refresh invoices
-        setSelectedAccount("");
-        setStartDate("");
-        setEndDate("");
-        setShowItemSelection(false);
-        setPreviewData(null);
-        setSelectedTimeEntries(new Set());
-        setSelectedAddons(new Set());
-        
-        fetchInvoices();
-        setActiveTab("invoices");
-      } else {
-        const errorData = await response.json();
-        error('Failed to generate invoice', errorData.error);
-      }
-    } catch (err) {
+      
+      success('Invoice generated successfully');
+      
+      // Reset form - queries will auto-refresh via invalidation
+      setSelectedAccount("");
+      setStartDate("");
+      setEndDate("");
+      setShowItemSelection(false);
+      setPreviewData(null);
+      setSelectedTimeEntries(new Set());
+      setSelectedAddons(new Set());
+      
+      setActiveTab("invoices");
+    } catch (err: any) {
       console.error('Failed to generate invoice:', err);
-      error('Failed to generate invoice');
+      error('Failed to generate invoice', err.message);
     }
   };
 
-  const handleAddRate = async () => {
+  const handleAddRate = useCallback(async () => {
     if (!newRate.name || !newRate.rate) {
       error('Please fill in all required fields');
       return;
     }
 
     try {
-      const response = await fetch('/api/billing/rates', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(newRate),
-      });
-
-      if (response.ok) {
-        success('Billing rate added successfully');
-        setShowAddRate(false);
-        setNewRate({ name: "", rate: 0, description: "", isDefault: false });
-        fetchBillingRates();
-      } else {
-        const data = await response.json();
-        error('Failed to add billing rate', data.error);
-      }
-    } catch (err) {
+      await createBillingRateMutation.mutateAsync(newRate);
+      success('Billing rate added successfully');
+      setShowAddRate(false);
+      setNewRate({ name: "", rate: 0, description: "", isDefault: false });
+    } catch (err: any) {
       console.error('Failed to add billing rate:', err);
-      error('Failed to add billing rate');
+      error('Failed to add billing rate', err.message);
     }
-  };
+  }, [newRate, error, success, createBillingRateMutation]);
 
-  const handleDeleteRate = async (rateId: string) => {
+  const handleDeleteRate = useCallback(async (rateId: string) => {
     try {
-      const response = await fetch(`/api/billing/rates/${rateId}`, {
-        method: 'DELETE',
-      });
-
-      if (response.ok) {
-        success('Billing rate deleted successfully');
-        fetchBillingRates();
-      } else {
-        const data = await response.json();
-        error('Failed to delete billing rate', data.error);
-      }
-    } catch (err) {
+      await deleteBillingRateMutation.mutateAsync(rateId);
+      success('Billing rate deleted successfully');
+    } catch (err: any) {
       console.error('Failed to delete billing rate:', err);
-      error('Failed to delete billing rate');
+      error('Failed to delete billing rate', err.message);
     }
-  };
+  }, [success, error, deleteBillingRateMutation]);
 
   const handleEditRate = (rateId: string) => {
     setEditingRate(rateId);
@@ -334,25 +275,12 @@ export default function BillingPage() {
 
   const handleSaveRate = async (rateId: string, updatedRate: { name: string; rate: number; description: string; isDefault: boolean }) => {
     try {
-      const response = await fetch(`/api/billing/rates/${rateId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(updatedRate),
-      });
-
-      if (response.ok) {
-        success('Billing rate updated successfully');
-        setEditingRate(null);
-        fetchBillingRates();
-      } else {
-        const data = await response.json();
-        error('Failed to update billing rate', data.error);
-      }
-    } catch (err) {
+      await updateBillingRateMutation.mutateAsync({ rateId, data: updatedRate });
+      success('Billing rate updated successfully');
+      setEditingRate(null);
+    } catch (err: any) {
       console.error('Failed to update billing rate:', err);
-      error('Failed to update billing rate');
+      error('Failed to update billing rate', err.message);
     }
   };
 
@@ -362,20 +290,11 @@ export default function BillingPage() {
     }
 
     try {
-      const response = await fetch(`/api/invoices/${invoiceId}`, {
-        method: 'DELETE',
-      });
-
-      if (response.ok) {
-        success('Invoice deleted successfully');
-        fetchInvoices();
-      } else {
-        const errorData = await response.json();
-        error('Failed to delete invoice', errorData.error);
-      }
-    } catch (err) {
+      await deleteInvoiceMutation.mutateAsync(invoiceId);
+      success('Invoice deleted successfully');
+    } catch (err: any) {
       console.error('Failed to delete invoice:', err);
-      error('Failed to delete invoice');
+      error('Failed to delete invoice', err.message);
     }
   };
 

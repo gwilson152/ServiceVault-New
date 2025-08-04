@@ -14,9 +14,11 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const { id: ticketId } = await params;
+
     // Check if ticket exists and user has access
     const ticket = await prisma.ticket.findUnique({
-      where: { id: params.id },
+      where: { id: ticketId },
       include: { account: true }
     });
 
@@ -37,7 +39,7 @@ export async function GET(
     }
 
     const addons = await prisma.ticketAddon.findMany({
-      where: { ticketId: params.id },
+      where: { ticketId: ticketId },
       orderBy: { createdAt: "asc" },
     });
 
@@ -62,6 +64,7 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const { id: ticketId } = await params;
     const body = await request.json();
     const { name, description, price, quantity } = body;
 
@@ -74,7 +77,7 @@ export async function POST(
 
     // Check if ticket exists and user has access
     const ticket = await prisma.ticket.findUnique({
-      where: { id: params.id },
+      where: { id: ticketId },
       include: { account: true }
     });
 
@@ -99,7 +102,7 @@ export async function POST(
 
     const addon = await prisma.ticketAddon.create({
       data: {
-        ticketId: params.id,
+        ticketId: ticketId,
         name,
         description: description || null,
         price: parseFloat(price),

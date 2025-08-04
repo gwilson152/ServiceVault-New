@@ -1,11 +1,10 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { useSession } from "next-auth/react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { useTimeEntryPermissions } from "@/hooks/usePermissions";
 import { formatMinutes } from "@/lib/time-utils";
 import { Edit, Trash2, Lock, FileText, Building } from "lucide-react";
 import Link from "next/link";
@@ -30,63 +29,41 @@ interface TimeEntry {
 interface TimeEntryCardProps {
   entry: TimeEntry;
   showBillingAmount?: boolean;
+  permissions?: { canEdit: boolean; canDelete: boolean };
   onEdit?: (entry: TimeEntry) => void;
   onDelete?: (entryId: string) => void;
 }
 
-export function TimeEntryCard({ entry, showBillingAmount = false, onEdit, onDelete }: TimeEntryCardProps) {
+export function TimeEntryCard({ entry, showBillingAmount = false, permissions = { canEdit: false, canDelete: false }, onEdit, onDelete }: TimeEntryCardProps) {
   const { data: session } = useSession();
-  const { canEdit, canDelete, isLocked, getLockReason } = useTimeEntryPermissions(entry);
   
-  const [canEditEntry, setCanEditEntry] = useState(false);
-  const [canDeleteEntry, setCanDeleteEntry] = useState(false);
-  const [permissionsLoaded, setPermissionsLoaded] = useState(false);
-
   // Memoize lock status and reason since they're synchronous
-  const entryIsLocked = useMemo(() => isLocked(), [entry.invoiceItems]);
-  const lockReason = useMemo(() => getLockReason(), [entry.invoiceItems]);
-
-  useEffect(() => {
-    let isMounted = true;
-    
-    const checkPermissions = async () => {
-      try {
-        const [editPermission, deletePermission] = await Promise.all([
-          canEdit(),
-          canDelete()
-        ]);
-        
-        if (isMounted) {
-          setCanEditEntry(editPermission);
-          setCanDeleteEntry(deletePermission);
-          setPermissionsLoaded(true);
-        }
-      } catch (error) {
-        console.error('Error checking permissions for entry', entry.id, error);
-        if (isMounted) {
-          setPermissionsLoaded(true);
-        }
-      }
-    };
-    
-    checkPermissions();
-    
-    return () => {
-      isMounted = false;
-    };
-  }, [entry.id, entry.userId, entry.isApproved, entry.invoiceItems, canEdit, canDelete]);
+  const entryIsLocked = useMemo(() => {
+    return !!(entry.invoiceItems && entry.invoiceItems.length > 0);
+  }, [entry.invoiceItems]);
+  
+  const lockReason = useMemo(() => {
+    if (!entry.invoiceItems || entry.invoiceItems.length === 0) {
+      return null;
+    }
+    const invoice = entry.invoiceItems[0]?.invoice;
+    if (invoice) {
+      return `This time entry is part of Invoice #${invoice.invoiceNumber} (${invoice.status}) and cannot be modified.`;
+    }
+    return "This time entry is associated with an invoice and cannot be modified.";
+  }, [entry.invoiceItems]);
 
   const handleEdit = useMemo(() => () => {
-    if (canEditEntry && onEdit) {
+    if (permissions.canEdit && onEdit) {
       onEdit(entry);
     }
-  }, [canEditEntry, onEdit, entry]);
+  }, [permissions.canEdit, onEdit, entry]);
 
   const handleDelete = useMemo(() => () => {
-    if (canDeleteEntry && onDelete) {
+    if (permissions.canDelete && onDelete) {
       onDelete(entry.id);
     }
-  }, [canDeleteEntry, onDelete, entry.id]);
+  }, [permissions.canDelete, onDelete, entry.id]);
 
   return (
     <Card key={entry.id}>
@@ -163,7 +140,7 @@ export function TimeEntryCard({ entry, showBillingAmount = false, onEdit, onDele
           </div>
 
           <div className="flex gap-2">
-            {canEditEntry && !entryIsLocked && (
+            {permissions.canEdit && !entryIsLocked && (
               <Button 
                 variant="ghost" 
                 size="sm" 
@@ -173,7 +150,7 @@ export function TimeEntryCard({ entry, showBillingAmount = false, onEdit, onDele
                 <Edit className="h-4 w-4" />
               </Button>
             )}
-            {canDeleteEntry && !entryIsLocked && (
+            {permissions.canDelete && !entryIsLocked && (
               <Button 
                 variant="ghost" 
                 size="sm" 

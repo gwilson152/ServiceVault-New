@@ -2,6 +2,49 @@
 
 This document tracks major feature implementations and system enhancements.
 
+## Enhanced Time Tracking System with User Preferences (2025-08-04)
+
+### Overview
+Complete overhaul of the time tracking page with advanced filtering, user preference persistence, and improved date logic. Enhanced user experience with comprehensive filter options and personalized settings.
+
+### Key Features
+- **Advanced Filtering System**: 8 different filter types with smart combinations
+- **User Preferences Persistence**: Filter settings saved per user with database storage
+- **Enhanced Date Logic**: Improved week calculations with Monday-first business weeks
+- **Last 7 Days Filter**: Rolling window filter for more intuitive recent time viewing
+- **Smart Filter Management**: Auto-save, clear all, and individual filter removal
+- **Filter Results Summary**: Live statistics showing filtered vs total entries
+
+### Database Schema Updates
+- **User Preferences**: Added `preferences Json?` field to User model for storing user-specific settings
+- **API Layer**: Complete preferences management system with GET/PUT/PATCH endpoints
+
+### Filtering Capabilities
+- **Period Filters**: Today, Last 7 Days, This Week (Mon-Sun), This Month, Custom Range, All Time
+- **Status Filters**: Billing Status (Billable/Non-Billable), Approval Status, Invoice Status
+- **Entity Filters**: Account, User, Ticket, Billing Rate selection
+- **Advanced Options**: Collapsible section with detailed filtering options
+- **Active Filter Display**: Visual badges showing all active filters with individual clear buttons
+
+### Technical Improvements
+- **Performance Optimization**: Fixed infinite re-render issues with proper useEffect dependency management
+- **Smart Date Calculations**: Proper start-of-week logic with time normalization
+- **Debounced Preferences**: 500ms debounce for preference saving to reduce API calls
+- **Type Safety**: Full TypeScript support for all filter preferences
+- **Memory Management**: Proper cleanup and memoization to prevent memory leaks
+
+### Components Enhanced
+- **TimeTrackingPage**: Complete filter system overhaul with preference integration
+- **useUserPreferences**: New custom hook for managing user-specific settings
+- **Filter UI**: Advanced filter interface with responsive design and smart interactions
+
+### API Endpoints Created
+- `GET /api/user/preferences`: Fetch user preferences with fallback defaults
+- `PUT /api/user/preferences`: Update entire preferences object
+- `PATCH /api/user/preferences`: Update specific preference keys
+
+---
+
 ## Enhanced Invoice Management System (2025-08-02)
 
 ### Overview

@@ -2,8 +2,8 @@
 
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { usePermissions } from "@/hooks/usePermissions";
+import { useEffect, useState, useCallback } from "react";
+import { useSettingsPermissions } from "@/hooks/queries/useSettingsPermissions";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -29,8 +29,21 @@ export default function SettingsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [activeTab, setActiveTab] = useState("general");
-  const { canViewSettings, canUpdateSettings, isLoading: permissionsLoading } = usePermissions();
+  const { canViewSettings, canUpdateSettings, isLoading: permissionsLoading } = useSettingsPermissions();
   const { addAction, removeAction, clearActions } = useActionBar();
+
+  // Handler functions - wrapped in useCallback for stable references
+  const handleSaveAll = useCallback(async () => {
+    // TODO: Implement save all settings
+    console.log("Saving all settings...");
+    setHasUnsavedChanges(false);
+  }, []);
+
+  const handleResetAll = useCallback(() => {
+    // TODO: Implement reset all settings
+    console.log("Resetting all settings...");
+    setHasUnsavedChanges(false);
+  }, []);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -45,39 +58,37 @@ export default function SettingsPage() {
     }
   }, [status, session, router, canViewSettings, permissionsLoading]);
 
+  // Permissions are now fetched via TanStack Query - no need for separate state
+
   // Setup action bar with save/reset buttons
   useEffect(() => {
-    const setupActions = async () => {
-      const canUpdate = await canUpdateSettings();
-      
-      if (hasUnsavedChanges && canUpdate) {
-        addAction({
-          id: "reset-settings",
-          label: "Reset",
-          icon: <RotateCcw className="h-4 w-4" />,
-          onClick: handleResetAll,
-          variant: "outline"
-        });
-        addAction({
-          id: "save-settings", 
-          label: "Save All",
-          icon: <Save className="h-4 w-4" />,
-          onClick: handleSaveAll,
-          variant: "default"
-        });
-      } else {
-        removeAction("reset-settings");
-        removeAction("save-settings");
-      }
-    };
+    if (hasUnsavedChanges && canUpdateSettings) {
+      addAction({
+        id: "reset-settings",
+        label: "Reset",
+        icon: <RotateCcw className="h-4 w-4" />,
+        onClick: handleResetAll,
+        variant: "outline"
+      });
+      addAction({
+        id: "save-settings", 
+        label: "Save All",
+        icon: <Save className="h-4 w-4" />,
+        onClick: handleSaveAll,
+        variant: "default"
+      });
+    } else {
+      removeAction("reset-settings");
+      removeAction("save-settings");
+    }
+  }, [hasUnsavedChanges, canUpdateSettings, addAction, removeAction, handleResetAll, handleSaveAll]);
 
-    setupActions();
-
-    // Cleanup on unmount
+  // Cleanup actions only on unmount
+  useEffect(() => {
     return () => {
       clearActions();
     };
-  }, [hasUnsavedChanges, addAction, removeAction, clearActions, canUpdateSettings]);
+  }, []); // Empty deps - only run on mount/unmount
 
   // Warn user about unsaved changes
   useEffect(() => {
@@ -103,18 +114,6 @@ export default function SettingsPage() {
   if (!session || !canViewSettings) {
     return null;
   }
-
-  const handleSaveAll = async () => {
-    // TODO: Implement save all settings
-    console.log("Saving all settings...");
-    setHasUnsavedChanges(false);
-  };
-
-  const handleResetAll = () => {
-    // TODO: Implement reset all settings
-    console.log("Resetting all settings...");
-    setHasUnsavedChanges(false);
-  };
 
   return (
     <>

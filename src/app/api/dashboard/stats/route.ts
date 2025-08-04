@@ -48,11 +48,7 @@ export async function GET() {
     const weekHours = (weekTimeEntries._sum.minutes || 0) / 60;
 
     // Get total accounts count
-    const totalAccounts = await prisma.account.count({
-      where: {
-        active: true
-      }
-    });
+    const totalAccounts = await prisma.account.count();
 
     // Get monthly revenue (sum of invoiced time entries this month)
     const monthlyRevenue = await prisma.timeEntry.aggregate({

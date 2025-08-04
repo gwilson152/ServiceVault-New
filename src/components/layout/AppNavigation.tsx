@@ -17,7 +17,8 @@ import {
   LogOut,
   Building,
   Timer,
-  BarChart3
+  BarChart3,
+  Shield
 } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 import { ActionBar } from "@/components/ui/ActionBar";
@@ -88,6 +89,12 @@ export function AppNavigation({ children }: AppNavigationProps) {
       label: "Settings",
       show: isAdmin || isEmployee,
       requiresPermission: canViewSettings
+    },
+    {
+      href: "/permissions",
+      icon: Shield,
+      label: "Permissions",
+      show: isAdmin // Only admins can manage permissions
     }
   ];
 
