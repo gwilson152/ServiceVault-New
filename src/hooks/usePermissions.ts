@@ -1,750 +1,149 @@
-"use client";
+import { useQuery } from '@tanstack/react-query';
+import { useSession } from 'next-auth/react';
+import { useCallback } from 'react';
+import type { UserPermissions } from '@/lib/permissions/PermissionService';
 
-import { useSession } from "next-auth/react";
-import { useState, useEffect } from "react";
-import { PERMISSIONS, PermissionCheck } from "@/lib/permissions";
-
-interface CachedPermissions {
-  [key: string]: boolean;
+interface UsePermissionsReturn {
+  hasPermission: (resource: string, action: string, accountId?: string) => boolean;
+  isSuperAdmin: boolean;
+  loading: boolean;
+  permissions: UserPermissions | undefined;
+  canViewTimeEntries: () => boolean;
+  canCreateTimeEntries: () => boolean;
+  canEditTimeEntries: () => boolean;
+  canApproveTimeEntries: () => boolean;
+  canViewBilling: () => boolean;
+  canCreateInvoices: () => boolean;
+  canViewAccounts: () => boolean;
+  canManageUsers: () => boolean;
 }
 
-export function usePermissions() {
+/**
+ * Clean, optimized permissions hook using the new PermissionService
+ */
+export function usePermissions(): UsePermissionsReturn {
   const { data: session } = useSession();
-  const [permissionCache, setPermissionCache] = useState<CachedPermissions>({});
-  const [isLoading, setIsLoading] = useState(false);
-
-  // Generate cache key for permission check
-  const getCacheKey = (permission: PermissionCheck): string => {
-    return `${permission.resource}:${permission.action}:${permission.scope || 'default'}`;
-  };
-
-  // Check if user has a specific permission
-  const hasPermission = async (permission: PermissionCheck): Promise<boolean> => {
-    if (!session?.user?.id) {
-      return false;
-    }
-
-    const cacheKey = getCacheKey(permission);
-    
-    // Return cached result if available
-    if (permissionCache[cacheKey] !== undefined) {
-      return permissionCache[cacheKey];
-    }
-
-    setIsLoading(true);
-    try {
-      const response = await fetch('/api/permissions/check', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(permission),
-      });
-
-      if (response.ok) {
-        const { hasPermission: result } = await response.json();
-        
-        // Cache the result
-        setPermissionCache(prev => ({
-          ...prev,
-          [cacheKey]: result
-        }));
-        
-        return result;
+  
+  // Fetch user permissions with caching
+  const { data: permissions, isLoading } = useQuery({
+    queryKey: ['user-permissions', session?.user?.id],
+    queryFn: async () => {
+      if (!session?.user?.id) throw new Error('No user session');
+      
+      const response = await fetch('/api/auth/permissions');
+      if (!response.ok) {
+        throw new Error('Failed to fetch permissions');
       }
-    } catch (error) {
-      console.error('Error checking permission:', error);
-    } finally {
-      setIsLoading(false);
-    }
+      
+      const data = await response.json();
+      
+      // Convert serialized format back to Maps and Sets
+      return {
+        isSuperAdmin: data.isSuperAdmin,
+        systemPermissions: new Set(data.systemPermissions),
+        accountPermissions: new Map(
+          Object.entries(data.accountPermissions).map(([accountId, perms]) => [
+            accountId,
+            new Set(perms as string[])
+          ])
+        )
+      } as UserPermissions;
+    },
+    enabled: !!session?.user?.id,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    refetchOnWindowFocus: false
+  });
 
+  // Generic permission checker
+  const hasPermission = useCallback((
+    resource: string, 
+    action: string, 
+    accountId?: string
+  ): boolean => {
+    if (!permissions) return false;
+    
+    // Super admin bypasses all checks
+    if (permissions.isSuperAdmin) return true;
+    
+    const permissionKey = `${resource}:${action}`;
+    const wildcardResource = `${resource}:*`;
+    const wildcardAll = '*:*';
+    
+    // Check system permissions
+    if (permissions.systemPermissions.has(permissionKey) ||
+        permissions.systemPermissions.has(wildcardResource) ||
+        permissions.systemPermissions.has(wildcardAll)) {
+      return true;
+    }
+    
+    // Check account-specific permissions
+    if (accountId && permissions.accountPermissions.has(accountId)) {
+      const accountPerms = permissions.accountPermissions.get(accountId)!;
+      return accountPerms.has(permissionKey) || 
+             accountPerms.has(wildcardResource) ||
+             accountPerms.has(wildcardAll);
+    }
+    
     return false;
-  };
+  }, [permissions]);
 
-  // Batch check multiple permissions
-  const checkPermissions = async (permissions: PermissionCheck[]): Promise<Record<string, boolean>> => {
-    if (!session?.user?.id) {
-      return {};
-    }
-
-    const results: Record<string, boolean> = {};
-    const uncachedPermissions: PermissionCheck[] = [];
-    
-    // Check cache first
-    for (const permission of permissions) {
-      const cacheKey = getCacheKey(permission);
-      if (permissionCache[cacheKey] !== undefined) {
-        results[cacheKey] = permissionCache[cacheKey];
-      } else {
-        uncachedPermissions.push(permission);
-      }
-    }
-
-    // Fetch uncached permissions
-    if (uncachedPermissions.length > 0) {
-      setIsLoading(true);
-      try {
-        const response = await fetch('/api/permissions/check-batch', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ permissions: uncachedPermissions }),
-        });
-
-        if (response.ok) {
-          const batchResults = await response.json();
-          
-          // Update cache and results
-          const newCacheEntries: CachedPermissions = {};
-          for (const permission of uncachedPermissions) {
-            const cacheKey = getCacheKey(permission);
-            const result = batchResults[cacheKey] || false;
-            newCacheEntries[cacheKey] = result;
-            results[cacheKey] = result;
-          }
-          
-          setPermissionCache(prev => ({ ...prev, ...newCacheEntries }));
-        }
-      } catch (error) {
-        console.error('Error batch checking permissions:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    }
-
-    return results;
-  };
-
-  // Clear permission cache (useful when user permissions change)
-  const clearCache = () => {
-    setPermissionCache({});
-  };
-
-  // Helper functions for common permission checks
-  const canViewTimeEntries = () => hasPermission(PERMISSIONS.TIME_ENTRIES.VIEW);
-  const canCreateTimeEntries = () => hasPermission(PERMISSIONS.TIME_ENTRIES.CREATE);
-  const canUpdateTimeEntries = () => hasPermission(PERMISSIONS.TIME_ENTRIES.UPDATE);
-  const canDeleteTimeEntries = () => hasPermission(PERMISSIONS.TIME_ENTRIES.DELETE);
-  const canApproveTimeEntries = () => hasPermission(PERMISSIONS.TIME_ENTRIES.APPROVE);
-  const canViewBilling = () => hasPermission(PERMISSIONS.BILLING.VIEW);
-  const canCreateBilling = () => hasPermission(PERMISSIONS.BILLING.CREATE);
-  const canUpdateBilling = () => hasPermission(PERMISSIONS.BILLING.UPDATE);
-  const canDeleteBilling = () => hasPermission(PERMISSIONS.BILLING.DELETE);
-  const canViewReports = () => hasPermission(PERMISSIONS.REPORTS.VIEW);
-  const canViewSettings = () => hasPermission(PERMISSIONS.SETTINGS.VIEW);
-  const canUpdateSettings = () => hasPermission(PERMISSIONS.SETTINGS.UPDATE);
-  const canCreateUsers = () => hasPermission(PERMISSIONS.USERS.CREATE);
-  const canInviteUsers = () => hasPermission(PERMISSIONS.USERS.INVITE);
-  const canManageUsers = () => hasPermission(PERMISSIONS.USERS.MANAGE);
-  const canUpdateUsers = () => hasPermission(PERMISSIONS.USERS.UPDATE);
-  const canDeleteUsers = () => hasPermission(PERMISSIONS.USERS.DELETE);
-  const canCreateUsersManually = () => hasPermission(PERMISSIONS.USERS.CREATE_MANUAL);
-  const canResendInvitations = () => hasPermission(PERMISSIONS.USERS.RESEND_INVITATION);
-  const canViewInvoices = () => hasPermission(PERMISSIONS.INVOICES.VIEW);
-  const canCreateInvoices = () => hasPermission(PERMISSIONS.INVOICES.CREATE);
-  const canUpdateInvoices = () => hasPermission(PERMISSIONS.INVOICES.UPDATE);
-  const canDeleteInvoices = () => hasPermission(PERMISSIONS.INVOICES.DELETE);
-  const canEditInvoiceItems = () => hasPermission(PERMISSIONS.INVOICES.EDIT_ITEMS);
-
-  // Clear cache when session changes
-  useEffect(() => {
-    if (session?.user?.id) {
-      clearCache();
-    }
-  }, [session?.user?.id]);
+  // Convenience methods for common permissions
+  const canViewTimeEntries = useCallback(() => 
+    hasPermission('time-entries', 'view'), [hasPermission]);
+  
+  const canCreateTimeEntries = useCallback(() => 
+    hasPermission('time-entries', 'create'), [hasPermission]);
+  
+  const canEditTimeEntries = useCallback(() => 
+    hasPermission('time-entries', 'update'), [hasPermission]);
+  
+  const canApproveTimeEntries = useCallback(() => 
+    hasPermission('time-entries', 'approve'), [hasPermission]);
+  
+  const canViewBilling = useCallback(() => 
+    hasPermission('billing', 'view'), [hasPermission]);
+  
+  const canCreateInvoices = useCallback(() => 
+    hasPermission('invoices', 'create'), [hasPermission]);
+  
+  const canViewAccounts = useCallback(() => 
+    hasPermission('accounts', 'view'), [hasPermission]);
+  
+  const canManageUsers = useCallback(() => 
+    hasPermission('users', 'manage'), [hasPermission]);
 
   return {
     hasPermission,
-    checkPermissions,
-    clearCache,
-    isLoading,
-    
-    // Common permission helpers
+    isSuperAdmin: permissions?.isSuperAdmin || false,
+    loading: isLoading,
+    permissions,
     canViewTimeEntries,
     canCreateTimeEntries,
-    canUpdateTimeEntries,
-    canDeleteTimeEntries,
+    canEditTimeEntries,
     canApproveTimeEntries,
     canViewBilling,
-    canCreateBilling,
-    canUpdateBilling,
-    canDeleteBilling,
-    canViewReports,
-    canViewSettings,
-    canUpdateSettings,
-    canCreateUsers,
-    canInviteUsers,
-    canManageUsers,
-    canUpdateUsers,
-    canDeleteUsers,
-    canCreateUsersManually,
-    canResendInvitations,
-    canViewInvoices,
     canCreateInvoices,
-    canUpdateInvoices,
-    canDeleteInvoices,
-    canEditInvoiceItems,
+    canViewAccounts,
+    canManageUsers
   };
 }
 
-// Hook for specific time entry permissions with additional context
-export function useTimeEntryPermissions(timeEntry?: {
-  id: string;
-  userId: string;
-  isApproved: boolean;
-  invoiceItems?: Array<{ invoice: { id: string; status: string } }>;
-}) {
-  const { hasPermission } = usePermissions();
-  const { data: session } = useSession();
-
-  const canEdit = async (): Promise<boolean> => {
-    if (!timeEntry || !session?.user) {
-      return false;
-    }
-
-    // Cannot edit if associated with any invoice
-    if (timeEntry.invoiceItems && timeEntry.invoiceItems.length > 0) {
-      return false;
-    }
-
-    // Cannot edit approved entries (unless special permission)
-    if (timeEntry.isApproved) {
-      return false;
-    }
-
-    // Check base permission
-    const hasUpdatePermission = await hasPermission(PERMISSIONS.TIME_ENTRIES.UPDATE);
-    if (!hasUpdatePermission) {
-      return false;
-    }
-
-    // Check if user can edit all entries or just their own
-    const canEditAll = await hasPermission({ resource: 'time-entries', action: 'update', scope: 'global' });
-    return canEditAll || timeEntry.userId === session.user.id;
-  };
-
-  const canDelete = async (): Promise<boolean> => {
-    if (!timeEntry || !session?.user) {
-      return false;
-    }
-
-    // Cannot delete if associated with any invoice
-    if (timeEntry.invoiceItems && timeEntry.invoiceItems.length > 0) {
-      return false;
-    }
-
-    // Check base permission
-    const hasDeletePermission = await hasPermission(PERMISSIONS.TIME_ENTRIES.DELETE);
-    if (!hasDeletePermission) {
-      return false;
-    }
-
-    // Check if user can delete all entries or just their own
-    const canDeleteAll = await hasPermission({ resource: 'time-entries', action: 'delete', scope: 'global' });
-    return canDeleteAll || timeEntry.userId === session.user.id;
-  };
-
-  const canApprove = async (): Promise<boolean> => {
-    if (!timeEntry) {
-      return false;
-    }
-
-    // Cannot approve if already approved or associated with invoice
-    if (timeEntry.isApproved || (timeEntry.invoiceItems && timeEntry.invoiceItems.length > 0)) {
-      return false;
-    }
-
-    return await hasPermission(PERMISSIONS.TIME_ENTRIES.APPROVE);
-  };
-
-  const isLocked = (): boolean => {
-    if (!timeEntry) {
-      return false;
-    }
-
-    // Entry is locked if it has invoice associations
-    return !!(timeEntry.invoiceItems && timeEntry.invoiceItems.length > 0);
-  };
-
-  const getLockReason = (): string | null => {
-    if (!timeEntry?.invoiceItems || timeEntry.invoiceItems.length === 0) {
-      return null;
-    }
-
-    const invoice = timeEntry.invoiceItems[0]?.invoice;
-    if (invoice) {
-      return `This time entry is part of Invoice #${invoice.id} (${invoice.status}) and cannot be modified.`;
-    }
-
-    return "This time entry is associated with an invoice and cannot be modified.";
-  };
-
+/**
+ * Hook for checking permissions on specific resources with IDs
+ */
+export function useResourcePermissions(resourceType: string, resourceId?: string) {
+  const { hasPermission, isSuperAdmin, loading } = usePermissions();
+  
   return {
-    canEdit,
-    canDelete,
-    canApprove,
-    isLocked,
-    getLockReason,
-  };
-}
-
-// Hook for invoice-specific permissions with account context
-export function useInvoicePermissions(invoice?: {
-  id: string;
-  status: string;
-  accountId: string;
-  creatorId: string;
-}) {
-  const { hasPermission } = usePermissions();
-  const { data: session } = useSession();
-
-  const canView = async (): Promise<boolean> => {
-    if (!invoice || !session?.user) {
-      return false;
-    }
-
-    // Check base permission with account context
-    const hasViewPermission = await hasPermission({
-      resource: 'invoices',
-      action: 'view',
-      accountId: invoice.accountId
-    });
-
-    if (!hasViewPermission) {
-      return false;
-    }
-
-    // Check scope-based access
-    const canViewAll = await hasPermission({ 
-      resource: 'invoices', 
-      action: 'view', 
-      scope: 'subsidiary',
-      accountId: invoice.accountId 
-    });
-    
-    const canViewAccount = await hasPermission({ 
-      resource: 'invoices', 
-      action: 'view', 
-      scope: 'account',
-      accountId: invoice.accountId 
-    });
-    
-    const canViewOwn = await hasPermission({ 
-      resource: 'invoices', 
-      action: 'view', 
-      scope: 'own',
-      accountId: invoice.accountId 
-    });
-
-    return canViewAll || canViewAccount || (canViewOwn && invoice.creatorId === session.user.id);
-  };
-
-  const canEdit = async (): Promise<boolean> => {
-    if (!invoice || !session?.user) {
-      return false;
-    }
-
-    // Only DRAFT invoices can be edited
-    if (invoice.status !== 'DRAFT') {
-      return false;
-    }
-
-    // Check base permission
-    const hasUpdatePermission = await hasPermission({
-      resource: 'invoices',
-      action: 'update',
-      accountId: invoice.accountId
-    });
-
-    if (!hasUpdatePermission) {
-      return false;
-    }
-
-    // Check scope-based access
-    const canEditAll = await hasPermission({ 
-      resource: 'invoices', 
-      action: 'update', 
-      scope: 'subsidiary',
-      accountId: invoice.accountId 
-    });
-    
-    const canEditAccount = await hasPermission({ 
-      resource: 'invoices', 
-      action: 'update', 
-      scope: 'account',
-      accountId: invoice.accountId 
-    });
-    
-    const canEditOwn = await hasPermission({ 
-      resource: 'invoices', 
-      action: 'update', 
-      scope: 'own',
-      accountId: invoice.accountId 
-    });
-
-    return canEditAll || canEditAccount || (canEditOwn && invoice.creatorId === session.user.id);
-  };
-
-  const canEditItems = async (): Promise<boolean> => {
-    if (!invoice || !session?.user) {
-      return false;
-    }
-
-    // Only DRAFT invoices can have items edited
-    if (invoice.status !== 'DRAFT') {
-      return false;
-    }
-
-    // Check specific edit-items permission
-    const hasEditItemsPermission = await hasPermission({
-      resource: 'invoices',
-      action: 'edit-items',
-      accountId: invoice.accountId
-    });
-
-    if (!hasEditItemsPermission) {
-      return false;
-    }
-
-    // Check scope-based access
-    const canEditAll = await hasPermission({ 
-      resource: 'invoices', 
-      action: 'edit-items', 
-      scope: 'subsidiary',
-      accountId: invoice.accountId 
-    });
-    
-    const canEditAccount = await hasPermission({ 
-      resource: 'invoices', 
-      action: 'edit-items', 
-      scope: 'account',
-      accountId: invoice.accountId 
-    });
-    
-    const canEditOwn = await hasPermission({ 
-      resource: 'invoices', 
-      action: 'edit-items', 
-      scope: 'own',
-      accountId: invoice.accountId 
-    });
-
-    return canEditAll || canEditAccount || (canEditOwn && invoice.creatorId === session.user.id);
-  };
-
-  const canDelete = async (): Promise<boolean> => {
-    if (!invoice || !session?.user) {
-      return false;
-    }
-
-    // Only DRAFT invoices can be deleted
-    if (invoice.status !== 'DRAFT') {
-      return false;
-    }
-
-    // Check base permission
-    const hasDeletePermission = await hasPermission({
-      resource: 'invoices',
-      action: 'delete',
-      accountId: invoice.accountId
-    });
-
-    if (!hasDeletePermission) {
-      return false;
-    }
-
-    // Check scope-based access
-    const canDeleteAll = await hasPermission({ 
-      resource: 'invoices', 
-      action: 'delete', 
-      scope: 'subsidiary',
-      accountId: invoice.accountId 
-    });
-    
-    const canDeleteAccount = await hasPermission({ 
-      resource: 'invoices', 
-      action: 'delete', 
-      scope: 'account',
-      accountId: invoice.accountId 
-    });
-    
-    const canDeleteOwn = await hasPermission({ 
-      resource: 'invoices', 
-      action: 'delete', 
-      scope: 'own',
-      accountId: invoice.accountId 
-    });
-
-    return canDeleteAll || canDeleteAccount || (canDeleteOwn && invoice.creatorId === session.user.id);
-  };
-
-  const isEditable = (): boolean => {
-    if (!invoice) {
-      return false;
-    }
-
-    // Only DRAFT invoices are editable
-    return invoice.status === 'DRAFT';
-  };
-
-  const getStatusReason = (): string | null => {
-    if (!invoice) {
-      return null;
-    }
-
-    if (invoice.status !== 'DRAFT') {
-      return `This invoice is ${invoice.status.toLowerCase()} and cannot be modified.`;
-    }
-
-    return null;
-  };
-
-  const canMarkSent = async (): Promise<boolean> => {
-    if (!invoice || !session?.user) {
-      return false;
-    }
-
-    // Only DRAFT invoices can be marked as sent
-    if (invoice.status !== 'DRAFT') {
-      return false;
-    }
-
-    // Check base permission
-    const hasMarkSentPermission = await hasPermission({
-      resource: 'invoices',
-      action: 'mark-sent',
-      accountId: invoice.accountId
-    });
-
-    if (!hasMarkSentPermission) {
-      return false;
-    }
-
-    // Check scope-based access
-    const canMarkAll = await hasPermission({ 
-      resource: 'invoices', 
-      action: 'mark-sent', 
-      scope: 'subsidiary',
-      accountId: invoice.accountId 
-    });
-    
-    const canMarkAccount = await hasPermission({ 
-      resource: 'invoices', 
-      action: 'mark-sent', 
-      scope: 'account',
-      accountId: invoice.accountId 
-    });
-    
-    const canMarkOwn = await hasPermission({ 
-      resource: 'invoices', 
-      action: 'mark-sent', 
-      scope: 'own',
-      accountId: invoice.accountId 
-    });
-
-    return canMarkAll || canMarkAccount || (canMarkOwn && invoice.creatorId === session.user.id);
-  };
-
-  const canMarkPaid = async (): Promise<boolean> => {
-    if (!invoice || !session?.user) {
-      return false;
-    }
-
-    // Only SENT or OVERDUE invoices can be marked as paid
-    if (invoice.status !== 'SENT' && invoice.status !== 'OVERDUE') {
-      return false;
-    }
-
-    // Check base permission
-    const hasMarkPaidPermission = await hasPermission({
-      resource: 'invoices',
-      action: 'mark-paid',
-      accountId: invoice.accountId
-    });
-
-    if (!hasMarkPaidPermission) {
-      return false;
-    }
-
-    // Check scope-based access
-    const canMarkAll = await hasPermission({ 
-      resource: 'invoices', 
-      action: 'mark-paid', 
-      scope: 'subsidiary',
-      accountId: invoice.accountId 
-    });
-    
-    const canMarkAccount = await hasPermission({ 
-      resource: 'invoices', 
-      action: 'mark-paid', 
-      scope: 'account',
-      accountId: invoice.accountId 
-    });
-    
-    const canMarkOwn = await hasPermission({ 
-      resource: 'invoices', 
-      action: 'mark-paid', 
-      scope: 'own',
-      accountId: invoice.accountId 
-    });
-
-    return canMarkAll || canMarkAccount || (canMarkOwn && invoice.creatorId === session.user.id);
-  };
-
-  const canUnmarkPaid = async (): Promise<boolean> => {
-    if (!invoice || !session?.user) {
-      return false;
-    }
-
-    // Only PAID invoices can be unmarked
-    if (invoice.status !== 'PAID') {
-      return false;
-    }
-
-    // Check base permission
-    const hasUnmarkPaidPermission = await hasPermission({
-      resource: 'invoices',
-      action: 'unmark-paid',
-      accountId: invoice.accountId
-    });
-
-    if (!hasUnmarkPaidPermission) {
-      return false;
-    }
-
-    // Check scope-based access
-    const canUnmarkAll = await hasPermission({ 
-      resource: 'invoices', 
-      action: 'unmark-paid', 
-      scope: 'subsidiary',
-      accountId: invoice.accountId 
-    });
-    
-    const canUnmarkAccount = await hasPermission({ 
-      resource: 'invoices', 
-      action: 'unmark-paid', 
-      scope: 'account',
-      accountId: invoice.accountId 
-    });
-    
-    const canUnmarkOwn = await hasPermission({ 
-      resource: 'invoices', 
-      action: 'unmark-paid', 
-      scope: 'own',
-      accountId: invoice.accountId 
-    });
-
-    return canUnmarkAll || canUnmarkAccount || (canUnmarkOwn && invoice.creatorId === session.user.id);
-  };
-
-  const canExportPDF = async (): Promise<boolean> => {
-    if (!invoice || !session?.user) {
-      return false;
-    }
-
-    // Check base permission
-    const hasExportPermission = await hasPermission({
-      resource: 'invoices',
-      action: 'export-pdf',
-      accountId: invoice.accountId
-    });
-
-    if (!hasExportPermission) {
-      return false;
-    }
-
-    // Check scope-based access (PDF export available for all statuses)
-    const canExportAll = await hasPermission({ 
-      resource: 'invoices', 
-      action: 'export-pdf', 
-      scope: 'subsidiary',
-      accountId: invoice.accountId 
-    });
-    
-    const canExportAccount = await hasPermission({ 
-      resource: 'invoices', 
-      action: 'export-pdf', 
-      scope: 'account',
-      accountId: invoice.accountId 
-    });
-    
-    const canExportOwn = await hasPermission({ 
-      resource: 'invoices', 
-      action: 'export-pdf', 
-      scope: 'own',
-      accountId: invoice.accountId 
-    });
-
-    return canExportAll || canExportAccount || (canExportOwn && invoice.creatorId === session.user.id);
-  };
-
-  const canAddItems = async (): Promise<boolean> => {
-    if (!invoice || !session?.user) {
-      return false;
-    }
-
-    // Only DRAFT invoices can have items added
-    if (invoice.status !== 'DRAFT') {
-      return false;
-    }
-
-    // Use existing edit-items permission for adding items
-    return await canEditItems();
-  };
-
-  const canUpdateDates = async (): Promise<boolean> => {
-    if (!invoice || !session?.user) {
-      return false;
-    }
-
-    // Check base permission
-    const hasUpdateDatesPermission = await hasPermission({
-      resource: 'invoices',
-      action: 'update-dates',
-      accountId: invoice.accountId
-    });
-
-    if (!hasUpdateDatesPermission) {
-      return false;
-    }
-
-    // Check scope-based access
-    const canUpdateAll = await hasPermission({ 
-      resource: 'invoices', 
-      action: 'update-dates', 
-      scope: 'subsidiary',
-      accountId: invoice.accountId 
-    });
-    
-    const canUpdateAccount = await hasPermission({ 
-      resource: 'invoices', 
-      action: 'update-dates', 
-      scope: 'account',
-      accountId: invoice.accountId 
-    });
-    
-    const canUpdateOwn = await hasPermission({ 
-      resource: 'invoices', 
-      action: 'update-dates', 
-      scope: 'own',
-      accountId: invoice.accountId 
-    });
-
-    return canUpdateAll || canUpdateAccount || (canUpdateOwn && invoice.creatorId === session.user.id);
-  };
-
-  return {
-    canView,
-    canEdit,
-    canEditItems,
-    canDelete,
-    canMarkSent,
-    canMarkPaid,
-    canUnmarkPaid,
-    canExportPDF,
-    canAddItems,
-    canUpdateDates,
-    isEditable,
-    getStatusReason,
+    canView: useCallback(() => 
+      hasPermission(resourceType, 'view', resourceId), [hasPermission, resourceType, resourceId]),
+    canEdit: useCallback(() => 
+      hasPermission(resourceType, 'update', resourceId), [hasPermission, resourceType, resourceId]),
+    canDelete: useCallback(() => 
+      hasPermission(resourceType, 'delete', resourceId), [hasPermission, resourceType, resourceId]),
+    canCreate: useCallback(() => 
+      hasPermission(resourceType, 'create', resourceId), [hasPermission, resourceType, resourceId]),
+    isSuperAdmin,
+    loading
   };
 }

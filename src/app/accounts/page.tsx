@@ -1,3 +1,54 @@
+/**
+ * ACCOUNTS PAGE
+ * 
+ * Purpose: Account management with hierarchical display, user management, and account operations
+ * Access: ADMIN role only - comprehensive account management capabilities
+ * 
+ * Key Functions:
+ * - Display accounts in grid or tree view with hierarchy visualization
+ * - Search and filter accounts by type (INDIVIDUAL, ORGANIZATION, SUBSIDIARY)
+ * - Create new accounts with parent-child relationship configuration
+ * - Navigate to individual account detail pages for user management
+ * - View toggle (grid/tree) with localStorage persistence for user preference
+ * 
+ * Related Pages:
+ * - /accounts/[id] - Individual account details with user management and settings
+ * - /tickets - Tickets are scoped to accounts, account selection affects ticket visibility
+ * - /time - Time entries can be account-scoped, accounts appear in filtering
+ * - /billing - Accounts are billing entities, account selection affects invoice generation
+ * - /dashboard - Account count statistics displayed on dashboard
+ * 
+ * API Dependencies:
+ * - GET /api/accounts - Fetch accounts with pagination, search, and type filtering
+ * - POST /api/accounts - Create new accounts with hierarchy relationships
+ * - GET /api/accounts/[id] - Account details for navigation to individual pages
+ * 
+ * Components Used:
+ * - AccountTreeView - Hierarchical tree display of accounts with expand/collapse
+ * - AccountHierarchyCard - Enhanced card display with hierarchy indicators
+ * - AccountViewToggle - Switch between grid and tree views with persistence
+ * - CreateAccountDialog - Account creation form with parent account selection
+ * - AccountSelector - Used within dialogs for parent account selection
+ * 
+ * State Management:
+ * - Local state: Search filters, view mode, pagination, account list
+ * - View preferences: Grid/tree mode stored in localStorage
+ * - Action bar: Create account action for quick access
+ * - Permission checking: Admin-only access with redirect for unauthorized users
+ * 
+ * Navigation:
+ * - Entry points: Main navigation (admin only), dashboard account statistics
+ * - Exit points: Individual account pages (/accounts/[id]), settings via query params
+ * - Deep linking: Supports search parameters and account type filters
+ * - Settings access: Uses ?tab=settings query parameter for direct tab navigation
+ * 
+ * Hierarchy Features:
+ * - Visual parent-child relationships with indentation and connecting lines
+ * - Account type differentiation (Organization > Subsidiary > Individual)
+ * - Collapsible tree structure for large account hierarchies
+ * - Search across hierarchy with parent context preservation
+ */
+
 "use client";
 
 import { useSession } from "next-auth/react";

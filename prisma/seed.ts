@@ -3,108 +3,251 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('Starting database seed...');
+  console.log('🌱 Seeding database with clean data...');
 
-  // Create essential system settings
-  await prisma.systemSettings.upsert({
-    where: { key: 'system.ticketCustomFields' },
+  // Create default role templates
+  console.log('Creating default role templates...');
+
+  // Super Admin role - inherits all permissions
+  const superAdminRole = await prisma.roleTemplate.upsert({
+    where: { name: 'Super Administrator' },
     update: {},
     create: {
-      key: 'system.ticketCustomFields',
-      jsonValue: {
-        ticketFields: [
-          { name: 'priority', type: 'select', options: ['Low', 'Medium', 'High', 'Critical'] },
-          { name: 'environment', type: 'select', options: ['Development', 'Staging', 'Production'] },
-        ],
-        accountFields: [
-          { name: 'account_manager', type: 'text' },
-          { name: 'billing_contact', type: 'email' },
-        ],
-      },
-      description: 'Global custom field definitions',
-    },
+      name: 'Super Administrator',
+      description: 'Full system access with all permissions automatically inherited',
+      permissions: [], // Empty because inheritAllPermissions = true
+      inheritAllPermissions: true,
+      isSystemRole: true,
+      scope: 'global'
+    }
+  });
+
+  // Employee role - for internal staff
+  const employeeRole = await prisma.roleTemplate.upsert({
+    where: { name: 'Employee' },
+    update: {},
+    create: {
+      name: 'Employee',
+      description: 'Internal staff with time tracking and ticket management permissions',
+      permissions: [
+        'tickets:view',
+        'tickets:create',
+        'tickets:update',
+        'time-entries:view',
+        'time-entries:create',
+        'time-entries:update',
+        'accounts:view',
+        'billing:view'
+      ],
+      inheritAllPermissions: false,
+      isSystemRole: true,
+      scope: 'global'
+    }
+  });
+
+  // Manager role - for team leads
+  const managerRole = await prisma.roleTemplate.upsert({
+    where: { name: 'Manager' },
+    update: {},
+    create: {
+      name: 'Manager',
+      description: 'Team lead with approval permissions and extended access',
+      permissions: [
+        'tickets:*',
+        'time-entries:*',
+        'time-entries:approve',
+        'accounts:view',
+        'accounts:update',
+        'billing:view',
+        'billing:create',
+        'invoices:view',
+        'invoices:create',
+        'users:view'
+      ],
+      inheritAllPermissions: false,
+      isSystemRole: true,
+      scope: 'global'
+    }
+  });
+
+  // Account Admin role - for account-specific administration
+  const accountAdminRole = await prisma.roleTemplate.upsert({
+    where: { name: 'Account Administrator' },
+    update: {},
+    create: {
+      name: 'Account Administrator',
+      description: 'Full access within assigned accounts',
+      permissions: [
+        'tickets:*',
+        'time-entries:view',
+        'users:view',
+        'users:invite',
+        'account-settings:update'
+      ],
+      inheritAllPermissions: false,
+      isSystemRole: false,
+      scope: 'account'
+    }
+  });
+
+  // Account User role - for regular account users
+  const accountUserRole = await prisma.roleTemplate.upsert({
+    where: { name: 'Account User' },
+    update: {},
+    create: {
+      name: 'Account User',
+      description: 'Basic account access for ticket creation and viewing',
+      permissions: [
+        'tickets:view',
+        'tickets:create',
+        'time-entries:view'
+      ],
+      inheritAllPermissions: false,
+      isSystemRole: false,
+      scope: 'account'
+    }
+  });
+
+  // Read-only role - for view-only access
+  const readOnlyRole = await prisma.roleTemplate.upsert({
+    where: { name: 'Read Only' },
+    update: {},
+    create: {
+      name: 'Read Only',
+      description: 'View-only access to assigned resources',
+      permissions: [
+        'tickets:view',
+        'time-entries:view'
+      ],
+      inheritAllPermissions: false,
+      isSystemRole: false,
+      scope: 'account'
+    }
+  });
+
+  console.log('✅ Created default role templates:');
+  console.log(`  - Super Administrator (ID: ${superAdminRole.id}) - System Role`);
+  console.log(`  - Employee (ID: ${employeeRole.id}) - System Role`);
+  console.log(`  - Manager (ID: ${managerRole.id}) - System Role`);
+  console.log(`  - Account Administrator (ID: ${accountAdminRole.id}) - Account Role`);
+  console.log(`  - Account User (ID: ${accountUserRole.id}) - Account Role`);
+  console.log(`  - Read Only (ID: ${readOnlyRole.id}) - Account Role`);
+
+  // Create default system settings
+  console.log('\nCreating default system settings...');
+
+  await prisma.systemSettings.upsert({
+    where: { key: 'company_name' },
+    update: {},
+    create: {
+      key: 'company_name',
+      value: 'Service Vault',
+    }
   });
 
   await prisma.systemSettings.upsert({
-    where: { key: 'default_tax_rate' },
+    where: { key: 'default_billing_rate' },
     update: {},
     create: {
-      key: 'default_tax_rate',
-      value: '0.08',
-      description: 'Default tax rate for invoices (8%)',
-    },
+      key: 'default_billing_rate',
+      value: '100.00',
+    }
   });
 
-  // Create ticket number template setting
+  await prisma.systemSettings.upsert({
+    where: { key: 'time_tracking_enabled' },
+    update: {},
+    create: {
+      key: 'time_tracking_enabled',
+      value: 'true',
+    }
+  });
+
   await prisma.systemSettings.upsert({
     where: { key: 'ticketNumberTemplate' },
     update: {},
     create: {
       key: 'ticketNumberTemplate',
       value: '{account}-{year}-{sequence:3}',
-      description: 'Template for generating ticket numbers. Available tags: {account}, {year}, {month}, {day}, {sequence}, {sequence:N}, {random}',
-    },
+    }
   });
-
-  // Create essential permissions
-  const permissions = [
-    { name: 'tickets.view', description: 'View tickets', resource: 'tickets', action: 'view' },
-    { name: 'tickets.create', description: 'Create tickets', resource: 'tickets', action: 'create' },
-    { name: 'tickets.edit', description: 'Edit tickets', resource: 'tickets', action: 'edit' },
-    { name: 'tickets.delete', description: 'Delete tickets', resource: 'tickets', action: 'delete' },
-    { name: 'time.view', description: 'View time entries', resource: 'time', action: 'view' },
-    { name: 'time.create', description: 'Create time entries', resource: 'time', action: 'create' },
-    { name: 'invoices.view', description: 'View invoices', resource: 'invoices', action: 'view' },
-    { name: 'invoices.create', description: 'Create invoices', resource: 'invoices', action: 'create' },
-    { name: 'users.manage', description: 'Manage users', resource: 'users', action: 'manage' },
-    { name: 'settings.manage', description: 'Manage settings', resource: 'settings', action: 'manage' },
-    { name: 'accounts.view', description: 'View accounts', resource: 'accounts', action: 'view' },
-    { name: 'accounts.manage', description: 'Manage accounts', resource: 'accounts', action: 'manage' },
-    { name: 'account_users.invite', description: 'Invite account users', resource: 'account_users', action: 'invite' },
-  ];
-
-  for (const permission of permissions) {
-    await prisma.permission.upsert({
-      where: { name: permission.name },
-      update: {},
-      create: permission,
-    });
-  }
 
   // Create default billing rates
-  const existingStandardRate = await prisma.billingRate.findFirst({
-    where: { name: 'Standard Rate' }
+  console.log('Creating default billing rates...');
+
+  const defaultRate = await prisma.billingRate.upsert({
+    where: { name: 'Standard Rate' },
+    update: {},
+    create: {
+      name: 'Standard Rate',
+      description: 'Default hourly rate for time entries',
+      rate: 100.00,
+      isDefault: true
+    }
   });
-  
-  if (!existingStandardRate) {
-    await prisma.billingRate.create({
-      data: {
-        name: 'Standard Rate',
-        description: 'Default hourly rate for services',
-        rate: 75.00,
-        isDefault: true,
-      },
+
+  const seniorRate = await prisma.billingRate.upsert({
+    where: { name: 'Senior Rate' },
+    update: {},
+    create: {
+      name: 'Senior Rate',
+      description: 'Senior consultant hourly rate',
+      rate: 150.00,
+      isDefault: false
+    }
+  });
+
+  console.log('✅ Created default billing rates:');
+  console.log(`  - Standard Rate: $${defaultRate.rate}/hour (Default)`);
+  console.log(`  - Senior Rate: $${seniorRate.rate}/hour`);
+
+  // Create sample accounts for development (optional)
+  if (process.env.NODE_ENV === 'development') {
+    console.log('\nCreating sample accounts for development...');
+
+    const sampleOrg = await prisma.account.upsert({
+      where: { name: 'ACME Corporation' },
+      update: {},
+      create: {
+        name: 'ACME Corporation',
+        accountType: 'ORGANIZATION',
+        companyName: 'ACME Corporation',
+        domains: 'acme.com,acme.org', // Domain auto-assignment example
+        address: '123 Business St, City, State 12345',
+        phone: '+1-555-123-4567'
+      }
     });
+
+    const sampleSubsidiary = await prisma.account.upsert({
+      where: { name: 'ACME Tech Division' },
+      update: {},
+      create: {
+        name: 'ACME Tech Division',
+        accountType: 'SUBSIDIARY',
+        parentId: sampleOrg.id,
+        companyName: 'ACME Tech Division',
+        domains: 'tech.acme.com',
+        address: '456 Tech Blvd, City, State 12345',
+        phone: '+1-555-123-4568'
+      }
+    });
+
+    console.log('✅ Created sample accounts:');
+    console.log(`  - ACME Corporation (ID: ${sampleOrg.id}) - Organization`);
+    console.log(`  - ACME Tech Division (ID: ${sampleSubsidiary.id}) - Subsidiary`);
   }
 
-  const existingSeniorRate = await prisma.billingRate.findFirst({
-    where: { name: 'Senior Rate' }
-  });
-  
-  if (!existingSeniorRate) {
-    await prisma.billingRate.create({
-      data: {
-        name: 'Senior Rate',
-        description: 'Senior developer/consultant rate',
-        rate: 125.00,
-        isDefault: false,
-      },
-    });
+  console.log('\n🎉 Database seeding completed successfully!');
+  console.log('✅ Default role templates created with super-admin support');
+  console.log('✅ System settings configured');
+  console.log('✅ Default billing rates created');
+  if (process.env.NODE_ENV === 'development') {
+    console.log('✅ Sample accounts created for development');
   }
-
-  console.log('Database seed completed successfully!');
-  console.log('Essential system settings and configuration have been created.');
-  console.log('Use the setup wizard to create your first admin user and complete the initial configuration.');
+  console.log('\n📋 Next steps:');
+  console.log('  1. Create your first user with super-admin role');
+  console.log('  2. Configure email settings');
+  console.log('  3. Set up additional accounts and users as needed');
 }
 
 main()

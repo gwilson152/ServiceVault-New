@@ -1,3 +1,57 @@
+/**
+ * TIME TRACKING PAGE
+ * 
+ * Purpose: Central hub for time entry management, timer controls, and time reporting
+ * Access: ADMIN and EMPLOYEE roles only, requires TIME_ENTRIES.VIEW permission
+ * 
+ * Key Functions:
+ * - View and filter time entries with advanced filtering options (period, status, account, user)
+ * - Create manual time entries for tickets or accounts directly
+ * - Display time statistics (today, week, month, billable amounts for permitted users)
+ * - Integrate with global timer system for seamless time tracking workflow
+ * - Time entry approval workflow for managers with appropriate permissions
+ * 
+ * Related Pages:
+ * - /tickets - Time entries are often created from ticket context via timer widgets
+ * - /billing - Time entries feed into invoice generation and billing workflows
+ * - /dashboard - Summary time stats are displayed on dashboard overview
+ * - /accounts - Account selection for time entries and account-scoped filtering
+ * 
+ * API Dependencies:
+ * - GET /api/time-entries - Fetch time entries with server-side role-based filtering
+ * - POST /api/tickets/[id]/time-entries - Create time entries for specific tickets
+ * - POST /api/accounts/[id]/time-entries - Create direct account time entries
+ * - GET /api/accounts - Account list for form dropdowns and filtering
+ * - GET /api/tickets - Ticket list for form dropdowns and filtering
+ * - GET /api/billing/rates - Billing rates for time entry creation (permission-based)
+ * - GET /api/users - User list for filtering (admin/manager view)
+ * 
+ * Components Used:
+ * - TimeEntryCard - Display individual time entries with permission-based actions
+ * - TimeEntryEditDialog - Edit existing time entries with validation
+ * - TimeEntryApprovalWizard - Bulk approval workflow for managers
+ * - AccountSelector - Hierarchical account selection for filtering and forms
+ * - TicketSelector - Ticket selection with filtering and search
+ * - useTimeTracking - Integration with global timer system for logged events
+ * 
+ * State Management:
+ * - Local state: Filter settings, form data, dialog visibility states
+ * - Global state: useTimeTracking for timer integration, useActionBar for contextual actions
+ * - Data fetching: Manual useEffect with stable fetch functions (legacy pattern, needs TanStack Query migration)
+ * - User preferences: Filter settings persisted via useUserPreferences hook
+ * - Permission state: useTimeEntryPermissions for individual entry permissions
+ * 
+ * Navigation:
+ * - Entry points: Main navigation, dashboard quick actions, timer "log time" workflow
+ * - Exit points: Ticket details (via time entry links), billing page (for invoicing), account management
+ * - Deep linking: Supports filter parameters in URL for bookmarking filtered views
+ * 
+ * Performance Notes:
+ * - Fixed infinite query loop by using stable fetch function references
+ * - Server-side permission filtering reduces client-side processing
+ * - Batch permission checks for better performance on large entry lists
+ */
+
 "use client";
 
 import { useSession } from "next-auth/react";
@@ -314,6 +368,27 @@ export default function TimeTrackingPage() {
 
   // calculateStatistics function moved inline to fetchTimeEntries to avoid circular dependency
   
+  // Stable fetch function wrappers - defined before useEffect to avoid initialization errors
+  const stableFetchAccounts = useCallback(() => {
+    fetchAccounts();
+  }, [fetchAccounts]);
+
+  const stableFetchBillingRates = useCallback(() => {
+    fetchBillingRates();
+  }, [fetchBillingRates]);
+
+  const stableFetchTickets = useCallback(() => {
+    fetchTickets();
+  }, [fetchTickets]);
+
+  const stableFetchUsers = useCallback(() => {
+    fetchUsers();
+  }, [fetchUsers]);
+
+  const stableFetchTimeEntries = useCallback(() => {
+    fetchTimeEntries();
+  }, [fetchTimeEntries]);
+
   // Permissions are now handled by useTimeEntryPermissions hook using TanStack Query
   // This avoids the infinite loop caused by state updates in async functions
 
@@ -364,16 +439,16 @@ export default function TimeTrackingPage() {
           });
         }
         
-        fetchAccounts();
-        fetchBillingRates();
-        fetchTickets();
-        fetchUsers();
-        fetchTimeEntries();
+        stableFetchAccounts();
+        stableFetchBillingRates();
+        stableFetchTickets();
+        stableFetchUsers();
+        stableFetchTimeEntries();
       };
       
       checkAccess();
     }
-  }, [status, session?.user?.email, router, permissionsLoading, preferencesLoading, canViewTimeEntries, canViewBilling, canApproveTimeEntriesValue, getTimePageFilters, updateTimePageFilters, addAction, fetchAccounts, fetchBillingRates, fetchTickets, fetchUsers, fetchTimeEntries]);
+  }, [status, session?.user?.email, router, permissionsLoading, preferencesLoading, canViewTimeEntries, canViewBilling, canApproveTimeEntriesValue, getTimePageFilters, addAction, stableFetchAccounts, stableFetchBillingRates, stableFetchTickets, stableFetchUsers, stableFetchTimeEntries]);
 
   // Cleanup actions when component unmounts
   useEffect(() => {
@@ -385,18 +460,18 @@ export default function TimeTrackingPage() {
   // Register for timer logged events to auto-refresh data
   useEffect(() => {
     const unregisterCallback = registerTimerLoggedCallback(() => {
-      fetchTimeEntries(); // Refresh time entries which will also recalculate statistics
+      stableFetchTimeEntries(); // Refresh time entries which will also recalculate statistics
     });
 
     return unregisterCallback;
-  }, [registerTimerLoggedCallback, fetchTimeEntries]);
+  }, [registerTimerLoggedCallback, stableFetchTimeEntries]);
 
   // Refresh time entries when filters change (only for server-side filters)
   useEffect(() => {
     if (session?.user && !isLoading) {
-      fetchTimeEntries();
+      stableFetchTimeEntries();
     }
-  }, [filterTicket, session?.user?.id, isLoading, fetchTimeEntries]);
+  }, [filterTicket, session?.user?.id, isLoading, stableFetchTimeEntries]);
 
   // Handle custom date range and period filter interaction
   useEffect(() => {
@@ -466,7 +541,7 @@ export default function TimeTrackingPage() {
       });
 
       if (response.ok) {
-        fetchTimeEntries(); // Refresh the time entries list
+        stableFetchTimeEntries(); // Refresh the time entries list
       } else {
         alert("Failed to delete time entry");
       }
@@ -474,7 +549,7 @@ export default function TimeTrackingPage() {
       console.error('Failed to delete time entry:', error);
       alert("Failed to delete time entry");
     }
-  }, [fetchTimeEntries]);
+  }, [stableFetchTimeEntries]);
 
   const handleOpenApprovalWizard = useCallback(() => {
     // Use the pre-fetched permission value instead of async call
@@ -540,7 +615,7 @@ export default function TimeTrackingPage() {
         setSelectedBillingRate("none");
         
         // Refresh data
-        fetchTimeEntries();
+        stableFetchTimeEntries();
         setActiveTab("entries");
       } else {
         const errorData = await response.json();
@@ -552,7 +627,7 @@ export default function TimeTrackingPage() {
     }
   }, [
     minutes, description, date, time, entryType, selectedTicket, selectedAccount,
-    noCharge, selectedBillingRate, fetchTimeEntries
+    noCharge, selectedBillingRate, stableFetchTimeEntries
   ]);
 
   // Timer functions are now handled globally by MultiTimerWidget - removed from this page
@@ -1324,7 +1399,7 @@ export default function TimeTrackingPage() {
         open={editDialogOpen}
         onOpenChange={setEditDialogOpen}
         onSuccess={() => {
-          fetchTimeEntries();
+          stableFetchTimeEntries();
           setSelectedTimeEntry(null);
         }}
       />
@@ -1333,7 +1408,7 @@ export default function TimeTrackingPage() {
         open={approvalWizardOpen}
         onOpenChange={setApprovalWizardOpen}
         onSuccess={() => {
-          fetchTimeEntries();
+          stableFetchTimeEntries();
         }}
       />
     </div>

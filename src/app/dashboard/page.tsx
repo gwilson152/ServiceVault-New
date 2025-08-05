@@ -1,3 +1,43 @@
+/**
+ * DASHBOARD PAGE
+ * 
+ * Purpose: Main landing page showing system overview and key metrics for all authenticated users
+ * Access: All authenticated users (ADMIN, EMPLOYEE, ACCOUNT_USER with role-specific content)
+ * 
+ * Key Functions:
+ * - Display role-appropriate statistics (active tickets, time tracking, revenue metrics)
+ * - Show recent activity including tickets and time entries
+ * - Provide quick access navigation to main workflow areas
+ * - Role-based content filtering (ACCOUNT_USER sees limited data)
+ * 
+ * Related Pages:
+ * - /tickets - Ticket management (quick ticket creation actions)
+ * - /time - Time tracking (recent time entries display)
+ * - /accounts - Account management (total accounts statistic)
+ * - /billing - Financial overview (revenue statistics for ADMIN/EMPLOYEE)
+ * - /portal - ACCOUNT_USER users are redirected to portal instead
+ * 
+ * API Dependencies:
+ * - GET /api/dashboard/stats - Main dashboard statistics (role-filtered)
+ * - GET /api/tickets?recent=true - Recent tickets list
+ * - GET /api/time-entries?recent=true - Recent time entries (via RecentTimeEntries component)
+ * 
+ * Components Used:
+ * - RecentTimeEntries - Display recent time tracking activity
+ * - Stats Cards - Metric display with icons and descriptions
+ * - Activity Feed - Recent system activity display
+ * 
+ * State Management:
+ * - Local state for dashboard stats and recent items
+ * - Session-based user role detection for content filtering
+ * - Real-time updates every 30 seconds for live dashboard metrics
+ * 
+ * Navigation:
+ * - Entry points: Main navigation, post-login redirect, portal fallback
+ * - Exit points: Quick actions to tickets, time tracking, account management
+ * - Deep linking: No URL parameters, serves as application hub
+ */
+
 "use client";
 
 import { useSession } from "next-auth/react";

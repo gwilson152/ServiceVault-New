@@ -142,24 +142,36 @@ export default function BillingPage() {
     }
   }, [status, session, router, canViewInvoices, canCreateInvoices, canUpdateInvoices, canDeleteInvoices, canViewBilling, canCreateBilling, canUpdateBilling, canDeleteBilling, addAction]);
 
-  if (status === "loading" || isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-lg">Loading...</div>
-      </div>
-    );
-  }
+  // All useCallback hooks must be defined before any conditional returns
+  const handleAddRate = useCallback(async () => {
+    if (!newRate.name || !newRate.rate) {
+      error('Please fill in all required fields');
+      return;
+    }
 
-  if (!session) {
-    return null;
-  }
+    try {
+      await createBillingRateMutation.mutateAsync(newRate);
+      success('Billing rate added successfully');
+      setShowAddRate(false);
+      setNewRate({ name: "", rate: 0, description: "", isDefault: false });
+    } catch (err: any) {
+      console.error('Failed to add billing rate:', err);
+      error('Failed to add billing rate', err.message);
+    }
+  }, [newRate, error, success, createBillingRateMutation]);
 
-  // Get selected account details for hierarchy display
-  const selectedAccountDetails = accounts.find(account => account.id === selectedAccount);
-  const hierarchicalAccounts = buildAccountHierarchy(accounts);
+  const handleDeleteRate = useCallback(async (rateId: string) => {
+    try {
+      await deleteBillingRateMutation.mutateAsync(rateId);
+      success('Billing rate deleted successfully');
+    } catch (err: any) {
+      console.error('Failed to delete billing rate:', err);
+      error('Failed to delete billing rate', err.message);
+    }
+  }, [deleteBillingRateMutation, success, error]);
 
   // Preview invoice items for manual selection
-  const handlePreviewInvoice = async () => {
+  const handlePreviewInvoice = useCallback(async () => {
     if (!selectedAccount) {
       error('Please select an account');
       return;
@@ -198,10 +210,10 @@ export default function BillingPage() {
       console.error('Failed to preview invoice:', err);
       error('Failed to preview invoice items');
     }
-  };
+  }, [selectedAccount, startDate, endDate, includeUnbilledOnly, includeSubsidiaries, error, setPreviewData, setSelectedTimeEntries, setSelectedAddons, setShowItemSelection, setActiveTab]);
 
   // Generate invoice with selected items
-  const handleGenerateInvoice = async () => {
+  const handleGenerateInvoice = useCallback(async () => {
     if (!selectedAccount) {
       error('Please select an account');
       return;
@@ -240,34 +252,23 @@ export default function BillingPage() {
       console.error('Failed to generate invoice:', err);
       error('Failed to generate invoice', err.message);
     }
-  };
+  }, [selectedAccount, showItemSelection, selectedTimeEntries, selectedAddons, startDate, endDate, includeUnbilledOnly, includeSubsidiaries, generateInvoiceMutation, success, error, setSelectedAccount, setStartDate, setEndDate, setShowItemSelection, setPreviewData, setSelectedTimeEntries, setSelectedAddons, setActiveTab]);
 
-  const handleAddRate = useCallback(async () => {
-    if (!newRate.name || !newRate.rate) {
-      error('Please fill in all required fields');
-      return;
-    }
+  if (status === "loading" || isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-lg">Loading...</div>
+      </div>
+    );
+  }
 
-    try {
-      await createBillingRateMutation.mutateAsync(newRate);
-      success('Billing rate added successfully');
-      setShowAddRate(false);
-      setNewRate({ name: "", rate: 0, description: "", isDefault: false });
-    } catch (err: any) {
-      console.error('Failed to add billing rate:', err);
-      error('Failed to add billing rate', err.message);
-    }
-  }, [newRate, error, success, createBillingRateMutation]);
+  if (!session) {
+    return null;
+  }
 
-  const handleDeleteRate = useCallback(async (rateId: string) => {
-    try {
-      await deleteBillingRateMutation.mutateAsync(rateId);
-      success('Billing rate deleted successfully');
-    } catch (err: any) {
-      console.error('Failed to delete billing rate:', err);
-      error('Failed to delete billing rate', err.message);
-    }
-  }, [success, error, deleteBillingRateMutation]);
+  // Get selected account details for hierarchy display
+  const selectedAccountDetails = accounts.find(account => account.id === selectedAccount);
+  const hierarchicalAccounts = buildAccountHierarchy(accounts);
 
   const handleEditRate = (rateId: string) => {
     setEditingRate(rateId);
