@@ -23,20 +23,23 @@ Core system documentation covering the application's structure and design:
 Detailed documentation for major application features:
 
 - **[`accounts.md`](./features/accounts.md)** - Hierarchical account management system
-- **[`billing.md`](./features/billing.md)** - Billing rates, invoicing, and payment processing  
+- **[`billing.md`](./features/billing.md)** - Billing rates system with enable/disable functionality and settings integration
+- **[`invoicing.md`](./features/invoicing.md)** - **New!** Complete invoice management system with permission patterns, API usage, and troubleshooting guide
 - **[`time-entries.md`](./features/time-entries.md)** - Time tracking, approval workflows, and billing integration
+- **[`tickets.md`](./features/tickets.md)** - **Updated!** Ticket system with explicit assignment permissions (assignable-to/assignable-for) and account user integration
 - **[`role-templates.md`](./features/role-templates.md)** - Role template management with ABAC permission system
-- **[`user-management.md`](./features/user-management.md)** - **New!** Comprehensive user administration with role management and security controls
+- **[`user-management.md`](./features/user-management.md)** - **Enhanced!** Comprehensive user administration with role management, security controls, and domain assignment
 
 ### Component Documentation
 
 #### [`components/`](./components/) - UI Component Library
 Technical documentation for reusable UI components:
 
-- **[`selectors.md`](./components/selectors.md)** - Hierarchical selector components (AccountSelector, etc.)
+- **[`selectors.md`](./components/selectors.md)** - **Enhanced!** Hierarchical selector components (AccountSelector, BillingRateSelector, etc.)
 - **[`action-bar.md`](./components/action-bar.md)** - Global action bar implementation
-- **[`ui/`](./components/ui/)** - Base UI component documentation
+- **[`ui/`](./components/ui/)** - Base UI component documentation  
 - **[`providers/`](./components/providers/)** - React context provider documentation
+- **[`dialogs.md`](./components/dialogs.md)** - **New!** User management dialogs and modal patterns
 
 ### UI/UX Documentation
 
@@ -55,8 +58,9 @@ User interface and user experience documentation:
 #### [`system/`](./system/) - System Implementation and Configuration
 Technical system documentation:
 
-- **[`permissions.md`](./system/permissions.md)** - **Essential!** ABAC permissions system architecture and implementation
-- **[`settings-architecture.md`](./system/settings-architecture.md)** - **New!** Unified settings architecture with SystemSettings and permission controls
+- **[`permissions.md`](./system/permissions.md)** - **Essential!** ABAC permissions system with PermissionService usage patterns and troubleshooting
+- **[`settings-architecture.md`](./system/settings-architecture.md)** - **New!** Unified settings architecture with SystemSettings and permission controls  
+- **[`database-schema.md`](./system/database-schema.md)** - **Updated!** Complete database schema documentation with recent Invoice and BillingRate enhancements
 - **[`user-preferences.md`](./system/user-preferences.md)** - Database-backed user preferences system
 - **[`deployment.md`](./system/deployment.md)** - Production deployment guide with Docker, security, and monitoring
 - **[`setup-wizard.md`](./system/setup-wizard.md)** - Initial system setup and configuration process
@@ -68,17 +72,17 @@ Technical system documentation:
 #### [`development/`](./development/) - Development Process and Status
 Development workflow and project status documentation:
 
-- **[`workflow.md`](./development/workflow.md)** - **Essential!** Development workflow, standards, and best practices
-- **[`todos.md`](./development/todos.md)** - Current development tasks and project status (updated regularly)
-  - Completed implementation tasks
-  - Pending development work
+- **[`workflow.md`](./development/workflow.md)** - **Essential!** Development workflow, standards, and database migration management
+- **[`todos.md`](./development/todos.md)** - Current development tasks and project status (updated 2025-08-06)
+  - Completed implementation tasks including billing/invoice system fixes
+  - Pending development work including AccountUserSelector standardization
   - Priority assignments and dependencies
 - **[`change-tracking.md`](./development/change-tracking.md)** - **Updated!** Recent fixes and changes made to the system
-  - Email settings consolidation to unified SystemSettings architecture
-  - Settings page unification and re-run setup functionality
-  - Settings save pattern standardization with individual section saves
-  - Company information moved to dedicated settings tab
-  - Post-migration stabilization fixes and bug resolutions
+  - Billing/invoice functionality fixes with permission service parameter format corrections
+  - Database schema alignment for Invoice model (addon vs ticketAddon relationships)
+  - Migration regeneration process for schema drift resolution
+  - Permission service PermissionContext object format enforcement
+  - BillingRate isEnabled field addition and database schema synchronization
 
 ## 🎯 Documentation Purpose
 
@@ -178,12 +182,13 @@ Each document serves specific audiences and use cases:
 
 ### Quick Reference
 - **Architecture**: [`architecture/app-overview.md`](./architecture/app-overview.md)
-- **Development**: [`development/workflow.md`](./development/workflow.md)
-- **Permissions**: [`system/permissions.md`](./system/permissions.md)
+- **Development**: [`development/workflow.md`](./development/workflow.md) - **includes database migration patterns**
+- **Permissions**: [`system/permissions.md`](./system/permissions.md) - **critical PermissionService usage**
 - **UI Standards**: [`ui/ui-design-principles.md`](./ui/ui-design-principles.md)
+- **Invoicing**: [`features/invoicing.md`](./features/invoicing.md) - **complete billing system guide**
 - **Deployment**: [`system/deployment.md`](./system/deployment.md)
 - **Current Work**: [`development/todos.md`](./development/todos.md)
-- **Components**: [`components/selectors.md`](./components/selectors.md)
+- **Components**: [`components/selectors.md`](./components/selectors.md) - **includes BillingRateSelector**
 
 ### Search Tips
 - Use your editor's search functionality across all `.md` files

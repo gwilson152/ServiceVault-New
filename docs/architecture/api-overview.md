@@ -94,6 +94,52 @@ const results = await prisma.account.findMany(filteredQuery);
 // - Hierarchical permissions: Include subsidiary accounts
 ```
 
+### Hierarchical Data Access
+Service Vault supports hierarchical account structures with optional subsidiary data inclusion:
+
+```typescript
+// Recursive function to get all child account IDs
+async function getAllChildAccountIds(accountId: string): Promise<string[]> {
+  const children = await prisma.account.findMany({
+    where: { parentId: accountId },
+    select: { id: true }
+  });
+  
+  let allChildIds: string[] = children.map(child => child.id);
+  
+  // Recursively get children of children
+  for (const child of children) {
+    const grandChildren = await getAllChildAccountIds(child.id);
+    allChildIds = allChildIds.concat(grandChildren);
+  }
+  
+  return allChildIds;
+}
+
+// Usage in API endpoints
+const accountIds = [invoiceAccountId];
+if (includeSubsidiaries) {
+  const childAccountIds = await getAllChildAccountIds(invoiceAccountId);
+  accountIds = accountIds.concat(childAccountIds);
+}
+
+// Enhanced query with multiple discovery pathways
+const timeEntries = await prisma.timeEntry.findMany({
+  where: {
+    AND: [
+      { invoiceItems: { none: {} } },
+      { isApproved: true },
+      {
+        OR: [
+          { accountId: { in: accountIds } },        // Direct account match
+          { ticket: { accountId: { in: accountIds } } }  // Ticket relationship
+        ]
+      }
+    ]
+  }
+});
+```
+
 ## API Conventions
 
 ### Standard HTTP Methods
@@ -129,6 +175,10 @@ const results = await prisma.account.findMany(filteredQuery);
 - `{field}_contains`: Text contains (case-insensitive)
 - `{field}_start`: Range start (dates, numbers)
 - `{field}_end`: Range end (dates, numbers)
+
+#### Hierarchy Parameters
+- `includeSubsidiaries`: Include data from subsidiary/child accounts (`true` | `false`, default: `false`)
+- `accountId`: Filter by specific account (when combined with `includeSubsidiaries`, includes child accounts)
 
 ### Request Headers
 ```http
@@ -500,7 +550,14 @@ const result = await prisma.$transaction(async (tx) => {
 
 #### Invoices (`/api/invoices`)
 - **Purpose**: Invoice generation and management  
-- **Key Features**: PDF generation, item management, status workflow
+- **Key Features**: PDF generation, item management, status workflow, subsidiary support, enhanced discovery
+- **Key Endpoints**:
+  - `/api/invoices/[id]/available-items` - Get unbilled items with enhanced discovery and optional subsidiary inclusion
+  - `/api/invoices/[id]/items` - Add items to existing invoices (uses identical validation logic)
+  - `/api/invoices/[id]/items/[itemId]` - Remove specific items from invoices
+- **Enhanced Discovery**: Finds time entries through direct account match OR ticket relationship
+- **API Consistency**: Discovery and validation endpoints use identical filtering logic
+- **Subsidiary Support**: `?includeSubsidiaries=true` parameter for hierarchical item inclusion
 - **Permissions**: Account-scoped access, billing permissions
 
 #### Settings (`/api/settings`)

@@ -664,7 +664,11 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
                               <span className="text-gray-500">No ticket</span>
                             )}
                           </TableCell>
-                          <TableCell>{entry.account.name}</TableCell>
+                          <TableCell>
+                            {entry.account ? entry.account.name : (
+                              <span className="text-gray-500">No account</span>
+                            )}
+                          </TableCell>
                           <TableCell>
                             <Badge variant={entry.billable ? "default" : "secondary"}>
                               {entry.billable ? "Billable" : "Non-billable"}

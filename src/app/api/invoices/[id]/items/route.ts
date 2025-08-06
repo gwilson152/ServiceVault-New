@@ -27,12 +27,12 @@ export async function POST(
     }
 
     // Check permission to edit invoice items with account context
-    const canEditItems = await permissionService.hasPermission(
-      session.user.id,
-      "invoices",
-      "edit-items",
-      invoiceForAuth.accountId
-    );
+    const canEditItems = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "invoices",
+      action: "edit-items",
+      accountId: invoiceForAuth.accountId
+    });
 
     if (!canEditItems) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -62,13 +62,31 @@ export async function POST(
 
     const newItems = [];
 
+    // Determine which account IDs to include (same logic as available-items)
+    let accountIds = [invoiceForAuth.accountId];
+    // Note: We don't check includeSubsidiaries here since the frontend should only send 
+    // time entry IDs that were already validated in the available-items call
+
     // Add time entries
     if (timeEntryIds.length > 0) {
       const timeEntries = await prisma.timeEntry.findMany({
         where: {
-          id: { in: timeEntryIds },
-          accountId: invoiceForAuth.accountId, // Ensure entries belong to same account
-          invoiceItems: { none: {} } // Ensure not already on an invoice
+          AND: [
+            { id: { in: timeEntryIds } },
+            { invoiceItems: { none: {} } }, // Ensure not already on an invoice
+            {
+              OR: [
+                // Direct account match
+                { accountId: { in: accountIds } },
+                // Ticket belongs to invoice account(s)
+                {
+                  ticket: {
+                    accountId: { in: accountIds }
+                  }
+                }
+              ]
+            }
+          ]
         },
         include: {
           ticket: true,
@@ -92,7 +110,6 @@ export async function POST(
         newItems.push({
           invoiceId: resolvedParams.id,
           timeEntryId: timeEntry.id,
-          ticketId: timeEntry.ticketId,
           description: `${timeEntry.user.name} - ${timeEntry.description || 'Time entry'}${timeEntry.ticket ? ` (Ticket ${timeEntry.ticket.ticketNumber})` : ''}`,
           quantity: hours,
           rate: rate,
@@ -107,7 +124,7 @@ export async function POST(
         where: {
           id: { in: addonIds },
           ticket: {
-            accountId: invoiceForAuth.accountId // Ensure addons belong to same account
+            accountId: { in: accountIds } // Use same account filtering as time entries
           },
           invoiceItems: { none: {} } // Ensure not already on an invoice
         },
@@ -128,8 +145,7 @@ export async function POST(
 
         newItems.push({
           invoiceId: resolvedParams.id,
-          ticketAddonId: addon.id,
-          ticketId: addon.ticketId,
+          addonId: addon.id,
           description: `${addon.name} - ${addon.description || 'Ticket addon'} (Ticket ${addon.ticket.ticketNumber})`,
           quantity: addon.quantity,
           rate: addon.price,
@@ -145,21 +161,17 @@ export async function POST(
         data: newItems
       });
 
-      // Recalculate invoice totals
+      // Recalculate invoice total
       const allItems = await tx.invoiceItem.findMany({
         where: { invoiceId: resolvedParams.id }
       });
 
-      const subtotal = allItems.reduce((sum, item) => sum + item.amount, 0);
-      const tax = subtotal * 0; // No tax for now
-      const total = subtotal + tax;
+      const total = allItems.reduce((sum, item) => sum + item.amount, 0);
 
-      // Update invoice totals
+      // Update invoice total
       await tx.invoice.update({
         where: { id: resolvedParams.id },
         data: {
-          subtotal,
-          tax,
           total,
           updatedAt: new Date()
         }

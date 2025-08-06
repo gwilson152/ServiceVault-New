@@ -1,8 +1,10 @@
-# TODOs - Permission System Implementation
+# TODOs - System Development Progress
 
 ## Overview
 
-This document tracks the progress of the major permission system overhaul completed on 2025-08-05. The system has been migrated from a fragmented User/AccountUser structure to a clean ABAC (Attribute-Based Access Control) system with PostgreSQL.
+This document tracks the progress of major system implementations and ongoing development work. Last updated: 2025-08-06.
+
+The system has been successfully migrated to a clean ABAC (Attribute-Based Access Control) system with PostgreSQL, with recent focus on billing/invoice functionality stabilization.
 
 ### Previous System Issues
 
@@ -24,7 +26,9 @@ The new system implements a clean ABAC (Attribute-Based Access Control) pattern 
 - `Account` - Business accounts with hierarchy support and CSV domains field
 - `RoleTemplate` - Permission templates with `inheritAllPermissions` super-admin flag
 - `AccountMembership` - Junction table for User ↔ Account relationships with role assignment
-- `Permission` - Granular permissions (resource, action, accountId scope)
+- `Invoice` + `InvoiceItem` - Complete invoicing system with time entry and addon integration
+- `BillingRate` - Billing rates with enable/disable functionality
+- `Ticket` - Enhanced with dual assignment model (assigneeId + assignedAccountUserId)
 
 **Key Services:**
 
@@ -104,6 +108,34 @@ await permissionService.hasPermission({
 - [x] Updated navigation system to use permission-based access instead of hard-coded roles
 - [x] Created comprehensive user detail page with view/edit/delete functionality at `/users/[id]`
 - [x] Added account parent assignment/reassignment functionality to `/accounts` page with circular reference prevention
+
+## 🆕 Recent Completions (2025-08-06)
+
+### Billing/Invoice System Stabilization
+
+**Critical Issues Resolved:**
+
+- [x] **PermissionService Parameter Format Error**: Fixed invoice API endpoints using individual parameters instead of PermissionContext object
+- [x] **Database Schema Alignment**: Updated Invoice interface to match actual database schema (removed non-existent `subtotal`, `tax` fields)
+- [x] **Relationship Naming**: Fixed `ticketAddon` vs `addon` relationship naming in TypeScript interfaces  
+- [x] **Migration Schema Drift**: Regenerated migrations to include missing `BillingRate.isEnabled` field
+- [x] **Permission Context Validation**: Enhanced permission service to properly validate `session?.user?.id` before database queries
+
+**Documentation Updates:**
+
+- [x] **Created comprehensive `/docs/features/invoicing.md`** with complete system documentation
+- [x] **Enhanced `/docs/system/permissions.md`** with PermissionService usage patterns and troubleshooting
+- [x] **Updated `/docs/development/workflow.md`** with database migration regeneration process
+- [x] **Created `/docs/system/database-schema.md`** with current schema documentation
+- [x] **Enhanced `/docs/components/selectors.md`** with BillingRateSelector documentation
+- [x] **Updated CLAUDE.md** with permission system examples and important reminders
+
+**Technical Fixes:**
+
+- [x] **Invoice API Routes**: Fixed all permission service calls in `/api/invoices/[id]/route.ts`
+- [x] **Database Migration**: Successfully regenerated migrations with complete schema
+- [x] **TypeScript Compilation**: Resolved all billing-related compilation errors
+- [x] **Invoice Interface**: Aligned with actual database fields and relationships
 
 ## 🔄 Remaining Tasks
 

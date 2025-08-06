@@ -275,17 +275,32 @@ By default, the component automatically selects the default billing rate when da
 
 ### Usage Patterns
 
-#### Time Entry Creation (Optional Selection)
+#### Time Entry Creation (Standard Pattern - Auto-Select Default)
 
 ```typescript
-// QuickTimeEntry component - User chooses rate
+// QuickTimeEntry component - Standard time logging with auto-selection
 <BillingRateSelector
   accountId={accountId}
   value={billingRateId}
   onValueChange={setBillingRateId}
   showNoChargeOption={false}    // Hide if noCharge switch handles it
-  autoSelectDefault={false}     // Don't preselect - let user choose
+  autoSelectDefault={true}      // Auto-select default rate (recommended)
   placeholder="Select billing rate (optional)"
+/>
+```
+
+#### Time Entry Creation (Manual Selection Only)
+
+```typescript
+// Special cases where user must explicitly choose rate
+<BillingRateSelector
+  accountId={accountId}
+  value={billingRateId}
+  onValueChange={setBillingRateId}
+  showNoChargeOption={false}    
+  autoSelectDefault={false}     // Force user to make explicit choice
+  placeholder="Choose billing rate"
+  required={true}               // Make selection required
 />
 ```
 
@@ -753,9 +768,10 @@ const [selectedAccount, setSelectedAccount] = useState<string>("all");
 
 1. **Account Context**: Always provide `accountId` to show relevant rates with proper overrides
 2. **Auto-Selection Strategy**:
-   - Use `autoSelectDefault={true}` for required fields (invoices, billing forms)
-   - Use `autoSelectDefault={false}` for optional fields (time entries, overrides)
-   - Consider user workflow - preselection vs user choice
+   - **Recommended Default**: Use `autoSelectDefault={true}` for most time entry scenarios
+   - Use `autoSelectDefault={true}` for required fields (invoices, billing forms, standard time logging)
+   - Use `autoSelectDefault={false}` only for special cases where explicit user choice is required
+   - Consider user workflow - auto-selection improves UX for routine operations
 3. **No Charge Integration**: Use `showNoChargeOption={false}` when handling no-charge logic separately
 4. **Required Fields**: Set `required={true}` for forms where billing rate is mandatory
 5. **State Management**: Clear billing rate selection when switching to no-charge mode
@@ -784,6 +800,15 @@ const handleNoChargeChange = (checked: boolean) => {
 
 // Examples of different auto-selection strategies:
 
+// Standard time entry - auto-select default rate (recommended)
+<BillingRateSelector
+  accountId={accountId}
+  value={billingRateId}
+  onValueChange={setBillingRateId}
+  autoSelectDefault={true}      // Auto-select for better UX
+  placeholder="Select billing rate (optional)"
+/>
+
 // Required billing form - auto-select default rate
 <BillingRateSelector
   accountId={accountId}
@@ -793,13 +818,14 @@ const handleNoChargeChange = (checked: boolean) => {
   required={true}
 />
 
-// Optional time entry - let user choose
+// Special case - force explicit user choice
 <BillingRateSelector
   accountId={accountId}
   value={billingRateId}
   onValueChange={setBillingRateId}
-  autoSelectDefault={false}     // No auto-selection
-  placeholder="Choose rate (optional)"
+  autoSelectDefault={false}     // Only when user must explicitly choose
+  required={true}
+  placeholder="Choose billing rate"
 />
 ```
 

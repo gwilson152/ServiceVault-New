@@ -27,12 +27,12 @@ export async function GET(
     }
 
     // Check permission to view this invoice with account context
-    const canViewInvoice = await permissionService.hasPermission(
-      session.user.id,
-      "invoices",
-      "view",
-      invoiceForAuth.accountId
-    );
+    const canViewInvoice = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "invoices",
+      action: "view",
+      accountId: invoiceForAuth.accountId
+    });
 
     if (!canViewInvoice) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -50,7 +50,7 @@ export async function GET(
                 user: true,
               },
             },
-            ticketAddon: {
+            addon: {
               include: {
                 ticket: true,
               },
@@ -98,12 +98,12 @@ export async function PUT(
     }
 
     // Check permission to update this invoice with account context
-    const canUpdateInvoice = await permissionService.hasPermission(
-      session.user.id,
-      "invoices",
-      "update",
-      invoiceForAuth.accountId
-    );
+    const canUpdateInvoice = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "invoices",
+      action: "update",
+      accountId: invoiceForAuth.accountId
+    });
 
     if (!canUpdateInvoice) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -114,12 +114,12 @@ export async function PUT(
 
     // For date updates, check specific permission
     if ((issueDate !== undefined || dueDate !== undefined)) {
-      const canUpdateDates = await permissionService.hasPermission(
-        session.user.id,
-        "invoices",
-        "update-dates",
-        invoiceForAuth.accountId
-      );
+      const canUpdateDates = await permissionService.hasPermission({
+        userId: session.user.id,
+        resource: "invoices",
+        action: "update-dates",
+        accountId: invoiceForAuth.accountId
+      });
 
       if (!canUpdateDates) {
         return NextResponse.json({ 
@@ -163,7 +163,7 @@ export async function PUT(
                 user: true,
               },
             },
-            ticketAddon: {
+            addon: {
               include: {
                 ticket: true,
               },
@@ -207,12 +207,12 @@ export async function DELETE(
     }
 
     // Check permission to delete this invoice with account context
-    const canDeleteInvoice = await permissionService.hasPermission(
-      session.user.id,
-      "invoices",
-      "delete",
-      invoiceForAuth.accountId
-    );
+    const canDeleteInvoice = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "invoices",
+      action: "delete",
+      accountId: invoiceForAuth.accountId
+    });
 
     if (!canDeleteInvoice) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });

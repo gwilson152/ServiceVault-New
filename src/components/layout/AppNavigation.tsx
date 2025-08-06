@@ -46,7 +46,24 @@ export function AppNavigation({ children }: AppNavigationProps) {
     canViewRoleTemplates
   } = usePermissions();
 
-  // Check if user has system-wide admin privileges
+  // Check if user has system-wide admin privileges and get role name
+  const getPrimaryRole = () => {
+    if (!session?.user?.systemRoles?.length) return "User";
+    
+    // Find the highest privilege role (Super Administrator first)
+    const superAdminRole = session.user.systemRoles.find(
+      (sr: any) => sr.role.inheritAllPermissions
+    );
+    
+    if (superAdminRole) {
+      return superAdminRole.role.name;
+    }
+    
+    // Return the first system role name if no super admin role
+    return session.user.systemRoles[0]?.role?.name || "User";
+  };
+
+  const primaryRoleName = getPrimaryRole();
   const isSystemAdmin = session?.user?.systemRoles?.some(
     (sr: any) => sr.role.inheritAllPermissions
   ) || false;
@@ -140,8 +157,8 @@ export function AppNavigation({ children }: AppNavigationProps) {
             <span className="text-sm text-muted-foreground hidden sm:block">
               {session?.user?.name || session?.user?.email}
             </span>
-            <Badge variant="secondary">
-              {isSystemAdmin ? "System Admin" : "User"}
+            <Badge variant="secondary" className={isSystemAdmin ? "bg-orange-100 text-orange-800" : ""}>
+              {primaryRoleName}
             </Badge>
 
             <Button
@@ -210,7 +227,7 @@ export function AppNavigation({ children }: AppNavigationProps) {
                     {session?.user?.name || session?.user?.email}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {isSystemAdmin ? "System Admin" : "User"}
+                    {primaryRoleName}
                   </p>
                 </div>
               </div>

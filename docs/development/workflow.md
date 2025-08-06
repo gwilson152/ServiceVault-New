@@ -28,6 +28,9 @@ cp .env.example .env
 npx prisma generate
 npx prisma db push
 
+# Seed database with default data
+npx tsx prisma/seed.ts
+
 # Start development server (user starts manually)  
 npm run dev
 ```
@@ -72,17 +75,48 @@ npx prisma studio      # Open database browser
 npx prisma db seed     # Seed database (if seeding script exists)
 ```
 
-### Useful Development Commands
+### Database Migration Management
+
+**When Schema Changes Significantly:**
 
 ```bash
-# Reset database (development only)
-npx prisma db push --force-reset
+# 1. Delete existing migrations (when schema drift occurs)
+rm -rf prisma/migrations
 
-# View database schema
+# 2. Create fresh migration from current schema
+npx prisma migrate dev --name initial_complete_schema
+
+# 3. Verify seeding works with new schema
+npx tsx prisma/seed.ts
+```
+
+**Regular Development:**
+
+```bash
+# Push schema changes without migration
+npx prisma db push
+
+# Generate Prisma client after schema changes
+npx prisma generate
+
+# Reset database (development only)
+npx prisma migrate reset --force
+
+# Generate specific migration  
+npx prisma migrate dev --name your-migration-name
+```
+
+**Database Troubleshooting:**
+
+```bash
+# Check current database state
 npx prisma db pull
 
-# Generate migration
-npx prisma migrate dev --name your-migration-name
+# View database in browser
+npx prisma studio
+
+# Check migration status
+npx prisma migrate status
 ```
 
 ## Code Standards

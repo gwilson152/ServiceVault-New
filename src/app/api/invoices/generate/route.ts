@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { hasPermission } from "@/lib/permissions";
+import { permissionService } from "@/lib/permissions/PermissionService";
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,19 +18,19 @@ export async function POST(request: NextRequest) {
       resource: "billing",
       action: "create"
     });
-    if (!canCreateBilling) {
+    if (!canCreate) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const body = await request.json();
-    const { 
-      accountId, 
-      startDate, 
-      endDate, 
-      includeUnbilledOnly = true, 
+    const {
+      accountId,
+      startDate,
+      endDate,
+      includeUnbilledOnly = true,
       includeSubsidiaries = false,
       selectedTimeEntryIds,
-      selectedAddonIds 
+      selectedAddonIds
     } = body;
 
     if (!accountId) {
@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
     let accountIds = [accountId];
     if (includeSubsidiaries) {
       const subsidiaries = await prisma.account.findMany({
-        where: { parentAccountId: accountId },
+        where: { parentId: accountId },
         select: { id: true }
       });
       accountIds = [...accountIds, ...subsidiaries.map(s => s.id)];
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
 
     // Get time entries - either specific IDs or filtered query
     let timeEntryWhere: Record<string, unknown>;
-    
+
     if (selectedTimeEntryIds && selectedTimeEntryIds.length > 0) {
       // Manual selection mode - use specific IDs
       timeEntryWhere = {
@@ -94,15 +94,40 @@ export async function POST(request: NextRequest) {
     const timeEntries = await prisma.timeEntry.findMany({
       where: timeEntryWhere,
       include: {
-        ticket: true,
-        user: true,
+        ticket: {
+          select: {
+            id: true,
+            ticketNumber: true,
+            title: true,
+            status: true,
+            priority: true,
+            assigneeId: true,
+            assignedAccountUserId: true,
+            createdAt: true,
+            accountId: true,
+            assignee: {
+              select: { id: true, name: true, email: true }
+            },
+            assignedAccountUser: {
+              select: { 
+                id: true,
+                user: {
+                  select: { id: true, name: true, email: true }
+                }
+              }
+            }
+          }
+        },
+        user: {
+          select: { id: true, name: true, email: true }
+        },
       },
       orderBy: { date: "asc" },
     });
 
     // Get ticket addons - either specific IDs or filtered query
     let addonWhere: Record<string, unknown>;
-    
+
     if (selectedAddonIds && selectedAddonIds.length > 0) {
       // Manual selection mode - use specific IDs
       addonWhere = {
@@ -128,7 +153,30 @@ export async function POST(request: NextRequest) {
     const ticketAddons = await prisma.ticketAddon.findMany({
       where: addonWhere,
       include: {
-        ticket: true,
+        ticket: {
+          select: {
+            id: true,
+            ticketNumber: true,
+            title: true,
+            status: true,
+            priority: true,
+            assigneeId: true,
+            assignedAccountUserId: true,
+            createdAt: true,
+            accountId: true,
+            assignee: {
+              select: { id: true, name: true, email: true }
+            },
+            assignedAccountUser: {
+              select: { 
+                id: true,
+                user: {
+                  select: { id: true, name: true, email: true }
+                }
+              }
+            }
+          }
+        },
       },
       orderBy: { createdAt: "asc" },
     });
@@ -158,7 +206,7 @@ export async function POST(request: NextRequest) {
     const invoiceNumber = `INV-${new Date().getFullYear()}-${String(invoiceCount + 1).padStart(3, '0')}`;
 
     // Create description
-    const periodDesc = startDate && endDate 
+    const periodDesc = startDate && endDate
       ? `for period ${new Date(startDate).toLocaleDateString()} - ${new Date(endDate).toLocaleDateString()}`
       : "for unbilled items";
 
@@ -169,9 +217,6 @@ export async function POST(request: NextRequest) {
         data: {
           invoiceNumber,
           accountId,
-          notes: `Generated invoice ${periodDesc}`,
-          subtotal,
-          tax: taxAmount,
           total,
           status: "DRAFT",
           creatorId: session.user.id,
@@ -198,7 +243,7 @@ export async function POST(request: NextRequest) {
       if (ticketAddons.length > 0) {
         const addonItems = ticketAddons.map(addon => ({
           invoiceId: invoice.id,
-          ticketAddonId: addon.id,
+          addonId: addon.id,
           description: addon.name,
           quantity: addon.quantity,
           rate: addon.price,
@@ -226,7 +271,7 @@ export async function POST(request: NextRequest) {
                 user: true,
               },
             },
-            ticketAddon: {
+            addon: {
               include: {
                 ticket: true,
               },

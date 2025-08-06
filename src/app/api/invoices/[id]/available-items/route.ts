@@ -4,6 +4,24 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { permissionService } from "@/lib/permissions/PermissionService";
 
+// Recursive function to get all child account IDs
+async function getAllChildAccountIds(accountId: string): Promise<string[]> {
+  const children = await prisma.account.findMany({
+    where: { parentId: accountId },
+    select: { id: true }
+  });
+  
+  let allChildIds: string[] = children.map(child => child.id);
+  
+  // Recursively get children of children
+  for (const child of children) {
+    const grandChildren = await getAllChildAccountIds(child.id);
+    allChildIds = allChildIds.concat(grandChildren);
+  }
+  
+  return allChildIds;
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -11,6 +29,8 @@ export async function GET(
   try {
     const session = await getServerSession(authOptions);
     const resolvedParams = await params;
+    const { searchParams } = new URL(request.url);
+    const includeSubsidiaries = searchParams.get('includeSubsidiaries') === 'true';
 
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -27,12 +47,12 @@ export async function GET(
     }
 
     // Check permission to view invoice items with account context
-    const canEditItems = await permissionService.hasPermission(
-      session.user.id, 
-      "invoices", 
-      "edit-items",
-      invoiceForAuth.accountId
-    );
+    const canEditItems = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "invoices",
+      action: "edit-items",
+      accountId: invoiceForAuth.accountId
+    });
 
     if (!canEditItems) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -45,12 +65,35 @@ export async function GET(
       }, { status: 400 });
     }
 
-    // Get unbilled time entries for this account
+    // Determine which account IDs to include
+    let accountIds = [invoiceForAuth.accountId];
+    if (includeSubsidiaries) {
+      const childAccountIds = await getAllChildAccountIds(invoiceForAuth.accountId);
+      accountIds = accountIds.concat(childAccountIds);
+    }
+
+    // Get unbilled time entries through multiple pathways:
+    // 1. Direct account match (time entry accountId)
+    // 2. Ticket relationship (time entry ticket belongs to invoice account)
+    // 3. Hierarchical relationships (including subsidiaries if requested)
     const timeEntries = await prisma.timeEntry.findMany({
       where: {
-        accountId: invoiceForAuth.accountId,
-        invoiceItems: { none: {} }, // Not already on an invoice
-        isApproved: true // Only approved time entries
+        AND: [
+          { invoiceItems: { none: {} } }, // Not already on an invoice
+          { isApproved: true }, // Only approved time entries
+          {
+            OR: [
+              // Direct account match
+              { accountId: { in: accountIds } },
+              // Ticket belongs to invoice account(s)
+              {
+                ticket: {
+                  accountId: { in: accountIds }
+                }
+              }
+            ]
+          }
+        ]
       },
       include: {
         ticket: {
@@ -81,11 +124,13 @@ export async function GET(
       ]
     });
 
-    // Get unbilled ticket addons for this account
+    console.log(`Found ${timeEntries.length} time entries for invoice account ${invoiceForAuth.accountId}`);
+
+    // Get unbilled ticket addons for this account (and subsidiaries if requested)
     const addons = await prisma.ticketAddon.findMany({
       where: {
         ticket: {
-          accountId: invoiceForAuth.accountId
+          accountId: { in: accountIds }
         },
         invoiceItems: { none: {} } // Not already on an invoice
       },

@@ -307,7 +307,7 @@ export function QuickTimeEntry({ ticketId, ticketTitle, accountId, onTimeLogged 
                 value={billingRateId}
                 onValueChange={setBillingRateId}
                 showNoChargeOption={false}
-                autoSelectDefault={false}
+                autoSelectDefault={true}
                 placeholder="Select billing rate (optional)"
               />
             )}

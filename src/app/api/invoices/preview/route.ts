@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { hasPermission } from "@/lib/permissions";
+import { permissionService } from "@/lib/permissions/PermissionService";
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
       resource: "billing",
       action: "view"
     });
-    if (!canViewBilling) {
+    if (!canView) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
     let accountIds = [accountId];
     if (includeSubsidiaries) {
       const subsidiaries = await prisma.account.findMany({
-        where: { parentAccountId: accountId },
+        where: { parentId: accountId },
         select: { id: true }
       });
       accountIds = [...accountIds, ...subsidiaries.map(s => s.id)];
@@ -75,14 +75,34 @@ export async function POST(request: NextRequest) {
       where: timeEntryWhere,
       include: {
         ticket: {
-          include: {
+          select: {
+            id: true,
+            ticketNumber: true,
+            title: true,
+            status: true,
+            priority: true,
+            assigneeId: true,
+            assignedAccountUserId: true,
+            accountId: true,
+            createdAt: true,
             account: {
-              select: { id: true, name: true, parentAccountId: true }
+              select: { id: true, name: true, parentId: true }
+            },
+            assignee: {
+              select: { id: true, name: true, email: true }
+            },
+            assignedAccountUser: {
+              select: { 
+                id: true,
+                user: {
+                  select: { id: true, name: true, email: true }
+                }
+              }
             }
           }
         },
         account: {
-          select: { id: true, name: true, parentAccountId: true }
+          select: { id: true, name: true, parentId: true }
         },
         user: {
           select: { id: true, name: true, email: true }
@@ -117,9 +137,29 @@ export async function POST(request: NextRequest) {
       where: addonWhere,
       include: {
         ticket: {
-          include: {
+          select: {
+            id: true,
+            ticketNumber: true,
+            title: true,
+            status: true,
+            priority: true,
+            assigneeId: true,
+            assignedAccountUserId: true,
+            accountId: true,
+            createdAt: true,
             account: {
-              select: { id: true, name: true, parentAccountId: true }
+              select: { id: true, name: true, parentId: true }
+            },
+            assignee: {
+              select: { id: true, name: true, email: true }
+            },
+            assignedAccountUser: {
+              select: { 
+                id: true,
+                user: {
+                  select: { id: true, name: true, email: true }
+                }
+              }
             }
           }
         },
@@ -138,10 +178,10 @@ export async function POST(request: NextRequest) {
     const accounts = await prisma.account.findMany({
       where: { id: { in: accountIds } },
       include: {
-        parentAccount: {
+        parent: {
           select: { id: true, name: true }
         },
-        childAccounts: {
+        children: {
           select: { id: true, name: true }
         }
       }
@@ -163,19 +203,23 @@ export async function POST(request: NextRequest) {
     // Group items by account for hierarchy display
     const itemsByAccount = timeEntries.reduce((acc, entry) => {
       const accountId = entry.ticket?.accountId || entry.accountId;
-      if (!acc[accountId]) {
-        acc[accountId] = { timeEntries: [], ticketAddons: [] };
+      if (accountId) {
+        if (!acc[accountId]) {
+          acc[accountId] = { timeEntries: [], ticketAddons: [] };
+        }
+        acc[accountId].timeEntries.push(entry);
       }
-      acc[accountId].timeEntries.push(entry);
       return acc;
     }, {} as Record<string, { timeEntries: any[], ticketAddons: any[] }>);
 
     ticketAddons.forEach(addon => {
       const accountId = addon.ticket.accountId;
-      if (!itemsByAccount[accountId]) {
-        itemsByAccount[accountId] = { timeEntries: [], ticketAddons: [] };
+      if (accountId) {
+        if (!itemsByAccount[accountId]) {
+          itemsByAccount[accountId] = { timeEntries: [], ticketAddons: [] };
+        }
+        itemsByAccount[accountId].ticketAddons.push(addon);
       }
-      itemsByAccount[accountId].ticketAddons.push(addon);
     });
 
     return NextResponse.json({

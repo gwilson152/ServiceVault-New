@@ -129,6 +129,70 @@ if (user.role === 'ADMIN') { // Don't do this!
 }
 ```
 
+## PermissionService Backend Usage
+
+### Critical Parameter Format
+
+**✅ Always use PermissionContext object:**
+
+```typescript
+const canEdit = await permissionService.hasPermission({
+  userId: session.user.id,        // Required: Must be valid user ID
+  resource: 'invoices',           // Required: Resource type
+  action: 'edit',                 // Required: Action to check
+  accountId: invoice.accountId    // Optional: Account context when applicable
+});
+```
+
+**❌ Never use individual parameters (deprecated format):**
+
+```typescript
+// This will cause userId to be undefined!
+await permissionService.hasPermission(userId, 'invoices', 'edit', accountId);
+```
+
+### Common Error: Undefined UserId
+
+**Problem**: `userId` becomes undefined, causing Prisma query failures:
+```
+Argument `where` of type UserWhereUniqueInput needs at least one of `id` or `email` arguments.
+```
+
+**Root Cause**: Using individual parameters instead of PermissionContext object
+
+**Solution**: Always check `session?.user?.id` exists before calling:
+
+```typescript
+export async function GET(request: NextRequest) {
+  const session = await getServerSession(authOptions);
+  
+  // ✅ Proper session validation
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // ✅ Correct PermissionService usage
+  const canView = await permissionService.hasPermission({
+    userId: session.user.id,
+    resource: 'invoices',
+    action: 'view',
+    accountId: resourceAccountId // Include when checking account-specific resources
+  });
+}
+```
+
+### Account Context Guidelines
+
+Include `accountId` when:
+- Checking permissions for account-specific resources (invoices, tickets, time entries)
+- User has account-level roles that should apply
+- Resource belongs to a specific account hierarchy
+
+Omit `accountId` when:
+- Checking system-wide permissions (user management, system settings)
+- User has system-level roles only
+- Permission is not account-contextual
+
 ## API Integration
 
 ### `withPermissions` Middleware

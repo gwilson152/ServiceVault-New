@@ -36,12 +36,12 @@ export async function DELETE(
     }
 
     // Check permission to edit invoice items with account context
-    const canEditItems = await permissionService.hasPermission(
-      session.user.id,
-      "invoices",
-      "edit-items",
-      invoiceItem.invoice.accountId
-    );
+    const canEditItems = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "invoices",
+      action: "edit-items",
+      accountId: invoiceItem.invoice.accountId
+    });
 
     if (!canEditItems) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -61,21 +61,17 @@ export async function DELETE(
         where: { id: resolvedParams.itemId }
       });
 
-      // Recalculate invoice totals
+      // Recalculate invoice total
       const remainingItems = await tx.invoiceItem.findMany({
         where: { invoiceId: resolvedParams.id }
       });
 
-      const subtotal = remainingItems.reduce((sum, item) => sum + item.amount, 0);
-      const tax = subtotal * 0; // No tax for now
-      const total = subtotal + tax;
+      const total = remainingItems.reduce((sum, item) => sum + item.amount, 0);
 
-      // Update invoice totals
+      // Update invoice total
       await tx.invoice.update({
         where: { id: resolvedParams.id },
         data: {
-          subtotal,
-          tax,
           total,
           updatedAt: new Date()
         }

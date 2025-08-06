@@ -13,8 +13,13 @@ interface UsePermissionsReturn {
   canEditTimeEntries: boolean;
   canApproveTimeEntries: boolean;
   canViewBilling: boolean;
+  canCreateBilling: boolean;
+  canUpdateBilling: boolean;
+  canDeleteBilling: boolean;
   canViewInvoices: boolean;
   canCreateInvoices: boolean;
+  canEditInvoices: boolean;
+  canDeleteInvoices: boolean;
   canViewAccounts: boolean;
   canViewUsers: boolean;
   canCreateUsers: boolean;
@@ -109,8 +114,13 @@ export function usePermissions(): UsePermissionsReturn {
   const canEditTimeEntries = hasPermission('time-entries', 'update');
   const canApproveTimeEntries = hasPermission('time-entries', 'approve');
   const canViewBilling = hasPermission('billing', 'view');
+  const canCreateBilling = hasPermission('billing', 'create');
+  const canUpdateBilling = hasPermission('billing', 'update');
+  const canDeleteBilling = hasPermission('billing', 'delete');
   const canViewInvoices = hasPermission('invoices', 'view');
   const canCreateInvoices = hasPermission('invoices', 'create');
+  const canEditInvoices = hasPermission('invoices', 'edit');
+  const canDeleteInvoices = hasPermission('invoices', 'delete');
   const canViewAccounts = hasPermission('accounts', 'view');
   const canViewUsers = hasPermission('users', 'view');
   const canCreateUsers = hasPermission('users', 'create');
@@ -139,8 +149,13 @@ export function usePermissions(): UsePermissionsReturn {
     canEditTimeEntries,
     canApproveTimeEntries,
     canViewBilling,
+    canCreateBilling,
+    canUpdateBilling,
+    canDeleteBilling,
     canViewInvoices,
     canCreateInvoices,
+    canEditInvoices,
+    canDeleteInvoices,
     canViewAccounts,
     canViewUsers,
     canCreateUsers,

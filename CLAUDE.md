@@ -49,7 +49,8 @@ npx prisma db push  # Push schema changes
 - `RoleTemplate` + `SystemRole/MembershipRole` - ABAC permission system
 - `Account` - Hierarchical business accounts with CSV domains
 - `TimeEntry` + `Ticket` - Time tracking and work management with explicit assignment structure
-- `BillingRate` + `AccountBillingRate` - Two-tier billing system
+- `BillingRate` + `AccountBillingRate` - Two-tier billing system with enable/disable functionality
+- `Invoice` + `InvoiceItem` - Complete invoicing system with time entry and addon integration
 
 ### Directory Structure
 
@@ -74,15 +75,29 @@ npx prisma db push  # Push schema changes
 
 **✅ Always Use:**
 ```typescript
-const { canViewUsers, canEditAccounts } = usePermissions();
+// Frontend: Use permission hooks for synchronous boolean values
+const { canViewUsers, canEditAccounts, canViewInvoices } = usePermissions();
+
+// Backend: Use PermissionService with PermissionContext object
 const canEdit = await permissionService.hasPermission({
-  userId, resource: 'accounts', action: 'edit'
+  userId: session.user.id,
+  resource: 'accounts', 
+  action: 'edit',
+  accountId: 'optional-account-id' // For account-specific permissions
 });
 ```
 
 **❌ Never Use:**
 ```typescript
 if (user.role === 'ADMIN') { } // Hard-coded roles forbidden
+
+// WRONG: Individual parameters (old format)
+await permissionService.hasPermission(userId, 'invoices', 'view', accountId);
+
+// WRONG: Missing userId causes undefined errors
+const canView = await permissionService.hasPermission({
+  resource: 'invoices', action: 'view' // Missing userId!
+});
 ```
 
 📖 **Complete guide**: [`/docs/system/permissions.md`](./docs/system/permissions.md)
@@ -122,10 +137,14 @@ All pages must use consistent container structure:
 ```typescript
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({error: 'Unauthorized'}, {status: 401});
+  if (!session?.user?.id) return NextResponse.json({error: 'Unauthorized'}, {status: 401});
 
+  // Always use PermissionContext object format
   const canView = await permissionService.hasPermission({
-    userId: session.user.id, resource: 'resource', action: 'view'
+    userId: session.user.id, 
+    resource: 'resource', 
+    action: 'view',
+    accountId: resourceAccountId // Include when checking account-specific resources
   });
   if (!canView) return NextResponse.json({error: 'Forbidden'}, {status: 403});
 
@@ -178,10 +197,12 @@ Two-tier rates: system defaults + account overrides
 ## Important Reminders
 
 - **Documentation is required** - Always update `/docs/` when making changes
-- **Never hard-code roles** - Always use PermissionService
-- **Use specialized components** - AccountSelector for accounts, etc.
+- **Never hard-code roles** - Always use PermissionService with correct PermissionContext format
+- **Use specialized components** - AccountSelector for accounts, BillingRateSelector for rates, etc.
 - **Follow layout patterns** - Consistent container structure
 - **Permission-first development** - Check permissions before any operation
+- **Database migrations** - Delete and regenerate migrations when schema changes significantly
+- **Invoice schema alignment** - Use `addon` (not `ticketAddon`) and omit non-existent fields (`subtotal`, `tax`)
 
 ---
 

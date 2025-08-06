@@ -12,7 +12,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent } from "@/components/ui/card";
-import { Clock, User, Calendar, DollarSign, Loader2 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Clock, User, Calendar, DollarSign, Loader2, Building2 } from "lucide-react";
 import { formatMinutes } from "@/lib/time-utils";
 
 interface TimeEntry {
@@ -29,11 +31,11 @@ interface TimeEntry {
     title: string;
     ticketNumber: string;
   };
-  billingRate: {
+  billingRate?: {
     id: string;
     name: string;
     rate: number;
-  };
+  } | null;
   estimatedAmount: number;
 }
 
@@ -52,6 +54,7 @@ export function AddTimeEntriesDialog({
 }: AddTimeEntriesDialogProps) {
   const [availableTimeEntries, setAvailableTimeEntries] = useState<TimeEntry[]>([]);
   const [selectedTimeEntries, setSelectedTimeEntries] = useState<string[]>([]);
+  const [includeSubsidiaries, setIncludeSubsidiaries] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -62,16 +65,24 @@ export function AddTimeEntriesDialog({
     } else {
       // Reset state when dialog closes
       setSelectedTimeEntries([]);
+      setIncludeSubsidiaries(false);
       setError(null);
     }
   }, [open, invoiceId]);
+
+  useEffect(() => {
+    if (open) {
+      fetchAvailableTimeEntries();
+    }
+  }, [includeSubsidiaries]);
 
   const fetchAvailableTimeEntries = async () => {
     setIsLoading(true);
     setError(null);
     
     try {
-      const response = await fetch(`/api/invoices/${invoiceId}/available-items`);
+      const url = `/api/invoices/${invoiceId}/available-items${includeSubsidiaries ? '?includeSubsidiaries=true' : ''}`;
+      const response = await fetch(url);
       if (response.ok) {
         const data = await response.json();
         setAvailableTimeEntries(data.timeEntries || []);
@@ -155,7 +166,23 @@ export function AddTimeEntriesDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-auto">
+        {/* Include Subsidiaries Toggle */}
+        <div className="flex items-center space-x-2 p-4 bg-muted/50 rounded-lg">
+          <Building2 className="h-4 w-4 text-muted-foreground" />
+          <Label htmlFor="include-subsidiaries" className="text-sm font-medium">
+            Include subsidiary companies
+          </Label>
+          <Switch
+            id="include-subsidiaries"
+            checked={includeSubsidiaries}
+            onCheckedChange={setIncludeSubsidiaries}
+          />
+          <span className="text-xs text-muted-foreground">
+            {includeSubsidiaries ? "Showing all companies" : "Current company only"}
+          </span>
+        </div>
+
+        <div className="flex-1 overflow-auto p-1">
           {isLoading ? (
             <div className="flex items-center justify-center p-8">
               <Loader2 className="h-6 w-6 animate-spin mr-2" />
@@ -254,10 +281,12 @@ export function AddTimeEntriesDialog({
                               <Clock className="h-3 w-3" />
                               {formatMinutes(entry.minutes || 0)}
                             </div>
-                            <div className="flex items-center gap-1">
-                              <DollarSign className="h-3 w-3" />
-                              {entry.billingRate.name} (${entry.billingRate.rate || 0}/hr)
-                            </div>
+                            {entry.billingRate && (
+                              <div className="flex items-center gap-1">
+                                <DollarSign className="h-3 w-3" />
+                                {entry.billingRate.name} (${entry.billingRate.rate || 0}/hr)
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>

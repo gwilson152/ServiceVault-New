@@ -12,7 +12,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent } from "@/components/ui/card";
-import { Package, DollarSign, Hash, Loader2, FileText } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Package, DollarSign, Hash, Loader2, FileText, Building2 } from "lucide-react";
 
 interface TicketAddon {
   id: string;
@@ -43,6 +45,7 @@ export function AddAddonsDialog({
 }: AddAddonsDialogProps) {
   const [availableAddons, setAvailableAddons] = useState<TicketAddon[]>([]);
   const [selectedAddons, setSelectedAddons] = useState<string[]>([]);
+  const [includeSubsidiaries, setIncludeSubsidiaries] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,16 +56,24 @@ export function AddAddonsDialog({
     } else {
       // Reset state when dialog closes
       setSelectedAddons([]);
+      setIncludeSubsidiaries(false);
       setError(null);
     }
   }, [open, invoiceId]);
+
+  useEffect(() => {
+    if (open) {
+      fetchAvailableAddons();
+    }
+  }, [includeSubsidiaries]);
 
   const fetchAvailableAddons = async () => {
     setIsLoading(true);
     setError(null);
     
     try {
-      const response = await fetch(`/api/invoices/${invoiceId}/available-items`);
+      const url = `/api/invoices/${invoiceId}/available-items${includeSubsidiaries ? '?includeSubsidiaries=true' : ''}`;
+      const response = await fetch(url);
       if (response.ok) {
         const data = await response.json();
         setAvailableAddons(data.addons || []);
@@ -146,7 +157,23 @@ export function AddAddonsDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-auto">
+        {/* Include Subsidiaries Toggle */}
+        <div className="flex items-center space-x-2 p-4 bg-muted/50 rounded-lg">
+          <Building2 className="h-4 w-4 text-muted-foreground" />
+          <Label htmlFor="include-subsidiaries-addons" className="text-sm font-medium">
+            Include subsidiary companies
+          </Label>
+          <Switch
+            id="include-subsidiaries-addons"
+            checked={includeSubsidiaries}
+            onCheckedChange={setIncludeSubsidiaries}
+          />
+          <span className="text-xs text-muted-foreground">
+            {includeSubsidiaries ? "Showing all companies" : "Current company only"}
+          </span>
+        </div>
+
+        <div className="flex-1 overflow-auto p-1">
           {isLoading ? (
             <div className="flex items-center justify-center p-8">
               <Loader2 className="h-6 w-6 animate-spin mr-2" />

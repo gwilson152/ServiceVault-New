@@ -36,8 +36,6 @@ interface Invoice {
   createdAt: string;
   issueDate: string;
   dueDate?: string;
-  subtotal: number;
-  tax: number;
   total: number;
   notes?: string;
   account: {
@@ -64,7 +62,7 @@ interface Invoice {
         ticketNumber: string;
       };
     };
-    ticketAddon?: {
+    addon?: {
       id: string;
       name: string;
       ticket: {
@@ -103,7 +101,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     canAddItems: false,
     canUpdateDates: false,
     isEditable: false,
-    statusReason: null
+    statusReason: null as string | null
   });
   const resolvedParams = use(params);
   const { addAction, clearActions } = useActionBar();
@@ -117,6 +115,24 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     loading: permissionsLoading 
   } = usePermissions();
 
+  const fetchInvoice = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/invoices/${resolvedParams.id}`);
+      if (response.ok) {
+        const data = await response.json();
+        setInvoice(data);
+      } else if (response.status === 404) {
+        setError("Invoice not found");
+      } else {
+        setError("Failed to load invoice");
+      }
+    } catch (error) {
+      setError("Failed to load invoice");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [resolvedParams.id]);
+
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/");
@@ -125,82 +141,37 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     }
   }, [status, session, router, resolvedParams.id, fetchInvoice]);
 
-  // Check all permissions after invoice is loaded
+  // Set permissions based on invoice state and user permissions
   useEffect(() => {
     if (!invoice || !session?.user) return;
     
-    const checkAllPermissions = async () => {
-      try {
-        // Define all permission checks we need
-        const permissionsToCheck = [
-          // Base permissions
-          { resource: 'invoices', action: 'view', accountId: invoice.account.id },
-          { resource: 'invoices', action: 'update', accountId: invoice.account.id },
-          { resource: 'invoices', action: 'edit-items', accountId: invoice.account.id },
-          { resource: 'invoices', action: 'delete', accountId: invoice.account.id },
-          { resource: 'invoices', action: 'mark-sent', accountId: invoice.account.id },
-          { resource: 'invoices', action: 'mark-paid', accountId: invoice.account.id },
-          { resource: 'invoices', action: 'unmark-paid', accountId: invoice.account.id },
-          { resource: 'invoices', action: 'export-pdf', accountId: invoice.account.id },
-          { resource: 'invoices', action: 'update-dates', accountId: invoice.account.id },
-          
-          // Scope-based permissions for view
-          { resource: 'invoices', action: 'view', scope: 'subsidiary', accountId: invoice.account.id },
-          { resource: 'invoices', action: 'view', scope: 'account', accountId: invoice.account.id },
-          { resource: 'invoices', action: 'view', scope: 'own', accountId: invoice.account.id },
-          
-          // Scope-based permissions for update
-          { resource: 'invoices', action: 'update', scope: 'subsidiary', accountId: invoice.account.id },
-          { resource: 'invoices', action: 'update', scope: 'account', accountId: invoice.account.id },
-          { resource: 'invoices', action: 'update', scope: 'own', accountId: invoice.account.id },
-        ];
-        
-        // Batch check all permissions
-        const results = await checkPermissions(permissionsToCheck);
-        
-        // Process results to determine final permissions
-        const canView = results['invoices:view:default'] || 
-                       results['invoices:view:subsidiary:' + invoice.account.id] ||
-                       results['invoices:view:account:' + invoice.account.id] ||
-                       (results['invoices:view:own:' + invoice.account.id] && invoice.creator.id === session?.user?.id);
-        
-        if (!canView) {
-          setError("You don't have permission to view this invoice");
-          return;
-        }
-        
-        const canEdit = invoice.status === 'DRAFT' && (
-          results['invoices:update:subsidiary:' + invoice.account.id] ||
-          results['invoices:update:account:' + invoice.account.id] ||
-          (results['invoices:update:own:' + invoice.account.id] && invoice.creator.id === session?.user?.id)
-        );
-        
-        const canUpdateDates = results['invoices:update-dates:default'] || false;
-        
-        // Update all permissions at once
-        setPermissions({
-          canView,
-          canEdit,
-          canEditItems: canEdit, // Same logic as edit for items
-          canDelete: invoice.status === 'DRAFT' && canEdit,
-          canMarkSent: invoice.status === 'DRAFT' && canEdit,
-          canMarkPaid: (invoice.status === 'SENT' || invoice.status === 'OVERDUE') && canEdit,
-          canUnmarkPaid: invoice.status === 'PAID' && canEdit,
-          canExportPDF: canView, // If can view, can export
-          canAddItems: canEdit,
-          canUpdateDates,
-          isEditable: invoice.status === 'DRAFT',
-          statusReason: invoice.status !== 'DRAFT' ? `This invoice is ${invoice.status.toLowerCase()} and cannot be modified.` : null
-        });
-        
-        setCanUpdateInvoiceDates(canUpdateDates);
-      } catch (err) {
-        console.error('Permission checks failed:', err);
-      }
-    };
+    // Use the synchronous permission hooks for simpler logic
+    const canView = canViewInvoices;
+    const canEdit = canEditInvoices && invoice.status === 'DRAFT';
+    const canDelete = canDeleteInvoices && invoice.status === 'DRAFT';
     
-    checkAllPermissions();
-  }, [invoice?.id, invoice?.status, invoice?.creator?.id, invoice?.account?.id, session?.user?.id, checkPermissions]);
+    if (!canView) {
+      setError("You don't have permission to view this invoice");
+      return;
+    }
+    
+    setPermissions({
+      canView,
+      canEdit,
+      canEditItems: canEdit,
+      canDelete,
+      canMarkSent: invoice.status === 'DRAFT' && canEdit,
+      canMarkPaid: (invoice.status === 'SENT' || invoice.status === 'OVERDUE') && canEdit,
+      canUnmarkPaid: invoice.status === 'PAID' && canEdit,
+      canExportPDF: canView,
+      canAddItems: canEdit,
+      canUpdateDates: canEdit,
+      isEditable: invoice.status === 'DRAFT',
+      statusReason: invoice.status !== 'DRAFT' ? `This invoice is ${invoice.status.toLowerCase()} and cannot be modified.` : null
+    });
+    
+    setCanUpdateInvoiceDates(canEdit);
+  }, [invoice?.id, invoice?.status, session?.user?.id, canViewInvoices, canEditInvoices, canDeleteInvoices]);
 
   // Setup ActionBar with invoice-specific actions using cached permissions
   useEffect(() => {
@@ -276,26 +247,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     return () => {
       clearActions();
     };
-  }, [invoice?.id, invoice?.status, editMode, session?.user?.id, permissions, addAction, clearActions, handleExportPDF, handleStatusChange, handleEditToggle, handleDeleteInvoice]);
-
-  const fetchInvoice = useCallback(async () => {
-    try {
-      const response = await fetch(`/api/invoices/${resolvedParams.id}`);
-      if (response.ok) {
-        const data = await response.json();
-        setInvoice(data);
-      } else if (response.status === 404) {
-        setError("Invoice not found");
-      } else {
-        setError("Failed to load invoice");
-      }
-    } catch (err) {
-      console.error('Failed to fetch invoice:', err);
-      setError("Failed to load invoice");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [resolvedParams.id]);
+  }, [invoice?.id, invoice?.status, editMode, session?.user?.id, permissions, addAction, clearActions]);
 
   const handleRemoveItem = useCallback(async (itemId: string) => {
     if (!invoice || !confirm("Are you sure you want to remove this item from the invoice?")) {
@@ -323,14 +275,13 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   const handleEditToggle = useCallback(async () => {
     if (!editMode) {
       // Check permission before enabling edit mode
-      const hasEditPermission = await canEdit();
-      if (!hasEditPermission) {
+      if (!permissions.canEdit) {
         setError("You don't have permission to edit this invoice");
         return;
       }
     }
     setEditMode(!editMode);
-  }, [editMode, canEdit]);
+  }, [editMode, permissions.canEdit]);
 
   const handleDateUpdate = useCallback(async (field: 'issueDate' | 'dueDate', newDate: string | null) => {
     if (!invoice) return;
@@ -485,7 +436,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
 
   // Group items by type
   const timeEntryItems = invoice.items.filter(item => item.timeEntry);
-  const addonItems = invoice.items.filter(item => item.ticketAddon);
+  const addonItems = invoice.items.filter(item => item.addon);
 
   return (
     <div className="p-6">
@@ -708,7 +659,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                     <div key={item.id} className="flex items-center justify-between p-4 border rounded-lg">
                       <div className="flex-1 space-y-1">
                         <div className="flex items-center gap-2">
-                          <span className="font-medium">{item.ticketAddon?.name}</span>
+                          <span className="font-medium">{item.addon?.name}</span>
                           <Badge variant="outline" className="text-xs">
                             Qty: {item.quantity}
                           </Badge>
@@ -720,7 +671,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                           {item.description}
                         </div>
                         <div className="text-xs text-muted-foreground">
-                          Ticket {item.ticketAddon?.ticket.ticketNumber}: {item.ticketAddon?.ticket.title}
+                          Ticket {item.addon?.ticket.ticketNumber}: {item.addon?.ticket.title}
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
@@ -762,19 +713,9 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
-                <div className="flex justify-between">
-                  <span>Subtotal</span>
-                  <span>${invoice.subtotal.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Tax</span>
-                  <span>${invoice.tax.toFixed(2)}</span>
-                </div>
-                <div className="border-t pt-2 mt-2">
-                  <div className="flex justify-between font-bold text-lg">
-                    <span>Total</span>
-                    <span className="text-green-600">${invoice.total.toFixed(2)}</span>
-                  </div>
+                <div className="flex justify-between font-bold text-lg">
+                  <span>Total</span>
+                  <span className="text-green-600">${invoice.total.toFixed(2)}</span>
                 </div>
               </div>
             </CardContent>

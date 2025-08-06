@@ -48,9 +48,8 @@ export default function BillingPage() {
   const {
     canViewInvoices,
     canCreateInvoices,
-    canUpdateInvoices,
+    canEditInvoices: canUpdateInvoices,
     canDeleteInvoices,
-    canEditInvoiceItems,
     canViewBilling,
     canCreateBilling,
     canUpdateBilling,
@@ -279,34 +278,17 @@ export default function BillingPage() {
     onDelete 
   }: { 
     invoice: any;
-    canView: () => Promise<boolean>;
-    canEdit: () => Promise<boolean>;
-    canDelete: () => Promise<boolean>;
+    canView: boolean;
+    canEdit: boolean;
+    canDelete: boolean;
     onView: () => void;
     onEdit: () => void;
     onDelete: () => void;
   }) => {
-    const [permissions, setPermissions] = useState({
-      view: false,
-      edit: false,
-      delete: false
-    });
-
-    useEffect(() => {
-      const checkPermissions = async () => {
-        const [view, edit, del] = await Promise.all([
-          canView(),
-          canEdit(),
-          canDelete()
-        ]);
-        setPermissions({ view, edit, delete: del });
-      };
-      checkPermissions();
-    }, [canView, canEdit, canDelete]);
 
     return (
       <div className="flex gap-2">
-        {permissions.view && (
+        {canView && (
           <Button 
             variant="ghost" 
             size="sm"
@@ -319,7 +301,7 @@ export default function BillingPage() {
         <Button variant="ghost" size="sm" title="Download PDF">
           <Download className="h-4 w-4" />
         </Button>
-        {permissions.edit && invoice.status === 'DRAFT' && (
+        {canEdit && invoice.status === 'DRAFT' && (
           <Button 
             variant="ghost" 
             size="sm" 
@@ -329,7 +311,7 @@ export default function BillingPage() {
             <Edit className="h-4 w-4" />
           </Button>
         )}
-        {permissions.delete && invoice.status === 'DRAFT' && (
+        {canDelete && invoice.status === 'DRAFT' && (
           <Button 
             variant="ghost" 
             size="sm" 
