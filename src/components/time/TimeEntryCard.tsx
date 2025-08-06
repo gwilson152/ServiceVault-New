@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatMinutes } from "@/lib/time-utils";
-import { Edit, Trash2, Lock, FileText, Building } from "lucide-react";
+import { Edit, Trash2, Lock, FileText, Building, RotateCcw } from "lucide-react";
 import Link from "next/link";
 
 interface TimeEntry {
@@ -29,12 +29,13 @@ interface TimeEntry {
 interface TimeEntryCardProps {
   entry: TimeEntry;
   showBillingAmount?: boolean;
-  permissions?: { canEdit: boolean; canDelete: boolean };
+  permissions?: { canEdit: boolean; canDelete: boolean; canApprove?: boolean };
   onEdit?: (entry: TimeEntry) => void;
   onDelete?: (entryId: string) => void;
+  onUnapprove?: (entryId: string) => void;
 }
 
-export function TimeEntryCard({ entry, showBillingAmount = false, permissions = { canEdit: false, canDelete: false }, onEdit, onDelete }: TimeEntryCardProps) {
+export function TimeEntryCard({ entry, showBillingAmount = false, permissions = { canEdit: false, canDelete: false }, onEdit, onDelete, onUnapprove }: TimeEntryCardProps) {
   const { data: session } = useSession();
   
   // Memoize lock status and reason since they're synchronous
@@ -64,6 +65,12 @@ export function TimeEntryCard({ entry, showBillingAmount = false, permissions = 
       onDelete(entry.id);
     }
   }, [permissions.canDelete, onDelete, entry.id]);
+
+  const handleUnapprove = useMemo(() => () => {
+    if (permissions.canApprove && onUnapprove) {
+      onUnapprove(entry.id);
+    }
+  }, [permissions.canApprove, onUnapprove, entry.id]);
 
   return (
     <Card key={entry.id}>
@@ -148,6 +155,17 @@ export function TimeEntryCard({ entry, showBillingAmount = false, permissions = 
                 title="Edit time entry"
               >
                 <Edit className="h-4 w-4" />
+              </Button>
+            )}
+            {permissions.canApprove && entry.isApproved && !entryIsLocked && (
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={handleUnapprove}
+                className="text-orange-600 hover:text-orange-700" 
+                title="Unapprove time entry"
+              >
+                <RotateCcw className="h-4 w-4" />
               </Button>
             )}
             {permissions.canDelete && !entryIsLocked && (

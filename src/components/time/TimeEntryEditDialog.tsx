@@ -37,7 +37,7 @@ interface TimeEntry {
 }
 
 interface TimeEntryEditDialogProps {
-  timeEntry: TimeEntry | null;
+  timeEntry?: TimeEntry | null; // Optional - if null/undefined, dialog is in create mode
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
@@ -45,12 +45,22 @@ interface TimeEntryEditDialogProps {
 
 export function TimeEntryEditDialog({ timeEntry, open, onOpenChange, onSuccess }: TimeEntryEditDialogProps) {
   const { data: session } = useSession();
-  const { canViewBilling, canEditTimeEntries, isSuperAdmin } = usePermissions();
+  const { canViewBilling, canEditTimeEntries, canCreateTimeEntries, isSuperAdmin } = usePermissions();
   
-  // Calculate permissions for the single time entry
+  // Calculate permissions for the single time entry (or create mode)
   const getTimeEntryPermissions = (entry: TimeEntry | null) => {
-    if (!entry || !session?.user?.id) {
+    if (!session?.user?.id) {
       return { canEdit: false, canDelete: false, isLocked: false, getLockReason: () => null };
+    }
+    
+    // If no entry provided, this is create mode
+    if (!entry) {
+      return { 
+        canEdit: canCreateTimeEntries, 
+        canDelete: false, 
+        isLocked: false, 
+        getLockReason: () => null 
+      };
     }
     
     const isOwner = entry.userId === session.user.id;
@@ -114,22 +124,36 @@ export function TimeEntryEditDialog({ timeEntry, open, onOpenChange, onSuccess }
     setShowBillingRates(canViewBilling);
   }, [canViewBilling]);
 
-  // Initialize form with timeEntry data
+  // Initialize form with timeEntry data or defaults for create mode
   useEffect(() => {
-    if (timeEntry && open) {
-      setEntryType(timeEntry.ticketId ? "ticket" : "account");
-      setSelectedTicket(timeEntry.ticketId || "");
-      setSelectedAccount(timeEntry.accountId || "");
-      setMinutes(timeEntry.minutes.toString());
-      setDescription(timeEntry.description);
-      
-      // Parse date and time from timeEntry.date
-      const entryDate = new Date(timeEntry.date);
-      setDate(entryDate.toISOString().split('T')[0]);
-      setTime(entryDate.toTimeString().slice(0, 5));
-      
-      setNoCharge(timeEntry.noCharge);
-      setSelectedBillingRate(timeEntry.billingRateId || "none");
+    if (open) {
+      if (timeEntry) {
+        // Edit mode - populate with existing data
+        setEntryType(timeEntry.ticketId ? "ticket" : "account");
+        setSelectedTicket(timeEntry.ticketId || "");
+        setSelectedAccount(timeEntry.accountId || "");
+        setMinutes(timeEntry.minutes.toString());
+        setDescription(timeEntry.description);
+        
+        // Parse date and time from timeEntry.date
+        const entryDate = new Date(timeEntry.date);
+        setDate(entryDate.toISOString().split('T')[0]);
+        setTime(entryDate.toTimeString().slice(0, 5));
+        
+        setNoCharge(timeEntry.noCharge);
+        setSelectedBillingRate(timeEntry.billingRateId || "none");
+      } else {
+        // Create mode - set defaults
+        setEntryType("ticket");
+        setSelectedTicket("");
+        setSelectedAccount("");
+        setMinutes("");
+        setDescription("");
+        setDate(new Date().toISOString().split('T')[0]);
+        setTime(new Date().toTimeString().slice(0, 5));
+        setNoCharge(false);
+        setSelectedBillingRate("none");
+      }
     }
   }, [timeEntry, open]);
 
@@ -179,7 +203,7 @@ export function TimeEntryEditDialog({ timeEntry, open, onOpenChange, onSuccess }
   };
 
   const handleSave = async () => {
-    if (!timeEntry || !canEdit) {
+    if (!canEdit) {
       return;
     }
 
@@ -200,31 +224,50 @@ export function TimeEntryEditDialog({ timeEntry, open, onOpenChange, onSuccess }
         ticketId: entryType === "ticket" ? selectedTicket : null,
         accountId: entryType === "account" ? selectedAccount : null,
         minutes: parseInt(minutes),
-        description,
+        description: description.trim(),
         date,
         time,
         noCharge,
         billingRateId: selectedBillingRate === "none" ? null : selectedBillingRate
       };
 
-      const response = await fetch(`/api/time-entries/${timeEntry.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
+      let response;
+      if (timeEntry) {
+        // Edit mode - update existing entry
+        response = await fetch(`/api/time-entries/${timeEntry.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        });
+      } else {
+        // Create mode - create new entry
+        const endpoint = entryType === "ticket" 
+          ? `/api/tickets/${selectedTicket}/time-entries`
+          : `/api/accounts/${selectedAccount}/time-entries`;
+        
+        response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        });
+      }
 
       if (response.ok) {
         onSuccess?.();
         onOpenChange(false);
       } else {
         const errorData = await response.json();
-        alert("Failed to update time entry: " + errorData.error);
+        const action = timeEntry ? "update" : "create";
+        alert(`Failed to ${action} time entry: ${errorData.error}`);
       }
     } catch (error) {
-      console.error("Error updating time entry:", error);
-      alert("Failed to update time entry");
+      const action = timeEntry ? "updating" : "creating";
+      console.error(`Error ${action} time entry:`, error);
+      alert(`Failed to ${action.slice(0, -3)} time entry`);
     } finally {
       setIsLoading(false);
     }
@@ -260,9 +303,6 @@ export function TimeEntryEditDialog({ timeEntry, open, onOpenChange, onSuccess }
     }
   };
 
-  if (!timeEntry) {
-    return null;
-  }
 
   const isReadOnly = isLocked || !canEdit;
 
@@ -272,8 +312,8 @@ export function TimeEntryEditDialog({ timeEntry, open, onOpenChange, onSuccess }
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {isLocked && <Lock className="h-4 w-4 text-red-500" />}
-            Edit Time Entry
-            {timeEntry.isApproved && (
+            {timeEntry ? "Edit Time Entry" : "Add New Time Entry"}
+            {timeEntry?.isApproved && (
               <Badge variant="secondary" className="text-green-700 bg-green-50">
                 Approved
               </Badge>
@@ -292,12 +332,18 @@ export function TimeEntryEditDialog({ timeEntry, open, onOpenChange, onSuccess }
               <span className="flex items-start gap-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
                 <AlertTriangle className="h-4 w-4 text-yellow-500 mt-0.5 flex-shrink-0" />
                 <span>
-                  <span className="text-yellow-700 font-medium block">Cannot Edit</span>
-                  <span className="text-yellow-600 text-sm">You do not have permission to edit this time entry.</span>
+                  <span className="text-yellow-700 font-medium block">
+                    {timeEntry ? "Cannot Edit" : "Cannot Create"}
+                  </span>
+                  <span className="text-yellow-600 text-sm">
+                    You do not have permission to {timeEntry ? "edit this time entry" : "create time entries"}.
+                  </span>
                 </span>
               </span>
             ) : (
-              "Modify the time entry details below. All fields marked with * are required."
+              timeEntry 
+                ? "Modify the time entry details below. All fields marked with * are required."
+                : "Create a new time entry by filling in the details below. All fields marked with * are required."
             )}
           </DialogDescription>
         </DialogHeader>
@@ -350,6 +396,17 @@ export function TimeEntryEditDialog({ timeEntry, open, onOpenChange, onSuccess }
                   enableFilters={true}
                   enableGrouping={true}
                   disabled={isReadOnly}
+                  allowClear={true}
+                  showStatusFilter={true}
+                  showPriorityFilter={true}
+                  showAccountFilter={true}
+                  showAssigneeFilter={true}
+                  showCustomerFilter={false} // Hide customer filter in time entry context
+                  showTimeTrackingFilter={true}
+                  showCreatedDateFilter={false} // Hide creation date in time entry context
+                  showSubtitle={true}
+                  showTimeInfo={true}
+                  maxHeight="300px"
                 />
               </div>
             ) : (
@@ -447,49 +504,51 @@ export function TimeEntryEditDialog({ timeEntry, open, onOpenChange, onSuccess }
             />
           </div>
 
-          {/* Current Entry Info */}
-          <div className="space-y-2 p-4 bg-muted rounded-lg">
-            <h4 className="font-medium text-sm">Current Entry Information</h4>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-              <div>
-                <span className="text-muted-foreground">Duration:</span>
-                <p className="font-medium">{formatMinutes(timeEntry.minutes)}</p>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Created by:</span>
-                <p className="font-medium">{timeEntry.user.name}</p>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Status:</span>
-                <p className="font-medium">
-                  {timeEntry.isApproved ? (
-                    <Badge variant="secondary" className="text-green-700 bg-green-50">Approved</Badge>
-                  ) : (
-                    <Badge variant="outline">Pending</Badge>
-                  )}
-                </p>
-              </div>
-              {showBillingRates && timeEntry.billingRateValue && (
+          {/* Current Entry Info - Only show in edit mode */}
+          {timeEntry && (
+            <div className="space-y-2 p-4 bg-muted rounded-lg">
+              <h4 className="font-medium text-sm">Current Entry Information</h4>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                 <div>
-                  <span className="text-muted-foreground">Billing:</span>
-                  <p className="font-medium">${((timeEntry.minutes / 60) * timeEntry.billingRateValue).toFixed(2)}</p>
+                  <span className="text-muted-foreground">Duration:</span>
+                  <p className="font-medium">{formatMinutes(timeEntry.minutes)}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Created by:</span>
+                  <p className="font-medium">{timeEntry.user.name}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Status:</span>
+                  <p className="font-medium">
+                    {timeEntry.isApproved ? (
+                      <Badge variant="secondary" className="text-green-700 bg-green-50">Approved</Badge>
+                    ) : (
+                      <Badge variant="outline">Pending</Badge>
+                    )}
+                  </p>
+                </div>
+                {showBillingRates && timeEntry.billingRateValue && (
+                  <div>
+                    <span className="text-muted-foreground">Billing:</span>
+                    <p className="font-medium">${((timeEntry.minutes / 60) * timeEntry.billingRateValue).toFixed(2)}</p>
+                  </div>
+                )}
+              </div>
+              
+              {/* Invoice Information */}
+              {timeEntry.invoiceItems && timeEntry.invoiceItems.length > 0 && (
+                <div className="mt-2 pt-2 border-t">
+                  <span className="text-muted-foreground text-sm">Invoice:</span>
+                  <p className="font-medium text-sm">
+                    #{timeEntry.invoiceItems[0].invoice.invoiceNumber} 
+                    <Badge variant="outline" className="ml-2">
+                      {timeEntry.invoiceItems[0].invoice.status}
+                    </Badge>
+                  </p>
                 </div>
               )}
             </div>
-            
-            {/* Invoice Information */}
-            {timeEntry.invoiceItems && timeEntry.invoiceItems.length > 0 && (
-              <div className="mt-2 pt-2 border-t">
-                <span className="text-muted-foreground text-sm">Invoice:</span>
-                <p className="font-medium text-sm">
-                  #{timeEntry.invoiceItems[0].invoice.invoiceNumber} 
-                  <Badge variant="outline" className="ml-2">
-                    {timeEntry.invoiceItems[0].invoice.status}
-                  </Badge>
-                </p>
-              </div>
-            )}
-          </div>
+          )}
         </div>
 
         <DialogFooter className="gap-2">
@@ -512,7 +571,7 @@ export function TimeEntryEditDialog({ timeEntry, open, onOpenChange, onSuccess }
               onClick={handleSave}
               disabled={isLoading || !minutes || !description.trim() || !date || !time}
             >
-              {isLoading ? "Saving..." : "Save Changes"}
+              {isLoading ? (timeEntry ? "Saving..." : "Creating...") : (timeEntry ? "Save Changes" : "Create Entry")}
             </Button>
           )}
         </DialogFooter>

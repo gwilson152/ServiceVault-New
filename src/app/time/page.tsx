@@ -537,6 +537,28 @@ export default function TimeTrackingPage() {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const handleUnapproveEntry = useCallback(async (entryId: string) => {
+    if (!confirm("Are you sure you want to unapprove this time entry?")) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/time-entries/${entryId}/unapprove`, {
+        method: 'POST',
+      });
+
+      if (response.ok) {
+        fetchTimeEntries(); // Refresh the time entries list
+      } else {
+        const errorData = await response.json();
+        alert("Failed to unapprove time entry: " + (errorData.error || "Unknown error"));
+      }
+    } catch (error) {
+      console.error('Failed to unapprove time entry:', error);
+      alert("Failed to unapprove time entry");
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleOpenApprovalWizard = useCallback(() => {
     // Use the pre-fetched permission value instead of async call
     if (canApproveTimeEntriesValue) {
@@ -829,6 +851,16 @@ export default function TimeTrackingPage() {
 
             {/* Time Entries Tab - Now first */}
             <TabsContent value="entries" className="space-y-4">
+              {/* Add New Entry Button */}
+              <div className="flex justify-end">
+                <Button onClick={() => {
+                  setSelectedTimeEntry(null); // Set to null for create mode
+                  setEditDialogOpen(true);
+                }}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add New Time Entry
+                </Button>
+              </div>
               {/* Filters */}
               <Card>
                 <CardHeader>
@@ -1146,14 +1178,20 @@ export default function TimeTrackingPage() {
                 ) : (
                   filteredEntries.map((entry) => {
                     const permissions = timeEntryPermissions.get(entry.id) || { canEdit: false, canDelete: false };
+                    // Add approval permission to the permissions object
+                    const enhancedPermissions = {
+                      ...permissions,
+                      canApprove: canApproveTimeEntriesValue
+                    };
                     return (
                       <TimeEntryCard
                         key={entry.id}
                         entry={entry}
                         showBillingAmount={showBillingRates}
-                        permissions={permissions}
+                        permissions={enhancedPermissions}
                         onEdit={handleEditEntry}
                         onDelete={handleDeleteEntry}
+                        onUnapprove={handleUnapproveEntry}
                       />
                     );
                   })
