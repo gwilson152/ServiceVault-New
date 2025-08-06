@@ -33,6 +33,7 @@ async function main() {
         'tickets:view',
         'tickets:create',
         'tickets:update',
+        'tickets:assignable-to',
         'time-entries:view',
         'time-entries:create',
         'time-entries:update',
@@ -54,6 +55,7 @@ async function main() {
       description: 'Team lead with approval permissions and extended access',
       permissions: [
         'tickets:*',
+        'tickets:assignable-to',
         'time-entries:*',
         'time-entries:approve',
         'accounts:view',
@@ -79,6 +81,7 @@ async function main() {
       description: 'Full access within assigned accounts',
       permissions: [
         'tickets:*',
+        'tickets:assignable-for',
         'time-entries:view',
         'users:view',
         'users:invite',
@@ -100,6 +103,7 @@ async function main() {
       permissions: [
         'tickets:view',
         'tickets:create',
+        'tickets:assignable-for',
         'time-entries:view'
       ],
       inheritAllPermissions: false,
@@ -117,6 +121,7 @@ async function main() {
       description: 'View-only access to assigned resources',
       permissions: [
         'tickets:view',
+        'tickets:assignable-for',
         'time-entries:view'
       ],
       inheritAllPermissions: false,

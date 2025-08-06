@@ -1,21 +1,35 @@
 /**
  * Billing Rate Selector Component
  * 
- * Provides interface for selecting billing rates with account-specific overrides.
- * Shows effective rates with inheritance information and visual indicators
- * for overrides and inherited rates from parent accounts.
+ * Standardized selector component for choosing billing rates with account-specific overrides.
+ * Shows effective rates with inheritance information and visual indicators for overrides
+ * and inherited rates from parent accounts. Designed for app-wide usage.
  * 
  * Features:
  * - Account-specific billing rate overrides
  * - Parent account inheritance (child inherits from parent)
  * - Visual indicators for overrides vs system defaults
  * - Effective rate calculation and display
- * - Permission-based visibility
+ * - Permission-based data loading
+ * - Loading and error states
+ * - Optional "No Charge" selection
+ * - Responsive design
  * 
  * Integration:
  * - Uses /api/accounts/[id]/billing-rates for rate data
  * - Integrates with billingRateService for effective rate calculation
- * - Used in time entry creation and editing forms
+ * - Used in time entry creation/editing, invoice generation, etc.
+ * 
+ * Usage:
+ * ```tsx
+ * <BillingRateSelector
+ *   accountId={accountId}
+ *   value={selectedRateId}
+ *   onValueChange={setSelectedRateId}
+ *   showNoChargeOption={true}
+ *   placeholder="Select billing rate"
+ * />
+ * ```
  */
 
 "use client";
@@ -33,7 +47,7 @@ import {
   Loader2
 } from "lucide-react";
 
-interface BillingRate {
+export interface BillingRate {
   id: string;
   name: string;
   description?: string;
@@ -47,14 +61,27 @@ interface BillingRate {
   inheritedAccountName?: string;
 }
 
-interface BillingRateSelectorProps {
+export interface BillingRateSelectorProps {
+  /** Account ID to load billing rates for */
   accountId: string;
+  /** Currently selected billing rate ID */
   value?: string;
+  /** Callback when selection changes */
   onValueChange: (value: string) => void;
+  /** Whether the selector is disabled */
   disabled?: boolean;
+  /** Whether selection is required */
   required?: boolean;
+  /** Whether to show "No Charge" option */
   showNoChargeOption?: boolean;
+  /** Placeholder text when no selection */
   placeholder?: string;
+  /** Additional CSS class names */
+  className?: string;
+  /** Custom label text (default: "Billing Rate") */
+  label?: string;
+  /** Whether to auto-select the default billing rate (default: true) */
+  autoSelectDefault?: boolean;
 }
 
 export function BillingRateSelector({
@@ -64,7 +91,10 @@ export function BillingRateSelector({
   disabled = false,
   required = false,
   showNoChargeOption = true,
-  placeholder = "Select billing rate"
+  placeholder = "Select billing rate",
+  className = "",
+  label = "Billing Rate",
+  autoSelectDefault = true
 }: BillingRateSelectorProps) {
   const [billingRates, setBillingRates] = useState<BillingRate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -73,7 +103,7 @@ export function BillingRateSelector({
 
   useEffect(() => {
     loadBillingRates();
-  }, [accountId]);
+  }, [accountId]); // Note: Don't include value/onValueChange to avoid infinite loops
 
   const loadBillingRates = async () => {
     if (!accountId) {
@@ -83,19 +113,37 @@ export function BillingRateSelector({
 
     try {
       setLoading(true);
+      setError(null);
       const response = await fetch(`/api/accounts/${accountId}/billing-rates`);
       
       if (response.ok) {
         const data = await response.json();
-        setBillingRates(data.billingRates || []);
+        const rates = data.billingRates || [];
+        setBillingRates(rates);
         setAccountName(data.account?.name || "");
-        setError(null);
+        
+        // Auto-select default billing rate if enabled and no current value
+        if (autoSelectDefault && !value && rates.length > 0) {
+          // First try to find a rate marked as default
+          let defaultRate = rates.find(rate => rate.isDefault);
+          
+          // If no explicit default, use the first rate as fallback
+          if (!defaultRate && rates.length > 0) {
+            defaultRate = rates[0];
+          }
+          
+          if (defaultRate) {
+            onValueChange(defaultRate.id);
+          }
+        }
       } else {
         const errorData = await response.json();
         setError(errorData.error || "Failed to load billing rates");
+        setBillingRates([]);
       }
     } catch (err) {
       setError("Failed to load billing rates");
+      setBillingRates([]);
     } finally {
       setLoading(false);
     }
@@ -140,8 +188,11 @@ export function BillingRateSelector({
 
   if (loading) {
     return (
-      <div className="space-y-2">
-        <Label>Billing Rate</Label>
+      <div className={`space-y-2 ${className}`}>
+        <Label>
+          {label}
+          {required && <span className="text-red-500 ml-1">*</span>}
+        </Label>
         <div className="flex items-center gap-2 p-2 border rounded">
           <Loader2 className="h-4 w-4 animate-spin" />
           <span className="text-sm text-muted-foreground">Loading billing rates...</span>
@@ -152,8 +203,11 @@ export function BillingRateSelector({
 
   if (error) {
     return (
-      <div className="space-y-2">
-        <Label>Billing Rate</Label>
+      <div className={`space-y-2 ${className}`}>
+        <Label>
+          {label}
+          {required && <span className="text-red-500 ml-1">*</span>}
+        </Label>
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
@@ -162,9 +216,9 @@ export function BillingRateSelector({
   }
 
   return (
-    <div className="space-y-2">
+    <div className={`space-y-2 ${className}`}>
       <Label>
-        Billing Rate
+        {label}
         {required && <span className="text-red-500 ml-1">*</span>}
       </Label>
       
@@ -265,3 +319,6 @@ export function BillingRateSelector({
     </div>
   );
 }
+
+// Re-export types for convenience
+export type { BillingRate, BillingRateSelectorProps };

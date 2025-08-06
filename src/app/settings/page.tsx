@@ -17,6 +17,7 @@ import { GeneralSettingsSection } from "@/components/settings/GeneralSettingsSec
 import { CompanyInfoSection } from "@/components/settings/CompanyInfoSection";
 import { TicketFieldsSection } from "@/components/settings/TicketFieldsSection";
 import { EmailSettingsSection } from "@/components/settings/EmailSettingsSection";
+import { BillingRatesSection } from "@/components/settings/BillingRatesSection";
 import { LicenseSection } from "@/components/settings/LicenseSection";
 import { DangerZoneSection } from "@/components/settings/DangerZoneSection";
 
@@ -65,11 +66,12 @@ export default function SettingsPage() {
 
           {/* Settings Tabs */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-            <TabsList className="grid w-full grid-cols-6">
+            <TabsList className="grid w-full grid-cols-7">
               <TabsTrigger value="general">General</TabsTrigger>
               <TabsTrigger value="company">Company</TabsTrigger>
               <TabsTrigger value="fields">Ticket Fields</TabsTrigger>
               <TabsTrigger value="email">Email</TabsTrigger>
+              <TabsTrigger value="billing">Billing Rates</TabsTrigger>
               <TabsTrigger value="license">License</TabsTrigger>
               <TabsTrigger value="danger" className="text-red-600 data-[state=active]:text-red-700">Danger Zone</TabsTrigger>
             </TabsList>
@@ -129,6 +131,10 @@ export default function SettingsPage() {
                   <EmailSettingsSection />
                 </CardContent>
               </Card>
+            </TabsContent>
+
+            <TabsContent value="billing" className="space-y-4">
+              <BillingRatesSection />
             </TabsContent>
 
             <TabsContent value="license" className="space-y-4">

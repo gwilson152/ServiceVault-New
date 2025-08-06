@@ -85,15 +85,27 @@ interface RoleTemplate {
 
 // Available permissions grouped by resource
 const PERMISSION_GROUPS = {
-  'accounts': ['view', 'create', 'edit', 'delete'],
+  'accounts': ['view', 'create', 'edit', 'delete', 'update'],
   'users': ['view', 'create', 'edit', 'delete', 'invite'],
-  'time-entries': ['view', 'create', 'edit', 'delete', 'approve'],
-  'tickets': ['view', 'create', 'edit', 'delete', 'assign'],
+  'time-entries': ['view', 'create', 'edit', 'delete', 'update', 'approve'],
+  'tickets': ['view', 'create', 'edit', 'delete', 'update', 'assignable-to', 'assignable-for'],
   'invoices': ['view', 'create', 'edit', 'delete', 'send'],
-  'billing': ['view', 'edit'],
+  'billing': ['view', 'create', 'edit'],
   'reports': ['view', 'export'],
   'settings': ['view', 'edit'],
+  'account-settings': ['view', 'update'],
   'role-templates': ['view', 'create', 'edit', 'delete']
+};
+
+// Helper function to get descriptive labels for permissions
+const getPermissionLabel = (resource: string, action: string): string => {
+  if (resource === 'tickets' && action === 'assignable-to') {
+    return 'assignable to (can be assigned tickets)';
+  }
+  if (resource === 'tickets' && action === 'assignable-for') {
+    return 'assignable for (tickets can be created for this user)';
+  }
+  return action.replace('-', ' ');
 };
 
 export default function RoleTemplatesPage() {
@@ -531,7 +543,7 @@ export default function RoleTemplatesPage() {
                                   checked={formData.permissions.includes(permission)}
                                   onCheckedChange={() => handlePermissionToggle(resource, action)}
                                 />
-                                <Label className="text-sm capitalize">{action}</Label>
+                                <Label className="text-sm capitalize">{getPermissionLabel(resource, action)}</Label>
                               </div>
                             );
                           })}

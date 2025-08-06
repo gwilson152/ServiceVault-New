@@ -148,6 +148,7 @@ export function TicketDetailModal({
   const [addons, setAddons] = useState<TicketAddon[]>([]);
   const [isLoadingTimeEntries, setIsLoadingTimeEntries] = useState(false);
 
+
   // Define load functions first
   const loadTimeEntries = useCallback(async () => {
     if (!ticket) return;
@@ -432,6 +433,7 @@ export function TicketDetailModal({
                 <QuickTimeEntry
                   ticketId={displayTicket.id}
                   ticketTitle={displayTicket.title}
+                  accountId={displayTicket.accountId}
                   onTimeLogged={() => {
                     loadTimeEntries();
                     onUpdate?.(displayTicket);
@@ -604,9 +606,9 @@ export function TicketDetailModal({
                       
                       {/* Agent Assignment */}
                       <AgentSelector
-                        agents={users}
                         selectedAgentId={editAssigneeId}
                         onAgentChange={setEditAssigneeId}
+                        accountId={editAccountId}
                         label="Assigned Agent"
                         placeholder="Select agent to work on this"
                       />
@@ -807,12 +809,19 @@ export function TicketDetailModal({
           {/* Time Entries Tab */}
           {showAdvancedTabs && (
             <TabsContent value="time" className="space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">Time Entries</h3>
-              <Button size="sm">
-                <Plus className="h-4 w-4 mr-1" />
-                Add Time Entry
-              </Button>
+              {canEdit && displayTicket && (
+                <QuickTimeEntry
+                  ticketId={displayTicket.id}
+                  ticketTitle={displayTicket.title}
+                  accountId={displayTicket.accountId}
+                  onTimeLogged={() => {
+                    loadTimeEntries();
+                    onUpdate?.(displayTicket);
+                  }}
+                />
+              )}
             </div>
 
             {isLoadingTimeEntries ? (
@@ -822,13 +831,9 @@ export function TicketDetailModal({
                 <CardContent className="flex flex-col items-center justify-center py-12">
                   <Clock className="h-12 w-12 text-muted-foreground mb-4" />
                   <h3 className="text-lg font-semibold mb-2">No time entries</h3>
-                  <p className="text-muted-foreground text-center mb-4">
-                    No time has been logged for this ticket yet.
+                  <p className="text-muted-foreground text-center">
+                    No time has been logged for this ticket yet. Use the time entry controls above to log your first entry.
                   </p>
-                  <Button>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Log First Entry
-                  </Button>
                 </CardContent>
               </Card>
             ) : (

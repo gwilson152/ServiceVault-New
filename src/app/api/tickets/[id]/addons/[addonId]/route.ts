@@ -77,8 +77,9 @@ export async function PATCH(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string; addonId: string } }
+  { params }: { params: Promise<{ id: string; addonId: string }> }
 ) {
+  const resolvedParams = await params;
   try {
     const session = await getServerSession(authOptions);
 

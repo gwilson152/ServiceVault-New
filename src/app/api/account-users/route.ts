@@ -145,6 +145,7 @@ export async function GET(request: NextRequest) {
       name: membership.user.name || membership.user.email,
       email: membership.user.email,
       hasLogin: true, // Assume users have login if they have memberships
+      canBeAssigned: true, // All active memberships can be assigned
       invitationToken: null,
       invitationExpiry: null
     }));

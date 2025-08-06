@@ -54,8 +54,6 @@ model User {
   memberships           AccountMembership[]
   authAccounts          AuthAccount[]
   createdEmails         EmailQueue[]
-  createdEmailSettings  EmailSettings[]     @relation("EmailSettingsCreator")
-  updatedEmailSettings  EmailSettings[]     @relation("EmailSettingsUpdater")
   createdEmailTemplates EmailTemplate[]     @relation("EmailTemplateCreator")
   updatedEmailTemplates EmailTemplate[]     @relation("EmailTemplateUpdater")
   createdInvoices       Invoice[]
@@ -96,14 +94,15 @@ model Account {
 }
 
 model AccountMembership {
-  id        String           @id @default(cuid())
-  userId    String
-  accountId String
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
-  account   Account          @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  roles     MembershipRole[]
+  id            String   @id @default(cuid())
+  userId        String
+  accountId     String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  account       Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roles         MembershipRole[]
+  assignedTickets Ticket[] @relation("TicketAssignedAccountUser")
 
   @@unique([userId, accountId])
   @@index([userId])
@@ -148,28 +147,42 @@ model SystemRole {
 }
 
 model Ticket {
-  id           String        @id @default(cuid())
-  ticketNumber String        @unique
-  title        String
-  description  String?
-  status       String        @default("OPEN")
-  priority     String        @default("MEDIUM")
-  customFields Json?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  accountId    String
-  creatorId    String?
-  assigneeId   String?
-  account      Account       @relation(fields: [accountId], references: [id])
-  assignee     User?         @relation("TicketAssignee", fields: [assigneeId], references: [id])
-  creator      User?         @relation("TicketCreator", fields: [creatorId], references: [id])
-  addons       TicketAddon[]
-  timeEntries  TimeEntry[]
-  timers       Timer[]
+  // Primary identification
+  id                   String             @id @default(cuid())
+  ticketNumber         String             @unique // Auto-generated unique ticket number (e.g., ACME-2025-0001) - format defined by system settings
+  title                String             // Ticket subject/title
+  description          String?            // Detailed description of the issue or request
+  
+  // Status and priority
+  status               String             @default("OPEN")   // Current status (OPEN, IN_PROGRESS, RESOLVED, CLOSED, etc.)
+  priority             String             @default("MEDIUM") // Priority level (LOW, MEDIUM, HIGH, CRITICAL)
+  
+  // Metadata
+  customFields         Json?              // Flexible storage for custom ticket fields
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  
+  // Relationships - Core assignment structure
+  accountId            String             // Which account this ticket belongs to
+  creatorId            String?            // Who created this ticket (internal staff)
+  assigneeId           String?            // Who is assigned to work on this ticket (agent/employee with tickets:assignable-to permission)
+  assignedAccountUserId String?           // Which account user this ticket is created FOR (customer with tickets:assignable-for permission)
+  
+  // Relations
+  account              Account            @relation(fields: [accountId], references: [id])
+  assignee             User?              @relation("TicketAssignee", fields: [assigneeId], references: [id])      // The agent working on it
+  creator              User?              @relation("TicketCreator", fields: [creatorId], references: [id])        // Who created it
+  assignedAccountUser  AccountMembership? @relation("TicketAssignedAccountUser", fields: [assignedAccountUserId], references: [id]) // Customer it's for
+  
+  // Associated data
+  addons               TicketAddon[]      // Additional charges/items for this ticket
+  timeEntries          TimeEntry[]        // Time logged against this ticket
+  timers               Timer[]            // Active timers for this ticket
 
   @@index([accountId])
   @@index([creatorId])
   @@index([assigneeId])
+  @@index([assignedAccountUserId])
   @@index([status])
 }
 
@@ -258,6 +271,7 @@ model BillingRate {
   rate         Float
   description  String?
   isDefault    Boolean              @default(false)
+  isEnabled    Boolean              @default(true)
   createdAt    DateTime             @default(now())
   updatedAt    DateTime             @updatedAt
   accountRates AccountBillingRate[]

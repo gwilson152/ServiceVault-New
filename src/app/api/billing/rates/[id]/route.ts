@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { permissionService } from "@/lib/permissions/PermissionService";
 
-export async function PUT(
+export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -27,11 +27,21 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { name, rate, description, isDefault } = body;
+    const { name, rate, description, isDefault, isEnabled } = body;
 
-    if (!name || rate === undefined || rate === null) {
+    // Build update data object with only provided fields
+    const updateData: any = {};
+    
+    if (name !== undefined) updateData.name = name;
+    if (rate !== undefined) updateData.rate = parseFloat(rate);
+    if (description !== undefined) updateData.description = description || null;
+    if (isDefault !== undefined) updateData.isDefault = isDefault;
+    if (isEnabled !== undefined) updateData.isEnabled = isEnabled;
+
+    // Validate required fields if they're being updated
+    if (name === "" || (rate !== undefined && (rate === null || isNaN(parseFloat(rate))))) {
       return NextResponse.json(
-        { error: "Name and rate are required" },
+        { error: "Name cannot be empty and rate must be a valid number" },
         { status: 400 }
       );
     }
@@ -49,12 +59,7 @@ export async function PUT(
 
     const billingRate = await prisma.billingRate.update({
       where: { id: resolvedParams.id },
-      data: {
-        name,
-        rate: parseFloat(rate),
-        description: description || null,
-        isDefault: isDefault || false,
-      },
+      data: updateData,
     });
 
     return NextResponse.json(billingRate);
@@ -87,6 +92,18 @@ export async function DELETE(
     });
     if (!canDelete) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    // Check if billing rate is in use
+    const timeEntriesWithRate = await prisma.timeEntry.count({
+      where: { billingRateId: resolvedParams.id }
+    });
+
+    if (timeEntriesWithRate > 0) {
+      return NextResponse.json(
+        { error: "Cannot delete billing rate. It is currently in use by existing time entries. You can disable it instead." },
+        { status: 400 }
+      );
     }
 
     await prisma.billingRate.delete({

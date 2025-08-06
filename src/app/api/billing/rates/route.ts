@@ -27,7 +27,20 @@ export async function GET() {
       orderBy: { name: "asc" }
     });
 
-    return NextResponse.json(billingRates);
+    // Check if each rate is in use
+    const billingRatesWithUsage = await Promise.all(
+      billingRates.map(async (rate) => {
+        const timeEntriesCount = await prisma.timeEntry.count({
+          where: { billingRateId: rate.id }
+        });
+        return {
+          ...rate,
+          isUsed: timeEntriesCount > 0
+        };
+      })
+    );
+
+    return NextResponse.json(billingRatesWithUsage);
   } catch (error) {
     console.error("Error fetching billing rates:", error);
     return NextResponse.json(
@@ -57,7 +70,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, rate, description, isDefault } = body;
+    const { name, rate, description, isDefault, isEnabled } = body;
 
     if (!name || rate === undefined || rate === null) {
       return NextResponse.json(
@@ -80,6 +93,7 @@ export async function POST(request: NextRequest) {
         rate: parseFloat(rate),
         description: description || null,
         isDefault: isDefault || false,
+        isEnabled: isEnabled !== undefined ? isEnabled : true,
       },
     });
 

@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -14,7 +14,8 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { id: ticketId } = await params;
+    const resolvedParams = await params;
+    const { id: ticketId } = resolvedParams;
 
     // Check if ticket exists and user has access
     const ticket = await prisma.ticket.findUnique({
@@ -55,7 +56,7 @@ export async function GET(
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -64,7 +65,8 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { id: ticketId } = await params;
+    const resolvedParams = await params;
+    const { id: ticketId } = resolvedParams;
     const body = await request.json();
     const { name, description, price, quantity } = body;
 

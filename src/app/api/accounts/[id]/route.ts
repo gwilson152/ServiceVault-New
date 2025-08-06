@@ -203,6 +203,74 @@ export async function GET(
   }
 }
 
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const session = await getServerSession(authOptions);
+
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Check permission to update accounts
+    const canUpdate = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "accounts",
+      action: "update"
+    });
+    if (!canUpdate) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const { id } = await params;
+    const body = await request.json();
+    
+    // Check if account exists
+    const existingAccount = await prisma.account.findUnique({
+      where: { id },
+      select: { id: true, accountType: true }
+    });
+
+    if (!existingAccount) {
+      return NextResponse.json({ error: 'Account not found' }, { status: 404 });
+    }
+
+    // Build update data dynamically based on provided fields
+    const updateData: any = {};
+    if (body.name !== undefined) updateData.name = body.name;
+    if (body.companyName !== undefined) updateData.companyName = body.companyName;
+    if (body.address !== undefined) updateData.address = body.address;
+    if (body.phone !== undefined) updateData.phone = body.phone;
+    if (body.domains !== undefined) updateData.domains = body.domains;
+    if (body.customFields !== undefined) updateData.customFields = body.customFields;
+
+    // Update account with only provided fields
+    const account = await prisma.account.update({
+      where: { id },
+      data: updateData,
+      include: {
+        parent: {
+          select: { id: true, name: true, accountType: true }
+        },
+        children: {
+          select: { id: true, name: true, accountType: true }
+        }
+      }
+    });
+
+    return NextResponse.json(account);
+
+  } catch (error) {
+    console.error('Error updating account:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}
+
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }

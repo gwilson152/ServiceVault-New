@@ -55,6 +55,8 @@ interface AccountDetails {
   companyName?: string;
   address?: string;
   phone?: string;
+  domains?: string;
+  customFields?: Record<string, unknown>;
   parentAccount?: { id: string; name: string; accountType: string };
   childAccounts: Array<{ id: string; name: string; accountType: string }>;
   accountUsers: AccountUserWithStatus[];
@@ -117,6 +119,14 @@ export default function AccountDetailsPage() {
   const [userToMove, setUserToMove] = useState<AccountUserWithStatus | null>(null);
   const [userToEdit, setUserToEdit] = useState<AccountUserWithStatus | null>(null);
   const [userToDelete, setUserToDelete] = useState<AccountUserWithStatus | null>(null);
+  
+  // Settings state
+  const [domainsText, setDomainsText] = useState('');
+  const [isSavingDomains, setIsSavingDomains] = useState(false);
+  const [accountPreferences, setAccountPreferences] = useState({
+    defaultTicketPriority: 'MEDIUM',
+    requireTimeEntryApproval: false
+  });
   
   const { 
     canCreateUsers, 
@@ -197,6 +207,90 @@ export default function AccountDetailsPage() {
     const emailSubject = `Regarding ${account?.name} Account`;
     const mailtoLink = `mailto:${accountUser.email}?subject=${encodeURIComponent(emailSubject)}`;
     window.open(mailtoLink, '_blank');
+  };
+
+  // Settings handlers
+  const handleSaveDomains = async () => {
+    if (!account) return;
+
+    setIsSavingDomains(true);
+    try {
+      const response = await fetch(`/api/accounts/${account.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          domains: domainsText.trim()
+        }),
+      });
+
+      if (response.ok) {
+        const updatedAccount = await response.json();
+        setAccount({ ...account, domains: updatedAccount.domains });
+        alert('Domains saved successfully!');
+      } else {
+        const error = await response.json();
+        alert(`Failed to save domains: ${error.error}`);
+      }
+    } catch (error) {
+      console.error('Error saving domains:', error);
+      alert('Failed to save domains. Please try again.');
+    } finally {
+      setIsSavingDomains(false);
+    }
+  };
+
+  const handleTestDomainMatching = () => {
+    if (!domainsText.trim()) {
+      alert('Please enter some domains first');
+      return;
+    }
+
+    const domains = domainsText.split(',').map(d => d.trim()).filter(Boolean);
+    const testEmail = prompt('Enter an email address to test domain matching:');
+    
+    if (testEmail) {
+      const emailDomain = testEmail.split('@')[1]?.toLowerCase();
+      const matches = domains.some(domain => domain.toLowerCase() === emailDomain);
+      
+      if (matches) {
+        alert(`✅ Email "${testEmail}" matches the configured domains and would be automatically assigned to this account.`);
+      } else {
+        alert(`❌ Email "${testEmail}" does not match any configured domains and would not be automatically assigned.`);
+      }
+    }
+  };
+
+  const handleSavePreferences = async () => {
+    if (!account) return;
+
+    try {
+      const response = await fetch(`/api/accounts/${account.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          customFields: {
+            ...account.customFields,
+            accountPreferences: accountPreferences
+          }
+        }),
+      });
+
+      if (response.ok) {
+        const updatedAccount = await response.json();
+        setAccount({ ...account, customFields: updatedAccount.customFields });
+        alert('Preferences saved successfully!');
+      } else {
+        const error = await response.json();
+        alert(`Failed to save preferences: ${error.error}`);
+      }
+    } catch (error) {
+      console.error('Error saving preferences:', error);
+      alert('Failed to save preferences. Please try again.');
+    }
   };
 
   const handleMoveUserToAccount = async (targetAccountId: string) => {
@@ -295,6 +389,15 @@ export default function AccountDetailsPage() {
           address: data.address || '',
           phone: data.phone || ''
         });
+        
+        // Initialize settings state
+        setDomainsText(data.domains || '');
+        if (data.customFields?.accountPreferences) {
+          setAccountPreferences({
+            ...accountPreferences,
+            ...data.customFields.accountPreferences
+          });
+        }
       } else {
         console.error('Failed to fetch account');
       }
@@ -968,20 +1071,136 @@ export default function AccountDetailsPage() {
 
             {/* Settings Tab */}
             <TabsContent value="settings" className="space-y-6">
+              {/* Domain Management */}
               <Card>
                 <CardHeader>
-                  <CardTitle>Account Settings</CardTitle>
-                  <CardDescription>Configure account-specific settings and permissions</CardDescription>
+                  <CardTitle>Domain Management</CardTitle>
+                  <CardDescription>
+                    Configure email domains for automatic user assignment to this account
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="domains">Email Domains (comma-separated)</Label>
+                    <Textarea
+                      id="domains"
+                      placeholder="example.com, subsidiary.org, dept.company.com"
+                      className="min-h-[100px]"
+                      value={domainsText}
+                      onChange={(e) => setDomainsText(e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Users with email addresses from these domains will be automatically assigned to this account when invited or registered.
+                    </p>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <Button 
+                      size="sm" 
+                      onClick={handleSaveDomains}
+                      disabled={isSavingDomains}
+                    >
+                      {isSavingDomains ? 'Saving...' : 'Save Domains'}
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={handleTestDomainMatching}
+                    >
+                      Test Domain Matching
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Billing Rate Overrides */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Billing Rate Overrides</CardTitle>
+                  <CardDescription>
+                    Set account-specific billing rates that override system defaults
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-center py-12">
-                    <Settings className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-                    <h3 className="text-lg font-semibold mb-2">Account Settings</h3>
-                    <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-                      Configure permissions, billing settings, and other account-specific options.
+                  <div className="text-center py-8">
+                    <DollarSign className="mx-auto h-8 w-8 text-muted-foreground mb-4" />
+                    <h4 className="text-lg font-semibold mb-2">Billing Rate Management</h4>
+                    <p className="text-muted-foreground mb-4 max-w-md mx-auto">
+                      Configure custom billing rates for this account that override system defaults.
                     </p>
                     <Button variant="outline">
-                      Configure Settings
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Rate Override
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Account Preferences */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Account Preferences</CardTitle>
+                  <CardDescription>
+                    Default settings and preferences for this account
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Default Ticket Priority</Label>
+                      <select 
+                        className="w-full p-2 border rounded"
+                        value={accountPreferences.defaultTicketPriority}
+                        onChange={(e) => setAccountPreferences({
+                          ...accountPreferences,
+                          defaultTicketPriority: e.target.value
+                        })}
+                      >
+                        <option value="LOW">Low</option>
+                        <option value="MEDIUM">Medium</option>
+                        <option value="HIGH">High</option>
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Time Entry Approval Required</Label>
+                      <select 
+                        className="w-full p-2 border rounded"
+                        value={accountPreferences.requireTimeEntryApproval.toString()}
+                        onChange={(e) => setAccountPreferences({
+                          ...accountPreferences,
+                          requireTimeEntryApproval: e.target.value === 'true'
+                        })}
+                      >
+                        <option value="false">No</option>
+                        <option value="true">Yes</option>
+                      </select>
+                    </div>
+                  </div>
+                  <Button 
+                    size="sm"
+                    onClick={handleSavePreferences}
+                  >
+                    Save Preferences
+                  </Button>
+                </CardContent>
+              </Card>
+
+              {/* Security Settings */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Security & Access</CardTitle>
+                  <CardDescription>
+                    Account-level security policies and access controls
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-center py-8">
+                    <AlertTriangle className="mx-auto h-8 w-8 text-amber-500 mb-4" />
+                    <h4 className="text-lg font-semibold mb-2">Security Settings</h4>
+                    <p className="text-muted-foreground mb-4 max-w-md mx-auto">
+                      Configure account-specific security policies, session timeouts, and access restrictions.
+                    </p>
+                    <Button variant="outline">
+                      Configure Security
                     </Button>
                   </div>
                 </CardContent>

@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { BillingRateSelector } from "@/components/selectors/billing-rate-selector";
 import { 
   Clock, 
   Plus, 
@@ -19,10 +20,11 @@ import { useTimeTracking } from "./TimeTrackingProvider";
 interface QuickTimeEntryProps {
   ticketId: string;
   ticketTitle: string;
+  accountId: string;
   onTimeLogged?: () => void;
 }
 
-export function QuickTimeEntry({ ticketId, ticketTitle, onTimeLogged }: QuickTimeEntryProps) {
+export function QuickTimeEntry({ ticketId, ticketTitle, accountId, onTimeLogged }: QuickTimeEntryProps) {
   const { startTimer, stopTimer, pauseTimer, resumeTimer, getTimerForTicket } = useTimeTracking();
   
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -34,6 +36,7 @@ export function QuickTimeEntry({ ticketId, ticketTitle, onTimeLogged }: QuickTim
   const [noCharge, setNoCharge] = useState(false);
   const [workDate, setWorkDate] = useState(new Date().toISOString().split('T')[0]);
   const [workTime, setWorkTime] = useState(new Date().toTimeString().slice(0, 5));
+  const [billingRateId, setBillingRateId] = useState("");
 
   const activeTimer = getTimerForTicket(ticketId);
   
@@ -117,7 +120,8 @@ export function QuickTimeEntry({ ticketId, ticketTitle, onTimeLogged }: QuickTim
           description: description.trim(),
           date: workDate,
           time: workTime,
-          noCharge
+          noCharge,
+          billingRateId: billingRateId || undefined
         }),
       });
 
@@ -128,6 +132,7 @@ export function QuickTimeEntry({ ticketId, ticketTitle, onTimeLogged }: QuickTim
         setNoCharge(false);
         setWorkDate(new Date().toISOString().split('T')[0]);
         setWorkTime(new Date().toTimeString().slice(0, 5));
+        setBillingRateId("");
         setIsModalOpen(false);
         onTimeLogged?.();
       } else {
@@ -150,6 +155,7 @@ export function QuickTimeEntry({ ticketId, ticketTitle, onTimeLogged }: QuickTim
     setNoCharge(false);
     setWorkDate(new Date().toISOString().split('T')[0]);
     setWorkTime(new Date().toTimeString().slice(0, 5));
+    setBillingRateId("");
   };
 
   return (
@@ -294,11 +300,26 @@ export function QuickTimeEntry({ ticketId, ticketTitle, onTimeLogged }: QuickTim
               />
             </div>
 
+            {/* Billing Rate Selection */}
+            {!noCharge && (
+              <BillingRateSelector
+                accountId={accountId}
+                value={billingRateId}
+                onValueChange={setBillingRateId}
+                showNoChargeOption={false}
+                autoSelectDefault={false}
+                placeholder="Select billing rate (optional)"
+              />
+            )}
+
             <div className="flex items-center space-x-2">
               <Switch
                 id="quick-no-charge"
                 checked={noCharge}
-                onCheckedChange={setNoCharge}
+                onCheckedChange={(checked) => {
+                  setNoCharge(checked);
+                  if (checked) setBillingRateId("");
+                }}
               />
               <Label htmlFor="quick-no-charge">No Charge</Label>
             </div>

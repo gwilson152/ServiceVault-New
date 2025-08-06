@@ -11,7 +11,7 @@ Service Vault is a **time management and invoicing system** built with Next.js 1
 - **ABAC Permission System** with role templates and super-admin capabilities
 - **Hierarchical account management** with parent-child relationships  
 - **Comprehensive user management** with role administration and security controls
-- **Advanced role management** with effective permissions viewer and assignment interface
+- **Ticket system** with explicit assignment permissions (assignable-to/assignable-for)
 - Time tracking with cross-device timer synchronization
 - Invoice generation with billing rate overrides
 - Customizable ticket fields and email templates
@@ -48,7 +48,7 @@ npx prisma db push  # Push schema changes
 - `User` + `AccountMembership` - Clean user-account relationships
 - `RoleTemplate` + `SystemRole/MembershipRole` - ABAC permission system
 - `Account` - Hierarchical business accounts with CSV domains
-- `TimeEntry` + `Ticket` - Time tracking and work management
+- `TimeEntry` + `Ticket` - Time tracking and work management with explicit assignment structure
 - `BillingRate` + `AccountBillingRate` - Two-tier billing system
 
 ### Directory Structure
@@ -164,13 +164,12 @@ Two-tier rates: system defaults + account overrides
 
 ## Current Status
 
-**✅ COMPLETED (Major RBAC → ABAC Migration + User Management):**
+**✅ COMPLETED (Major RBAC → ABAC Migration + User Management + Ticket System):**
 - Permission system overhaul with RoleTemplate architecture
 - Database migration to PostgreSQL with clean schema
 - Comprehensive user management system with role administration
-- Advanced user management dialogs (UserRoleManagementDialog, UserStatusManagementDialog)
-- Complete user security controls (enable/disable, password reset, session management)
-- Effective permissions viewer with human-readable displays
+- Complete ticket system with explicit assignment permissions (assignable-to/assignable-for)
+- Advanced user management dialogs with role and security controls
 - All critical API endpoints updated with permission filtering
 - Navigation and page layouts updated for new system
 

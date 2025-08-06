@@ -1,6 +1,6 @@
 "use client";
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { User, Mail } from "lucide-react";
@@ -13,9 +13,9 @@ interface Agent {
 }
 
 interface AgentSelectorProps {
-  agents: Agent[];
   selectedAgentId: string;
   onAgentChange: (agentId: string) => void;
+  accountId?: string; // Optional account context for scoped permissions
   label?: string;
   placeholder?: string;
   className?: string;
@@ -23,19 +23,42 @@ interface AgentSelectorProps {
 }
 
 export function AgentSelector({
-  agents,
   selectedAgentId,
   onAgentChange,
+  accountId,
   label = "Assigned Agent",
   placeholder = "Select an agent",
   className = "",
   disabled = false
 }: AgentSelectorProps) {
-  
-  // Filter to only show employees and admins (not account users)
-  const availableAgents = agents.filter(agent => 
-    agent.role === 'ADMIN' || agent.role === 'EMPLOYEE'
-  );
+  const [assignableAgents, setAssignableAgents] = useState<Agent[]>([]);
+  const [isLoadingAgents, setIsLoadingAgents] = useState(false);
+
+  // Fetch assignable agents based on permissions
+  useEffect(() => {
+    setIsLoadingAgents(true);
+    const url = accountId 
+      ? `/api/users/assignable?accountId=${accountId}`
+      : '/api/users/assignable';
+    
+    fetch(url)
+      .then(response => {
+        if (response.ok) {
+          return response.json();
+        }
+        throw new Error('Failed to fetch assignable agents');
+      })
+      .then((data: { assignableUsers: Agent[] }) => {
+        setAssignableAgents(data.assignableUsers || []);
+      })
+      .catch(error => {
+        console.error('Error fetching assignable agents:', error);
+        setAssignableAgents([]);
+      })
+      .finally(() => {
+        setIsLoadingAgents(false);
+      });
+  }, [accountId]);
 
   const renderAgentOptions = () => {
     const options = [
@@ -47,7 +70,7 @@ export function AgentSelector({
       </SelectItem>
     ];
 
-    availableAgents.forEach(agent => {
+    assignableAgents.forEach(agent => {
       options.push(
         <SelectItem key={`agent-${agent.id}`} value={agent.id}>
           <div className="flex items-center gap-2">
@@ -71,8 +94,11 @@ export function AgentSelector({
     <div className={`space-y-2 ${className}`}>
       <Label htmlFor="agent-select">
         {label}
+        {isLoadingAgents && (
+          <span className="text-xs text-muted-foreground ml-2">(Loading agents...)</span>
+        )}
         <span className="text-xs text-muted-foreground ml-2">
-          (Internal staff who will work on this ticket)
+          (Users with assignment permissions)
         </span>
       </Label>
       <Select 

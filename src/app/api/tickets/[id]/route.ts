@@ -23,7 +23,6 @@ export async function GET(
         assignee: true,
         assignedAccountUser: true,
         creator: true,
-        accountUserCreator: true,
         timeEntries: {
           include: {
             user: true,
@@ -190,7 +189,6 @@ export async function PATCH(
         assignee: true,
         assignedAccountUser: true,
         creator: true,
-        accountUserCreator: true,
         timeEntries: {
           include: {
             user: true,

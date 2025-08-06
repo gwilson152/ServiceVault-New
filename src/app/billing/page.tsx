@@ -5,12 +5,9 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, useCallback } from "react";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAllAccountsQuery } from "@/hooks/queries/useAccountsQuery";
-import { useBillingRatesQuery, useInvoicesQuery } from "@/hooks/queries/useBillingQuery";
+import { useInvoicesQuery } from "@/hooks/queries/useBillingQuery";
 import { 
   useGenerateInvoiceMutation, 
-  useCreateBillingRateMutation, 
-  useUpdateBillingRateMutation,
-  useDeleteBillingRateMutation,
   useDeleteInvoiceMutation 
 } from "@/hooks/queries/useBillingMutations";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -64,10 +61,9 @@ export default function BillingPage() {
   // TanStack Query hooks replace manual state management
   const { data: accounts = [], isLoading: accountsLoading } = useAllAccountsQuery();
   const { data: invoices = [], isLoading: invoicesLoading } = useInvoicesQuery();
-  const { data: billingRates = [], isLoading: billingRatesLoading } = useBillingRatesQuery();
   
   // Combined loading state from TanStack Query hooks and permissions
-  const isLoading = accountsLoading || invoicesLoading || billingRatesLoading || permissionsHookLoading;
+  const isLoading = accountsLoading || invoicesLoading || permissionsHookLoading;
   
   // Permission state
   const [permissions, setPermissions] = useState({
@@ -89,24 +85,12 @@ export default function BillingPage() {
   const [selectedTimeEntries, setSelectedTimeEntries] = useState<Set<string>>(new Set());
   const [selectedAddons, setSelectedAddons] = useState<Set<string>>(new Set());
 
-  // Billing rates state
-  const [editingRate, setEditingRate] = useState<string | null>(null);
-  const [showAddRate, setShowAddRate] = useState(false);
-  const [newRate, setNewRate] = useState({
-    name: "",
-    rate: 0,
-    description: "",
-    isDefault: false
-  });
 
   const { success, error } = useToast();
   const { addAction, clearActions } = useActionBar();
 
   // Mutation hooks for data modifications
   const generateInvoiceMutation = useGenerateInvoiceMutation();
-  const createBillingRateMutation = useCreateBillingRateMutation();
-  const updateBillingRateMutation = useUpdateBillingRateMutation();
-  const deleteBillingRateMutation = useDeleteBillingRateMutation();
   const deleteInvoiceMutation = useDeleteInvoiceMutation();
 
   useEffect(() => {
@@ -131,32 +115,6 @@ export default function BillingPage() {
   }, [status, session, router, canViewInvoices, canViewBilling, canCreateBilling, canUpdateBilling, canDeleteBilling, permissionsHookLoading]);
 
   // All useCallback hooks must be defined before any conditional returns
-  const handleAddRate = useCallback(async () => {
-    if (!newRate.name || !newRate.rate) {
-      error('Please fill in all required fields');
-      return;
-    }
-
-    try {
-      await createBillingRateMutation.mutateAsync(newRate);
-      success('Billing rate added successfully');
-      setShowAddRate(false);
-      setNewRate({ name: "", rate: 0, description: "", isDefault: false });
-    } catch (err: any) {
-      console.error('Failed to add billing rate:', err);
-      error('Failed to add billing rate', err.message);
-    }
-  }, [newRate, error, success, createBillingRateMutation]);
-
-  const handleDeleteRate = useCallback(async (rateId: string) => {
-    try {
-      await deleteBillingRateMutation.mutateAsync(rateId);
-      success('Billing rate deleted successfully');
-    } catch (err: any) {
-      console.error('Failed to delete billing rate:', err);
-      error('Failed to delete billing rate', err.message);
-    }
-  }, [deleteBillingRateMutation, success, error]);
 
   // Preview invoice items for manual selection
   const handlePreviewInvoice = useCallback(async () => {
@@ -258,20 +216,6 @@ export default function BillingPage() {
   const selectedAccountDetails = accounts.find(account => account.id === selectedAccount);
   const hierarchicalAccounts = buildAccountHierarchy(accounts);
 
-  const handleEditRate = (rateId: string) => {
-    setEditingRate(rateId);
-  };
-
-  const handleSaveRate = async (rateId: string, updatedRate: { name: string; rate: number; description: string; isDefault: boolean }) => {
-    try {
-      await updateBillingRateMutation.mutateAsync({ rateId, data: updatedRate });
-      success('Billing rate updated successfully');
-      setEditingRate(null);
-    } catch (err: any) {
-      console.error('Failed to update billing rate:', err);
-      error('Failed to update billing rate', err.message);
-    }
-  };
 
   const handleInvoiceDelete = async (invoiceId: string) => {
     if (!confirm("Are you sure you want to delete this invoice? This action cannot be undone.")) {
@@ -400,129 +344,6 @@ export default function BillingPage() {
     );
   };
 
-  // Billing Rate Card Component
-  const BillingRateCard = ({ rate }: { rate: { id: string; name: string; rate: number; description: string; isDefault: boolean } }) => {
-    const [editData, setEditData] = useState({
-      name: rate.name,
-      rate: rate.rate,
-      description: rate.description,
-      isDefault: rate.isDefault
-    });
-
-    const isEditing = editingRate === rate.id;
-
-    const handleSave = () => {
-      handleSaveRate(rate.id, editData);
-    };
-
-    const handleCancel = () => {
-      setEditingRate(null);
-      setEditData({
-        name: rate.name,
-        rate: rate.rate,
-        description: rate.description,
-        isDefault: rate.isDefault
-      });
-    };
-
-    return (
-      <Card key={rate.id}>
-        <CardContent className="p-4">
-          {isEditing ? (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor={`name-${rate.id}`}>Rate Name</Label>
-                  <Input
-                    id={`name-${rate.id}`}
-                    value={editData.name}
-                    onChange={(e) => setEditData(prev => ({ ...prev, name: e.target.value }))}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor={`rate-${rate.id}`}>Hourly Rate ($)</Label>
-                  <Input
-                    id={`rate-${rate.id}`}
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={editData.rate}
-                    onChange={(e) => setEditData(prev => ({ ...prev, rate: parseFloat(e.target.value) || 0 }))}
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor={`desc-${rate.id}`}>Description</Label>
-                <Input
-                  id={`desc-${rate.id}`}
-                  value={editData.description}
-                  onChange={(e) => setEditData(prev => ({ ...prev, description: e.target.value }))}
-                />
-              </div>
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  id={`default-${rate.id}`}
-                  checked={editData.isDefault}
-                  onChange={(e) => setEditData(prev => ({ ...prev, isDefault: e.target.checked }))}
-                  className="rounded"
-                />
-                <Label htmlFor={`default-${rate.id}`} className="text-sm">
-                  Set as default rate
-                </Label>
-              </div>
-              <div className="flex gap-2">
-                <Button size="sm" onClick={handleSave}>
-                  <Save className="h-4 w-4 mr-2" />
-                  Save
-                </Button>
-                <Button variant="outline" size="sm" onClick={handleCancel}>
-                  <X className="h-4 w-4 mr-2" />
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="flex items-center justify-between">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <div className="font-medium">{rate.name}</div>
-                  {rate.isDefault && (
-                    <Badge variant="secondary" className="text-xs">
-                      Default
-                    </Badge>
-                  )}
-                </div>
-                <div className="text-sm text-muted-foreground">{rate.description}</div>
-              </div>
-              <div className="flex items-center gap-4">
-                <div className="text-2xl font-bold text-green-600">
-                  ${rate.rate}/hr
-                </div>
-                <div className="flex gap-2">
-                  {permissions.updateBilling && (
-                    <Button variant="ghost" size="sm" onClick={() => handleEditRate(rate.id)}>
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                  )}
-                  {permissions.deleteBilling && (
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      className="text-red-600 hover:text-red-700"
-                      onClick={() => handleDeleteRate(rate.id)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>  
-    );
-  };
 
   return (
     <>
@@ -586,10 +407,9 @@ export default function BillingPage() {
 
           {/* Main Content Tabs */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="invoices">Invoices</TabsTrigger>
               <TabsTrigger value="generate">Generate Invoice</TabsTrigger>
-              <TabsTrigger value="rates">Billing Rates</TabsTrigger>
             </TabsList>
 
             {/* Invoices Tab */}
@@ -960,123 +780,6 @@ export default function BillingPage() {
               )}
             </TabsContent>
 
-            {/* Billing Rates Tab */}
-            <TabsContent value="rates" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <CardTitle>Billing Rates Management</CardTitle>
-                      <CardDescription>
-                        Manage hourly billing rates for different types of work. Create, edit, and delete billing rates used in time tracking and invoicing.
-                      </CardDescription>
-                    </div>
-                    <Button 
-                      onClick={() => setShowAddRate(true)}
-                      disabled={!permissions.createBilling}
-                    >
-                      <Plus className="mr-2 h-4 w-4" />
-                      Add Rate
-                    </Button>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {/* Add New Rate Form */}
-                    {showAddRate && (
-                      <Card className="border-dashed">
-                        <CardContent className="p-4">
-                          <div className="space-y-4">
-                            <h4 className="font-medium">Add New Billing Rate</h4>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              <div className="space-y-2">
-                                <Label htmlFor="new-rate-name">Rate Name *</Label>
-                                <Input
-                                  id="new-rate-name"
-                                  value={newRate.name}
-                                  onChange={(e) => setNewRate(prev => ({ ...prev, name: e.target.value }))}
-                                  placeholder="e.g., Senior Development"
-                                />
-                              </div>
-                              <div className="space-y-2">
-                                <Label htmlFor="new-rate-amount">Hourly Rate ($) *</Label>
-                                <Input
-                                  id="new-rate-amount"
-                                  type="number"
-                                  step="0.01"
-                                  min="0"
-                                  value={newRate.rate}
-                                  onChange={(e) => setNewRate(prev => ({ ...prev, rate: parseFloat(e.target.value) || 0 }))}
-                                  placeholder="125.00"
-                                />
-                              </div>
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="new-rate-desc">Description</Label>
-                              <Input
-                                id="new-rate-desc"
-                                value={newRate.description}
-                                onChange={(e) => setNewRate(prev => ({ ...prev, description: e.target.value }))}
-                                placeholder="Brief description of this billing rate"
-                              />
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <input
-                                type="checkbox"
-                                id="new-rate-default"
-                                checked={newRate.isDefault}
-                                onChange={(e) => setNewRate(prev => ({ ...prev, isDefault: e.target.checked }))}
-                                className="rounded"
-                              />
-                              <Label htmlFor="new-rate-default" className="text-sm">
-                                Set as default rate
-                              </Label>
-                            </div>
-                            <div className="flex gap-2">
-                              <Button onClick={handleAddRate}>
-                                <Save className="h-4 w-4 mr-2" />
-                                Add Rate
-                              </Button>
-                              <Button 
-                                variant="outline" 
-                                onClick={() => {
-                                  setShowAddRate(false);
-                                  setNewRate({ name: "", rate: 0, description: "", isDefault: false });
-                                }}
-                              >
-                                <X className="h-4 w-4 mr-2" />
-                                Cancel
-                              </Button>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )}
-
-                    {/* Existing Billing Rates */}
-                    {billingRates.length === 0 ? (
-                      <div className="text-center py-8">
-                        <DollarSign className="mx-auto h-12 w-12 text-muted-foreground" />
-                        <h3 className="mt-2 text-sm font-semibold">No billing rates</h3>
-                        <p className="text-sm text-muted-foreground">Create your first billing rate to get started.</p>
-                        <Button 
-                          className="mt-4" 
-                          onClick={() => setShowAddRate(true)}
-                          disabled={!permissions.createBilling}
-                        >
-                          <Plus className="mr-2 h-4 w-4" />
-                          Add Billing Rate
-                        </Button>
-                      </div>
-                    ) : (
-                      billingRates.map((rate) => (
-                        <BillingRateCard key={rate.id} rate={rate} />
-                      ))
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
           </Tabs>
         </div>
       </main>

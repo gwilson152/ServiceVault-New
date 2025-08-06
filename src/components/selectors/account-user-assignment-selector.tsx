@@ -32,16 +32,32 @@ export function AccountUserAssignmentSelector({
   useEffect(() => {
     if (selectedAccountId) {
       setIsLoadingUsers(true);
-      // Fetch all account users (active and inactive) for assignment purposes
-      fetch(`/api/account-users?accountId=${selectedAccountId}&includeInactive=true`)
+      // Fetch account users who can have tickets created for them (tickets:assignable-for permission)
+      fetch(`/api/account-users/assignable-for?accountId=${selectedAccountId}`)
         .then(response => {
           if (response.ok) {
             return response.json();
           }
           throw new Error('Failed to fetch account users');
         })
-        .then((data: AccountUserWithStatus[]) => {
-          setAccountUsers(data);
+        .then((data: { accountUsers: any[] }) => {
+          // Map the new API response to AccountUserWithStatus format
+          const mappedUsers = data.accountUsers?.map(user => ({
+            id: user.membershipId, // Use membershipId as the ID for selection
+            membershipId: user.membershipId, // Keep original membershipId
+            name: user.name,
+            email: user.email,
+            phone: undefined,
+            isActive: true, // Users from assignable-for endpoint are active by definition
+            createdAt: new Date(user.createdAt),
+            updatedAt: new Date(user.updatedAt),
+            account: { id: selectedAccountId, name: '', accountType: '' }, // Minimal account info
+            user: { id: user.userId, name: user.name, email: user.email, role: user.role },
+            hasLogin: true, // Users from this endpoint have login by definition
+            canBeAssigned: true, // They can be assigned tickets for by definition
+            invitationStatus: 'activated' as const
+          })) || [];
+          setAccountUsers(mappedUsers);
         })
         .catch(error => {
           console.error('Error fetching account users:', error);

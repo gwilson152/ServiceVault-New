@@ -466,7 +466,20 @@ const result = await prisma.$transaction(async (tx) => {
   - `/api/users/[id]/force-password-reset` - Security actions
   - `/api/users/[id]/revoke-sessions` - Session management
   - `/api/users/[id]/effective-permissions` - Permission analysis
+  - `/api/users/assignable` - **NEW**: Fetch users with `tickets:assignable-to` permission for agent assignment
 - **Permissions**: Admin-only with self-protection mechanisms
+
+#### Account Users (`/api/account-users`)
+- **Purpose**: Account membership management and user assignment
+- **Key Features**: Hierarchical user access, child account inclusion, status tracking
+- **Enhanced Support**: 
+  - **Child Account Users**: Automatically includes users from child accounts for hierarchical access
+  - **Status Fields**: Compatible with `AccountUserWithStatus` type including `hasLogin`, `canBeAssigned`
+  - **Permission Filtering**: Respects user's accessible account permissions
+- **Query Parameters**:
+  - `accountId` - Filter by specific account (includes child accounts)
+  - `includeInactive` - Include inactive users (legacy parameter, all memberships considered active)
+- **Permissions**: Requires `users:view` permission with account-level filtering
 
 ### Specialized APIs
 

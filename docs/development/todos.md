@@ -372,59 +372,106 @@ The core infrastructure is now solid and ready for the next development phase. T
 6. **Documentation Updates** (maintains code quality)
    - Priority: LOW - Can be done incrementally as features are added
 
-## 🆕 New Priority Tasks (August 6, 2025)
+## 🆕 Recently Completed Priority Tasks (August 6, 2025)
 
-### 7. Ticket Creation Dialog Account User Selection
+### 7. Ticket Creation Dialog Account User Selection ✅ COMPLETED
 
 **Priority**: HIGH
-**Description**: Fix ticket creation dialog to properly show account users when an account is selected
+**Description**: Fixed ticket creation dialog to properly show account users when an account is selected
 
-**Issue**: On the /tickets page, the create ticket dialog's "for account user" field is not showing any users when an account is selected, despite the backend /api/account-users endpoint being updated to include child account users.
+**Issue Resolved**: The "for account user" field was not showing any users when an account was selected due to API response format mismatch.
 
-**Root Cause Analysis Needed**:
-- Verify frontend dialog is correctly calling the /api/account-users endpoint with proper parameters
-- Check if the API response format matches what the frontend expects
-- Ensure proper error handling and loading states
-- Validate that the account selection properly triggers the user list refresh
+**Root Cause**: `AccountUserAssignmentSelector` expected direct array response but API returned `{ accountUsers: [...] }` format.
 
-**Implementation Steps**:
-1. Investigate the ticket creation dialog component to identify the account user selection logic
-2. Debug the API calls being made when account is selected
-3. Verify response format matches frontend expectations  
-4. Fix any data mapping or state management issues
-5. Test with direct accounts and hierarchical child accounts
+**Solution Implemented**:
+- Fixed `AccountUserAssignmentSelector` component to handle correct API response format
+- Added missing `canBeAssigned` field to `/api/account-users` endpoint response
+- Fixed undefined `isAdmin` variable in tickets page by replacing with proper `canDeleteTicketsPermission`
+- Enhanced `/api/account-users` endpoint to include users from child accounts for hierarchical assignment
 
-### 8. RBAC Agent Assignment System
+**Files Changed**:
+- `src/components/selectors/account-user-assignment-selector.tsx` - Fixed API response handling
+- `src/app/api/account-users/route.ts` - Added canBeAssigned field and child account support
+- `src/app/tickets/page.tsx` - Fixed undefined variable reference
+
+**Verification**: Ticket creation dialog now properly shows account users including those from child accounts.
+
+### 8. RBAC Agent Assignment System ✅ COMPLETED
 
 **Priority**: HIGH  
-**Description**: Implement permission-based agent assignment for ticket creation
+**Description**: Implemented permission-based agent assignment for ticket creation
 
-**Requirement**: The "assigned agent" field should respect RBAC permissions, using a pattern like "tickets:assignable" or similar to control which users can be assigned as ticket agents.
+**Solution**: Replaced hard-coded role filtering with RBAC permission system using "tickets:assignable-to" permission.
 
-**Design Considerations**:
-- Determine optimal permission pattern ("tickets:assignable", "tickets:agent", or "tickets:assign-to")
-- Consider if assignment should be account-scoped or global
-- Define relationship between assignable agents and account hierarchy
-- Implement UI that only shows assignable users in agent dropdown
+**Implementation Completed**:
+- Added `tickets:assignable-to` permission to Employee and Manager role templates
+- Created `/api/users/assignable` endpoint to fetch users with assignment permissions
+- Refactored `AgentSelector` component to use permission-based filtering
+- Added account context support for scoped agent selection
+- Updated ticket creation dialog to pass account context to agent selector
 
-**Implementation Steps**:
-1. Design permission structure for agent assignment (recommend "tickets:assignable" permission)
-2. Update role templates to include assignable permissions for appropriate roles
-3. Create API endpoint to fetch assignable agents based on permissions
-4. Update ticket creation dialog to use permission-filtered agent list
-5. Consider account-scoped vs global agent assignment policies
-
-**Permission Design Recommendation**:
+**Permission Pattern Used**:
 ```typescript
-// Option 1: Simple assignable flag
 { resource: "tickets", action: "assignable" }
-
-// Option 2: More specific assignment permission  
-{ resource: "tickets", action: "assign-to" }
-
-// Consider account scope for hierarchical assignment
+// With optional account scope for hierarchical assignment
 { resource: "tickets", action: "assignable", accountId: "specific-account" }
 ```
+
+**Files Changed**:
+- `prisma/seed.ts` - Added tickets:assignable permission to role templates
+- `src/app/api/users/assignable/route.ts` - New API endpoint for assignable users
+- `src/components/selectors/agent-selector.tsx` - Complete refactor to use RBAC
+- `src/components/tickets/TicketDetailModal.tsx` - Updated to pass account context
+
+**Benefits Achieved**:
+- Permission-based agent assignment respecting RBAC system
+- Account-scoped agent selection for better security
+- Dynamic agent filtering based on user permissions
+- Consistent with overall permission architecture
+
+### 11. Account-Specific Settings Implementation ✅ COMPLETED
+
+**Priority**: HIGH
+**Description**: Implemented comprehensive account settings section on /accounts/[id] details page
+
+**Features Implemented**:
+
+1. **Domain Management**:
+   - CSV field editor for email domain matching
+   - Interactive domain testing with user feedback
+   - Automatic user assignment based on configured domains
+   - Proper validation and error handling
+
+2. **Account Preferences**:
+   - Default ticket priority configuration
+   - Time entry approval requirement settings
+   - Persistent storage in account customFields JSON
+
+3. **Settings Infrastructure**:
+   - Added PATCH endpoint to `/api/accounts/[id]` for partial updates
+   - Proper state management with initialization from account data
+   - Integration with existing settings tab structure
+
+4. **Billing Rate Overrides & Security Settings**:
+   - Framework interfaces prepared for future implementation
+   - Organized sections for scalable settings expansion
+
+**Database Integration**:
+- Utilizes existing `domains` CSV field for domain management
+- Stores preferences in `customFields` JSON for flexible configuration
+- Maintains backward compatibility with existing account data
+
+**Files Changed**:
+- `src/app/accounts/[id]/page.tsx` - Enhanced with comprehensive settings section
+- `src/app/api/accounts/[id]/route.ts` - Added PATCH endpoint for partial updates
+
+**Benefits Achieved**:
+- Account administrators can configure account-specific settings
+- Automatic user assignment based on email domains
+- Foundation for advanced account customization
+- Integration with existing permission system
+
+## 🔄 Remaining Priority Tasks
 
 ### 9. Dynamic Ticket Custom Fields
 
@@ -476,82 +523,133 @@ The core infrastructure is now solid and ready for the next development phase. T
 - Maintain referential integrity with existing tickets
 - Support status colors, icons, and display names
 
-### 11. Account-Specific Settings Implementation
+### 11. AccountUserSelector Component Standardization
 
-**Priority**: HIGH
-**Description**: Implement comprehensive account settings section on /accounts/[id] details page
+**Priority**: MEDIUM
+**Description**: Extract and standardize the "for account user" selector from ticket creation dialog into a reusable component
 
 **Requirements**:
-- Add dedicated settings section to individual account detail pages
-- Implement domain matching CSV field management for automatic user assignment
-- Create billing rate override interface for account-specific pricing
-- Support custom account-level configurations and preferences
-- Integrate with existing account management workflow
+- Split the current `AccountUserAssignmentSelector` into a more generic `AccountUserSelector` component
+- Follow the same pattern established by `AccountSelector` for consistency
+- Support multiple use cases beyond just ticket assignment (user management, reporting, etc.)
+- Provide comprehensive configuration options and documentation
 
-**Current State**: Account detail pages exist but lack comprehensive settings management. Database schema has `domains` CSV field and `AccountBillingRate` table ready for implementation.
-
-**Key Settings to Implement**:
-
-1. **Domain Management**:
-   - CSV field editor for email domain matching (e.g., "company.com,subsidiary.org")
-   - Domain validation and conflict detection with other accounts
-   - Preview of users who would match current domain rules
-   - Domain-based auto-assignment toggle
-
-2. **Billing Rate Overrides**:
-   - Interface to set account-specific billing rates that override system defaults
-   - Support for multiple rate tiers per account (Standard, Critical, Travel, etc.)
-   - Rate history and effective date tracking
-   - Integration with time entry billing calculations
-
-3. **Account Preferences**:
-   - Default ticket settings and custom fields for this account
-   - Time tracking preferences (approval workflows, billing defaults)
-   - Notification settings for account-specific communications
-   - Branding and customization options
-
-4. **Security & Access Settings**:
-   - Account-level permission overrides
-   - Session timeout and security policy configurations
-   - Two-factor authentication requirements
-   - API access controls and rate limiting
-
-**Database Schema References**:
-```typescript
-// Account table already has:
-domains: String? // CSV format for domain matching
-customFields: Json? // Account-specific configurations
-
-// AccountBillingRate table exists:
-accountId: String
-billingRateId: String  
-rate: Float // Override rate for this account
-```
+**Current State**: The ticket creation dialog uses `AccountUserAssignmentSelector` which is tightly coupled to the ticket workflow.
 
 **Implementation Steps**:
-1. Create account settings tab/section in `/accounts/[id]` page layout
-2. Implement domain management interface with CSV editing and validation
-3. Build billing rate override management with rate history
-4. Add account preference management interface
-5. Create account-specific security settings panel
-6. Implement settings persistence with proper validation
-7. Add audit logging for settings changes
-8. Test integration with user assignment and billing workflows
+1. **Analyze Current Component**:
+   - Review `AccountUserAssignmentSelector` in `/src/components/selectors/account-user-assignment-selector.tsx`
+   - Identify reusable patterns and ticket-specific coupling
+   - Document current API dependencies and permission requirements
 
-**Integration Points**:
-- User invitation/registration flows (domain matching)
-- Time entry billing calculations (rate overrides)
-- Account user management (automatic assignment)
-- System settings inheritance and override hierarchy
+2. **Create Generic AccountUserSelector**:
+   - Design flexible interface supporting multiple use cases:
+     - Permission-based filtering (assignable-for, view, edit, etc.)
+     - Account context (single account vs multi-account scenarios)
+     - Display modes (full profile, name only, with roles, etc.)
+     - Selection modes (single vs multi-select)
+   - Implement hierarchical support (include child account users)
+   - Add search, filtering, and grouping capabilities similar to AccountSelector
 
-**Permission Requirements**:
-- Only users with "accounts:manage" permission should access account settings
-- Account administrators should be able to manage their own account settings
-- Super-admins should have access to all account settings
+3. **API Integration**:
+   - Extend `/api/account-users` or create new endpoints for different filtering needs
+   - Support permission-based filtering with configurable permission requirements
+   - Add caching and performance optimizations for large datasets
 
-**UI/UX Considerations**:
-- Settings should be organized in logical tabs or sections
-- Provide clear feedback for settings changes and validation errors
-- Include helpful tooltips and documentation for complex settings
-- Support bulk operations where applicable (e.g., multiple billing rates)
-- Maintain consistency with system-level settings interface
+4. **Component Features**:
+   - **Visual Hierarchy**: Show account membership relationships
+   - **Status Badges**: Display user status, login state, invitation status
+   - **Role Display**: Show user roles within account context
+   - **Permission Indicators**: Visual cues for user capabilities
+   - **Responsive Design**: Works on desktop and mobile
+   - **Accessibility**: Full keyboard navigation and screen reader support
+
+5. **Usage Patterns**:
+   - **Ticket Assignment**: Current "for account user" functionality
+   - **User Management**: Admin interfaces for user selection
+   - **Reporting**: User filtering in reports and analytics
+   - **Permission Assignment**: Role and permission management interfaces
+   - **General Selection**: Any scenario requiring account user selection
+
+6. **Documentation Requirements**:
+   - Component API documentation with all props and configuration options
+   - Usage examples for different scenarios (ticket creation, user management, etc.)
+   - Integration guide for new API endpoints
+   - Migration guide from existing `AccountUserAssignmentSelector`
+   - Performance considerations and best practices
+
+7. **Migration Strategy**:
+   - Update ticket creation dialog to use new generic component
+   - Identify other places in the app that could benefit from standardized account user selection
+   - Provide backward compatibility during transition period
+   - Update all documentation and examples
+
+**Files to Create/Modify**:
+- `/src/components/selectors/account-user-selector.tsx` - New generic component
+- `/src/components/selectors/account-user-assignment-selector.tsx` - Refactor or deprecate
+- `/docs/components/selectors.md` - Add comprehensive documentation section
+- `/src/types/account-user.ts` - Extend types for generic usage patterns
+- API endpoints for flexible account user filtering
+
+**Success Criteria**:
+- Generic component supports all current ticket assignment functionality
+- Component can be easily reused across the application
+- Performance is maintained or improved over current implementation
+- Documentation provides clear guidance for all usage patterns
+- Migration from current component is seamless
+
+**Benefits**:
+- **Consistency**: Standardized account user selection across the application
+- **Maintainability**: Single component to maintain instead of multiple implementations
+- **Developer Experience**: Clear documentation and examples for easy adoption
+- **User Experience**: Consistent interface patterns reduce learning curve
+- **Performance**: Optimized component with proper caching and filtering
+- **Scalability**: Flexible architecture supports future requirements
+
+This task will create a cornerstone component for account user selection, similar to how `AccountSelector` serves as the standard for account selection throughout the application.
+
+### 12. Ticket Schema and API Completion ✅ COMPLETED
+
+**Priority**: HIGH
+**Description**: Fixed missing database schema fields and API issues preventing ticket creation
+
+**Issues Resolved**:
+1. **Missing Schema Field**: Added `assignedAccountUserId` field to Ticket model for tracking which account user tickets are created for
+2. **Schema Relations**: Added proper `assignedAccountUser` relation linking to AccountMembership
+3. **API Cleanup**: Removed obsolete `accountUserCreatorId` and `accountUserCreator` field references
+4. **Permission Integration**: Full integration with `tickets:assignable-to` and `tickets:assignable-for` permissions
+
+**Database Changes Made**:
+```prisma
+model Ticket {
+  // Core assignment structure
+  assigneeId           String?            // Agent assigned to work on ticket (tickets:assignable-to)
+  assignedAccountUserId String?           // Account user ticket is created for (tickets:assignable-for)
+  
+  // Relations
+  assignee             User?              @relation("TicketAssignee")
+  assignedAccountUser  AccountMembership? @relation("TicketAssignedAccountUser")
+}
+
+model AccountMembership {
+  assignedTickets Ticket[] @relation("TicketAssignedAccountUser")
+}
+```
+
+**API Fixes Applied**:
+- Fixed ticket creation POST `/api/tickets` - removed `accountUserCreatorId` field
+- Fixed ticket retrieval GET `/api/tickets/[id]` - removed `accountUserCreator` includes
+- Updated permission validation for both assignee and account user assignments
+
+**Files Changed**:
+- `prisma/schema.prisma` - Added missing fields, relations, and comprehensive documentation
+- `src/app/api/tickets/route.ts` - Fixed creation data and include statements
+- `src/app/api/tickets/[id]/route.ts` - Fixed include statements
+
+**Benefits**:
+- **Ticket Creation Works**: End-to-end ticket creation now functions properly
+- **Clear Assignment Structure**: Explicit separation of agent assignment vs customer assignment
+- **Permission-Based**: Full integration with RBAC permission system
+- **Database Integrity**: Proper relations and indexes for performance
+
+**Verification**: Ticket creation dialog now successfully creates tickets with both agent assignment and account user assignment functionality working correctly.

@@ -6,6 +6,9 @@ This document tracks recent changes and fixes made to the application after the 
 
 ## Recent Changes
 
+> **Latest Status**: Ticket creation system fully functional with explicit assignment permissions and complete ABAC integration (August 6, 2025)
+
+
 ### 2025-08-06 - Email Settings Consolidation to SystemSettings (COMPLETED)
 
 **Issue**: Redundant `EmailSettings` table duplicating functionality of `SystemSettings` with inferior design.
@@ -443,3 +446,139 @@ The system is now production-ready with a solid foundation for future developmen
 - Clean cascade handling for data integrity
 
 **Verification**: All user management features now provide enterprise-level administration capabilities with proper security controls and intuitive interfaces.
+
+### 2025-08-06 - Ticket System Enhancements (COMPLETED)
+
+**Issue**: Multiple issues with ticket creation dialog and agent assignment system.
+
+#### Fixed Ticket Creation Dialog Account User Selection
+**Problem**: The "for account user" field wasn't showing users when an account was selected
+**Root Cause**: API response format mismatch between backend and frontend component
+**Changes**:
+- **Fixed AccountUserAssignmentSelector** to handle correct API response format `{ accountUsers: [...] }`
+- **Added missing canBeAssigned field** to `/api/account-users` response for UI compatibility
+- **Fixed undefined isAdmin variable** in tickets page by replacing with proper `canDeleteTicketsPermission`
+- **Enhanced /api/account-users endpoint** to include users from child accounts for hierarchical ticket assignment
+
+**Files Changed**:
+- `src/components/selectors/account-user-assignment-selector.tsx` - Fixed API response handling
+- `src/app/api/account-users/route.ts` - Added canBeAssigned field and child account support
+- `src/app/tickets/page.tsx` - Fixed undefined variable reference
+
+#### Implemented RBAC Agent Assignment System
+**Problem**: Agent selection used hard-coded role filtering instead of permission-based assignment
+**Changes**:
+- **Added tickets:assignable-to permission** to Employee and Manager role templates in seed data
+- **Created /api/users/assignable endpoint** to fetch users with assignment permissions
+- **Refactored AgentSelector component** to use permission-based filtering instead of hard-coded roles
+- **Added account context support** for scoped agent selection in ticket creation
+- **Updated ticket creation dialog** to pass account context to agent selector
+
+**Benefits**:
+- Permission-based agent assignment respecting RBAC system
+- Account-scoped agent selection for better security
+- Dynamic agent filtering based on user permissions
+- Consistent with overall permission architecture
+
+**Files Changed**:
+- `prisma/seed.ts` - Added tickets:assignable-to permission to role templates
+- `src/app/api/users/assignable/route.ts` - New API endpoint for assignable users
+- `src/components/selectors/agent-selector.tsx` - Complete refactor to use RBAC
+- `src/components/tickets/TicketDetailModal.tsx` - Updated to pass account context
+
+#### Account-Specific Settings Implementation
+**Feature**: Comprehensive settings section for individual account management
+**Changes**:
+- **Domain Management Interface**: CSV field editor for automatic user assignment based on email domains
+- **Account Preferences**: Default ticket priority and time entry approval settings stored in customFields
+- **Settings Persistence**: Added PATCH endpoint to `/api/accounts/[id]` for partial updates
+- **State Management**: Added proper initialization and handlers for all settings sections
+- **UI Integration**: Added settings tab to account detail pages with organized sections
+
+**Key Features Implemented**:
+- **Email Domain Matching**: Configure CSV domains for automatic user assignment
+- **Domain Testing**: Interactive domain matching validation with user feedback
+- **Account Preferences**: Configurable defaults for tickets and time tracking
+- **Billing Rate Overrides**: Placeholder interface for account-specific pricing
+- **Security Settings**: Framework for account-level security policies
+
+**Benefits**:
+- Account administrators can configure account-specific settings
+- Automatic user assignment based on email domains
+- Persistent settings storage using existing database schema
+- Integration with existing permission system
+- Foundation for advanced account customization
+
+**Files Changed**:
+- `src/app/accounts/[id]/page.tsx` - Enhanced with comprehensive settings section
+- `src/app/api/accounts/[id]/route.ts` - Added PATCH endpoint for partial updates
+
+**Database Integration**:
+- Utilizes existing `domains` CSV field for domain management
+- Stores preferences in `customFields` JSON for flexible configuration
+- Maintains backward compatibility with existing account data
+
+**Verification**: Account settings now provide comprehensive configuration options with proper persistence and user-friendly interfaces.
+
+## 🆕 Recent Priority Fixes (August 6, 2025)
+
+### 12. Ticket Schema and API Completion ✅ COMPLETED
+
+**Issue**: Ticket creation failing due to missing database schema fields and obsolete API references
+**Error**: `Unknown argument 'assignedAccountUserId'` and `Unknown field 'accountUserCreator'`
+
+#### Root Cause Analysis:
+1. **Missing Database Field**: The Ticket model lacked `assignedAccountUserId` to track which account user tickets are created for
+2. **Incomplete Schema Relations**: No relation between Ticket and AccountMembership for account user assignment
+3. **Obsolete Field References**: API code referenced non-existent `accountUserCreatorId` and `accountUserCreator` fields
+
+#### Implementation Completed:
+
+**Database Schema Updates**:
+```prisma
+model Ticket {
+  // Added field for account user assignment
+  assignedAccountUserId String?           // Which account user this ticket is created FOR
+  
+  // Added relation
+  assignedAccountUser  AccountMembership? @relation("TicketAssignedAccountUser")
+  
+  // Added index
+  @@index([assignedAccountUserId])
+}
+
+model AccountMembership {
+  // Added reverse relation
+  assignedTickets Ticket[] @relation("TicketAssignedAccountUser")
+}
+```
+
+**API Fixes Applied**:
+- **Ticket Creation** (`/api/tickets` POST): Removed obsolete `accountUserCreatorId: null`
+- **Ticket Retrieval** (`/api/tickets` POST & `/api/tickets/[id]` GET): Removed obsolete `accountUserCreator: true` includes
+- **Permission Integration**: Full validation for both `tickets:assignable-to` and `tickets:assignable-for` permissions
+
+**Schema Documentation Added**:
+- Comprehensive comments explaining the assignment structure
+- Clear distinction between agent assignment (`assigneeId`) and customer assignment (`assignedAccountUserId`)
+- Field-level documentation for all ticket relationships
+
+#### Technical Benefits:
+- **Complete Ticket Workflow**: End-to-end ticket creation now functions properly
+- **Explicit Permissions**: Clear semantic separation of `assignable-to` vs `assignable-for`
+- **Database Integrity**: Proper relations, indexes, and cascade rules
+- **API Consistency**: Cleaned up all obsolete field references
+
+#### Files Changed:
+- `prisma/schema.prisma` - Added fields, relations, indexes, and comprehensive documentation
+- `src/app/api/tickets/route.ts` - Removed `accountUserCreatorId`, fixed includes
+- `src/app/api/tickets/[id]/route.ts` - Removed `accountUserCreator` includes
+
+#### Verification Steps:
+1. ✅ Database schema push successful
+2. ✅ Prisma client generation successful
+3. ✅ Ticket creation dialog functionality restored
+4. ✅ Both agent assignment and account user assignment working
+5. ✅ Permission validation functioning for both assignment types
+
+**Result**: Ticket creation now works end-to-end with proper RBAC integration and clear assignment semantics matching the UI workflow ("Assigned To" and "For Account User" fields).

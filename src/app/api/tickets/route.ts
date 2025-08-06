@@ -180,29 +180,62 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // TODO: Check if assignee has permission to work on tickets
-      // For now, we'll allow any valid user
+      // Check if assignee has permission to be assigned tickets
+      const canBeAssignedTickets = await permissionService.hasPermission({
+        userId: assignee.id,
+        resource: "tickets",
+        action: "assignable-to",
+        accountId
+      });
+
+      if (!canBeAssignedTickets) {
+        return NextResponse.json(
+          { error: "Selected user cannot be assigned tickets" },
+          { status: 403 }
+        );
+      }
     }
 
     // Validate assigned account user if provided
     if (assignedAccountUserId && assignedAccountUserId !== "unassigned") {
-      const assignedAccountUser = await prisma.accountUser.findUnique({
-        where: { id: assignedAccountUserId }
+      const assignedMembership = await prisma.accountMembership.findUnique({
+        where: { id: assignedAccountUserId },
+        include: {
+          user: true,
+          account: true
+        }
       });
 
-      if (!assignedAccountUser) {
+      if (!assignedMembership) {
         return NextResponse.json(
-          { error: "Account user not found" },
+          { error: "Account membership not found" },
           { status: 400 }
         );
       }
 
       // Assigned account user must belong to the same account as the ticket
-      if (assignedAccountUser.accountId !== accountId) {
+      if (assignedMembership.accountId !== accountId) {
         return NextResponse.json(
           { error: "Account user must belong to the same account as the ticket" },
           { status: 400 }
         );
+      }
+
+      // Check if this account user can have tickets created for them
+      if (assignedMembership.user) {
+        const canHaveTicketsCreatedFor = await permissionService.hasPermission({
+          userId: assignedMembership.user.id,
+          resource: "tickets",
+          action: "assignable-for",
+          accountId
+        });
+
+        if (!canHaveTicketsCreatedFor) {
+          return NextResponse.json(
+            { error: "Tickets cannot be created for the selected account user" },
+            { status: 403 }
+          );
+        }
       }
     }
 
@@ -233,7 +266,6 @@ export async function POST(request: NextRequest) {
           assigneeId: assigneeId === "unassigned" ? null : assigneeId,
           assignedAccountUserId: assignedAccountUserId === "unassigned" ? null : assignedAccountUserId,
           creatorId: creatorId,
-          accountUserCreatorId: null, // TODO: Handle when implementing account membership
           customFields: customFields || {},
         },
       });
@@ -262,7 +294,6 @@ export async function POST(request: NextRequest) {
         assignee: true,
         assignedAccountUser: true,
         creator: true,
-        accountUserCreator: true,
         addons: true,
       },
     });

@@ -681,6 +681,7 @@ export default function TicketsPage() {
                                 <QuickTimeEntry
                                   ticketId={ticket.id}
                                   ticketTitle={ticket.title}
+                                  accountId={ticket.accountId}
                                   onTimeLogged={() => fetchTickets()}
                                 />
                                 <QuickAddonEntry
@@ -688,12 +689,9 @@ export default function TicketsPage() {
                                   ticketTitle={ticket.title}
                                   onAddonAdded={() => fetchTickets()}
                                 />
-                                <Button variant="ghost" size="sm" title="Edit ticket">
-                                  <Edit className="h-4 w-4" />
-                                </Button>
                               </>
                             )}
-                            {isAdmin && (
+                            {canDeleteTicketsPermission && (
                               <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700" title="Delete ticket">
                                 <Trash2 className="h-4 w-4" />
                               </Button>
