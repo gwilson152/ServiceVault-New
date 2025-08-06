@@ -28,18 +28,18 @@ Detailed documentation for major application features:
 - **[`time-entries.md`](./features/time-entries.md)** - Time tracking, approval workflows, and billing integration
 - **[`tickets.md`](./features/tickets.md)** - **Updated!** Ticket system with explicit assignment permissions (assignable-to/assignable-for) and account user integration
 - **[`role-templates.md`](./features/role-templates.md)** - Role template management with ABAC permission system
-- **[`user-management.md`](./features/user-management.md)** - **Enhanced!** Comprehensive user administration with role management, security controls, and domain assignment
+- **[`user-management.md`](./features/user-management.md)** - **Enhanced!** Comprehensive user administration with system role management, account role management, security controls, and domain assignment
 
 ### Component Documentation
 
 #### [`components/`](./components/) - UI Component Library
 Technical documentation for reusable UI components:
 
-- **[`selectors.md`](./components/selectors.md)** - **Enhanced!** Hierarchical selector components (AccountSelector, BillingRateSelector, etc.)
+- **[`selectors.md`](./components/selectors.md)** - **Enhanced!** Hierarchical selector components (AccountSelector, BillingRateSelector, TicketSelector with advanced filtering, etc.)
 - **[`action-bar.md`](./components/action-bar.md)** - Global action bar implementation
 - **[`ui/`](./components/ui/)** - Base UI component documentation  
 - **[`providers/`](./components/providers/)** - React context provider documentation
-- **[`dialogs.md`](./components/dialogs.md)** - **New!** User management dialogs and modal patterns
+- **[`dialogs.md`](./components/dialogs.md)** - **Enhanced!** User management dialogs including system role management and modal patterns
 
 ### UI/UX Documentation
 

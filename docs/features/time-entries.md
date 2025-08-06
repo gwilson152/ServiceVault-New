@@ -385,11 +385,20 @@ Rich form interface for time entry creation/editing:
 // TimeEntryEditDialog features:
 - Account/Ticket selection with hierarchical display
 - Time input with multiple formats (hours, minutes, decimal)
-- Billing rate selection with rate preview
+- Billing rate selection with account-specific rate resolution
+- Billing rate preview with effective rate calculation
 - No-charge toggle with billing implications
 - Description with auto-complete suggestions
 - Date picker with business logic validation
+- Conditional billing rate display based on account context
 ```
+
+**Billing Rate Selector Integration:**
+- **Context-Aware Loading**: Only loads rates when valid account context is available
+- **Account Override Support**: Displays account-specific rate overrides
+- **Rate Inheritance**: Shows rates inherited from parent accounts
+- **Visual Indicators**: Icons and badges distinguish override vs system rates
+- **Permission-Based Display**: Only visible to users with billing view permissions
 
 #### Time Entry Lists
 Comprehensive display with filtering and sorting:
@@ -537,7 +546,48 @@ CREATE INDEX idx_time_entries_invoice ON time_entries(id) WHERE billing_rate_val
 - **Business Logic Validation**: Server-side validation of all rules
 - **Rate Tampering Prevention**: Billing rates validated server-side
 
-### 15. Future Enhancements
+### 15. Recent Improvements & Fixes
+
+#### Billing Rate Selector Enhancements (2025-08-06)
+Major improvements to billing rate integration in time entry forms:
+
+**Issues Fixed:**
+1. **Duplicate Labels**: Removed duplicate "Billing Rate" labels in TimeEntryEditDialog
+2. **Context Loading**: Fixed billing rates not loading due to missing account context
+3. **Conditional Display**: Enhanced billing rate selector to show appropriate guidance
+
+**Implementation Details:**
+```typescript
+// Fixed billing rate selector integration
+{showBillingRates && (
+  (entryType === "account" && selectedAccount) || (entryType === "ticket" && selectedTicket) ? (
+    <BillingRateSelector
+      accountId={entryType === "account" ? selectedAccount : tickets.find(t => t.id === selectedTicket)?.account?.id || ""}
+      value={selectedBillingRate === "none" ? "" : selectedBillingRate}
+      onValueChange={(value) => setSelectedBillingRate(value || "none")}
+      placeholder="Select billing rate (optional)"
+      showNoChargeOption={false}
+    />
+  ) : (
+    <div className="space-y-2">
+      <Label>Billing Rate</Label>
+      <div className="text-sm text-muted-foreground">
+        {entryType === "ticket" 
+          ? "Select a ticket first to choose billing rate" 
+          : "Select an account first to choose billing rate"}
+      </div>
+    </div>
+  )
+)}
+```
+
+**User Experience Improvements:**
+- **Clear Guidance**: Users now see helpful messages when billing rates are unavailable
+- **Context-Aware Loading**: Billing rates only load when account context is established
+- **Clean Interface**: Eliminated duplicate labels and improved form layout
+- **Consistent Behavior**: Same billing rate behavior across main page and dialog
+
+### 16. Future Enhancements
 
 #### Planned Features
 1. **Enhanced Timer System**: Multiple concurrent timers, timer templates
@@ -547,13 +597,13 @@ CREATE INDEX idx_time_entries_invoice ON time_entries(id) WHERE billing_rate_val
 5. **Integration APIs**: External time tracking tool integration
 
 #### Account Override Implementation
-Priority enhancement to implement proper account billing rate overrides:
+Enhanced account billing rate override system is now fully implemented:
 
 ```typescript
-// Planned implementation for time entry creation
+// Current implementation for time entry creation with overrides
 async function createTimeEntryWithOverrides(data: TimeEntryInput) {
   if (data.billingRateId && !data.noCharge) {
-    // Use proper override resolution
+    // Proper override resolution implemented
     const effectiveRate = await resolveEffectiveRate(
       data.accountId || await getTicketAccountId(data.ticketId),
       data.billingRateId

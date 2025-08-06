@@ -10,35 +10,38 @@ The user management dialogs provide comprehensive interfaces for managing user p
 
 ```
 /components/users/
-  ├── UserRoleManagementDialog.tsx          # Role assignment and management
+  ├── SystemRoleManagementDialog.tsx        # System-wide role management
+  ├── UserRoleManagementDialog.tsx          # Account-specific role management
   ├── UserStatusManagementDialog.tsx        # Security and account status
   ├── AssignAccountDialog.tsx               # Account assignment and role selection
   └── AddExistingUserDialog.tsx            # Add existing users to accounts
 ```
 
-## UserRoleManagementDialog
+## SystemRoleManagementDialog
 
-The `UserRoleManagementDialog` provides a comprehensive interface for managing user roles within the ABAC permission system.
+The `SystemRoleManagementDialog` provides a dedicated interface for managing system-wide roles that grant global permissions across all accounts and resources.
 
 ### Features
 
-- **System Role Management**: Assign/remove system-wide roles
-- **Account Role Management**: Manage roles within specific accounts
-- **Role Template Integration**: Works with RoleTemplate system
-- **Permission Preview**: Shows effective permissions after role changes
-- **Bulk Operations**: Assign/remove multiple roles efficiently
-- **Real-time Validation**: Prevents invalid role combinations
+- **System Role Assignment**: Add/remove system-wide roles with global permissions
+- **Super Admin Management**: Special handling for super administrator roles
+- **Permission Visualization**: Shows detailed permissions for each system role
+- **Security Controls**: Super admin protection and last admin safeguards
+- **Visual Distinction**: Orange-themed UI to distinguish from account roles
+- **Real-time Validation**: Immediate feedback on permission changes
 
 ### Usage
 
 ```typescript
-import { UserRoleManagementDialog } from "@/components/users/UserRoleManagementDialog";
+import { SystemRoleManagementDialog } from "@/components/users/SystemRoleManagementDialog";
 
-<UserRoleManagementDialog
+<SystemRoleManagementDialog
+  open={systemRoleDialogOpen}
+  onOpenChange={setSystemRoleDialogOpen}
   userId={selectedUserId}
-  open={roleDialogOpen}
-  onOpenChange={setRoleDialogOpen}
-  onRolesUpdated={handleRolesUpdated}
+  userName={selectedUserName}
+  systemRoles={userSystemRoles}
+  onRoleChanged={handleRoleChanged}
 />
 ```
 
@@ -46,22 +49,114 @@ import { UserRoleManagementDialog } from "@/components/users/UserRoleManagementD
 
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
-| `userId` | `string` | Required | User ID to manage roles for |
 | `open` | `boolean` | Required | Dialog open state |
 | `onOpenChange` | `(open: boolean) => void` | Required | Callback when dialog state changes |
-| `onRolesUpdated` | `() => void` | Optional | Callback when roles are successfully updated |
+| `userId` | `string` | Required | User ID to manage system roles for |
+| `userName` | `string` | Required | User name for display purposes |
+| `systemRoles` | `SystemRole[]` | Required | Current system roles assigned to user |
+| `onRoleChanged` | `() => void` | Required | Callback when roles are updated |
+
+### System Role Types
+
+**Super Administrator Roles:**
+- Full system access with `inheritAllPermissions: true`
+- Only manageable by other super administrators
+- Cannot remove last super admin from system
+- Special crown icon and orange styling
+
+**Regular System Roles:**
+- Specific global permissions across all accounts
+- Manageable by users with `users:edit` permission
+- Show detailed permission breakdown
+- Blue styling for regular roles
+
+### Security Features
+
+**Super Admin Protection:**
+- Only super admins can assign/remove super admin system roles
+- Explicit warning dialogs for super admin operations
+- Cannot remove the last super administrator role
+
+**Permission Validation:**
+- Requires `users:edit` permission to manage roles
+- Real-time validation of role assignments
+- Prevents duplicate role assignments
+
+**Confirmation Dialogs:**
+- All destructive operations require explicit confirmation
+- Clear warnings about permission impacts
+- Cannot accidentally remove critical roles
+
+### API Integration
+
+The dialog integrates with the System Role Management API:
+
+```typescript
+// Add system role
+POST /api/users/[id]/system-roles
+{
+  "roleId": "role-template-id"
+}
+
+// Remove system role
+DELETE /api/users/[id]/system-roles
+{
+  "roleId": "role-template-id"
+}
+```
+
+## UserRoleManagementDialog
+
+The `UserRoleManagementDialog` provides a comprehensive interface for managing account-specific user roles within the ABAC permission system.
+
+### Features
+
+- **Account Role Management**: Manage roles within specific account memberships
+- **Role Template Integration**: Works with RoleTemplate system
+- **Permission Preview**: Shows effective permissions after role changes
+- **Bulk Operations**: Assign/remove multiple roles efficiently
+- **Real-time Validation**: Prevents invalid role combinations
+- **Account Membership Control**: Remove users from accounts entirely
+
+### Usage
+
+```typescript
+import { UserRoleManagementDialog } from "@/components/users/UserRoleManagementDialog";
+
+<UserRoleManagementDialog
+  open={roleDialogOpen}
+  onOpenChange={setRoleDialogOpen}
+  userId={selectedUserId}
+  userName={selectedUserName}
+  memberships={userMemberships}
+  onRoleChanged={handleRoleChanged}
+/>
+```
+
+### Props
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `open` | `boolean` | Required | Dialog open state |
+| `onOpenChange` | `(open: boolean) => void` | Required | Callback when dialog state changes |
+| `userId` | `string` | Required | User ID to manage roles for |
+| `userName` | `string` | Required | User name for display purposes |
+| `memberships` | `AccountMembership[]` | Required | Current account memberships with roles |
+| `onRoleChanged` | `() => void` | Required | Callback when roles are updated |
 
 ### Role Management Features
-
-**System Roles:**
-- Super Administrator: Full system access
-- Employee: General system access  
-- Manager: Enhanced permissions
 
 **Account Roles:**
 - Account Administrator: Full account management
 - Account User: Standard account access
 - Read Only: View-only permissions
+- Custom roles: Based on role templates defined in the system
+
+**Key Capabilities:**
+- Add roles to existing account memberships
+- Remove roles from specific account memberships
+- Remove users from accounts entirely
+- View effective permissions across all account memberships
 
 ## UserStatusManagementDialog
 

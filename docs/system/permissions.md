@@ -17,7 +17,8 @@ The Service Vault application uses an Attribute-Based Access Control (ABAC) syst
 
 The permission system has been simplified to eliminate manual permission assignment:
 - **Role Templates**: Defined at `/dashboard/roles` (super-admin only)
-- **Role Assignments**: Managed through account pages and user management
+- **System Role Assignments**: Global roles managed through user detail pages
+- **Account Role Assignments**: Account-specific roles managed through account pages and user management
 - **No Direct Permissions**: All access controlled through role templates
 
 ## Database Architecture
@@ -59,6 +60,70 @@ Permission {
   conditions: Json  // Additional conditions
 }
 ```
+
+## System Role Management
+
+### Overview
+
+System roles provide global, system-wide permissions that apply across all accounts and resources. Unlike account-specific roles, system roles are assigned directly to users and grant comprehensive access.
+
+### Key Features
+
+#### **System Role Assignment**
+- **Global Permissions**: System roles grant permissions that apply system-wide
+- **Super Admin Support**: Special handling for `inheritAllPermissions` roles
+- **Security Controls**: Only super admins can assign super admin system roles
+- **Last Admin Protection**: Cannot remove the last super administrator
+
+#### **Management Interface**
+- **Dedicated UI**: SystemRoleManagementDialog provides focused system role management
+- **Visual Distinction**: Orange-themed UI to distinguish from account roles
+- **Permission Preview**: Shows detailed permissions granted by each system role
+- **Confirmation Dialogs**: All destructive operations require explicit confirmation
+
+#### **API Endpoints**
+```typescript
+// Add system role to user
+POST /api/users/[id]/system-roles
+{
+  "roleId": "role-template-id"
+}
+
+// Remove system role from user  
+DELETE /api/users/[id]/system-roles
+{
+  "roleId": "role-template-id"
+}
+```
+
+#### **Security Features**
+- **Permission Validation**: Requires `users:edit` permission
+- **Super Admin Protection**: Only super admins can manage super admin roles
+- **Last Admin Check**: Prevents removal of final super administrator
+- **Role Validation**: Ensures role templates exist before assignment
+
+### Usage Patterns
+
+#### **Assigning System Roles**
+1. Navigate to user detail page (`/users/[id]`)
+2. Click "Manage System Roles" (orange button)
+3. Select available role from dropdown
+4. Click "Add Role" to assign
+5. Confirm assignment in dialog
+
+#### **Removing System Roles**
+1. Navigate to user detail page (`/users/[id]`)
+2. Click "Manage System Roles" (orange button)
+3. Click trash icon next to role to remove
+4. Confirm removal in confirmation dialog
+
+### Integration with Account Roles
+
+System roles and account roles work together in the permission system:
+- **System roles**: Provide global permissions across all accounts
+- **Account roles**: Provide permissions scoped to specific accounts
+- **Combined effect**: User has union of all permissions from both types
+- **Super admin override**: `inheritAllPermissions` system roles grant all access
 
 ## Permission Service
 

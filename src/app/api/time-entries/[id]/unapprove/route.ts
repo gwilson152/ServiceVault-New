@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
-import { authOptions } from '@/lib/auth/auth-options';
-import { prisma } from '@/lib/db';
-import { PermissionService } from '@/lib/permissions/PermissionService';
-
-const permissionService = new PermissionService();
+import { authOptions } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
+import { permissionService } from '@/lib/permissions/PermissionService';
 
 export async function POST(
   request: NextRequest,

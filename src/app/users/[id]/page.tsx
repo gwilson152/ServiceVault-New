@@ -75,6 +75,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { AssignAccountDialog } from "@/components/users/AssignAccountDialog";
 import { UserRoleManagementDialog } from "@/components/users/UserRoleManagementDialog";
 import { UserStatusManagementDialog } from "@/components/users/UserStatusManagementDialog";
+import { SystemRoleManagementDialog } from "@/components/users/SystemRoleManagementDialog";
 
 interface UserDetail {
   id: string;
@@ -179,6 +180,7 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
   const [showAssignAccountDialog, setShowAssignAccountDialog] = useState(false);
   const [showRoleManagementDialog, setShowRoleManagementDialog] = useState(false);
   const [showStatusManagementDialog, setShowStatusManagementDialog] = useState(false);
+  const [showSystemRoleManagementDialog, setShowSystemRoleManagementDialog] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [editForm, setEditForm] = useState({
     name: "",
@@ -389,7 +391,17 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
                 onClick={() => setShowRoleManagementDialog(true)}
               >
                 <Shield className="h-4 w-4 mr-2" />
-                Manage Roles
+                Manage Account Roles
+              </Button>
+            )}
+            {canEditUsers && (
+              <Button 
+                variant="outline" 
+                onClick={() => setShowSystemRoleManagementDialog(true)}
+                className="border-orange-200 text-orange-700 hover:bg-orange-50"
+              >
+                <Settings className="h-4 w-4 mr-2" />
+                Manage System Roles
               </Button>
             )}
             {canEditUsers && (
@@ -589,22 +601,53 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
                   </div>
                 )}
                 
-                {user.systemRoles.length > 0 && (
-                  <div className="mt-6">
-                    <h3 className="font-medium mb-2">System Roles</h3>
+                {/* System Roles Section */}
+                <div className="mt-6 border-t pt-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-medium flex items-center gap-2">
+                      <Settings className="h-4 w-4 text-orange-500" />
+                      System Roles ({user.systemRoles.length})
+                    </h3>
+                    {canEditUsers && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowSystemRoleManagementDialog(true)}
+                        className="text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+                      >
+                        <Settings className="h-4 w-4 mr-2" />
+                        Manage System Roles
+                      </Button>
+                    )}
+                  </div>
+                  
+                  {user.systemRoles.length === 0 ? (
+                    <div className="text-center py-4 border border-dashed border-gray-300 rounded-lg bg-gray-50">
+                      <Settings className="h-8 w-8 text-gray-300 mx-auto mb-2" />
+                      <p className="text-sm text-gray-500">No system roles assigned</p>
+                      <p className="text-xs text-gray-400">User has account-specific permissions only</p>
+                    </div>
+                  ) : (
                     <div className="flex flex-wrap gap-2">
                       {user.systemRoles.map((systemRole, index) => (
                         <Badge 
                           key={index} 
                           variant={systemRole.role.inheritAllPermissions ? "default" : "outline"}
+                          className={systemRole.role.inheritAllPermissions 
+                            ? "bg-orange-100 text-orange-800 border-orange-200" 
+                            : "bg-blue-50 text-blue-700 border-blue-200"
+                          }
                         >
+                          {systemRole.role.inheritAllPermissions && (
+                            <Settings className="h-3 w-3 mr-1" />
+                          )}
                           {systemRole.role.name}
                           {systemRole.role.inheritAllPermissions && " (Super Admin)"}
                         </Badge>
                       ))}
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
@@ -911,6 +954,16 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
           userName={user?.name || user?.email || ""}
           userEmail={user?.email || ""}
           onStatusChanged={loadUser}
+        />
+
+        {/* System Role Management Dialog */}
+        <SystemRoleManagementDialog
+          open={showSystemRoleManagementDialog}
+          onOpenChange={setShowSystemRoleManagementDialog}
+          userId={user?.id || ""}
+          userName={user?.name || user?.email || ""}
+          systemRoles={user?.systemRoles || []}
+          onRoleChanged={loadUser}
         />
       </div>
     </main>

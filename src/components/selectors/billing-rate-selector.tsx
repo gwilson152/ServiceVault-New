@@ -217,10 +217,12 @@ export function BillingRateSelector({
 
   return (
     <div className={`space-y-2 ${className}`}>
-      <Label>
-        {label}
-        {required && <span className="text-red-500 ml-1">*</span>}
-      </Label>
+      {label && (
+        <Label>
+          {label}
+          {required && <span className="text-red-500 ml-1">*</span>}
+        </Label>
+      )}
       
       <Select 
         value={value} 

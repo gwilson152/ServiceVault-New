@@ -467,17 +467,14 @@ export function TimeEntryEditDialog({ timeEntry, open, onOpenChange, onSuccess }
 
             {/* Billing Rate - Only visible to users with BILLING.VIEW permission */}
             {showBillingRates && (
-              <div className="space-y-2">
-                <Label htmlFor="billing-rate">Billing Rate</Label>
-                <BillingRateSelector
-                  accountId={entryType === "account" ? selectedAccount : tickets.find(t => t.id === selectedTicket)?.account?.id || timeEntry?.account?.id || ""}
-                  value={selectedBillingRate === "none" ? "" : selectedBillingRate}
-                  onValueChange={(value) => setSelectedBillingRate(value || "none")}
-                  placeholder="Select billing rate (optional)"
-                  showNoChargeOption={false}
-                  disabled={isReadOnly}
-                />
-              </div>
+              <BillingRateSelector
+                accountId={entryType === "account" ? selectedAccount : tickets.find(t => t.id === selectedTicket)?.account?.id || timeEntry?.account?.id || ""}
+                value={selectedBillingRate === "none" ? "" : selectedBillingRate}
+                onValueChange={(value) => setSelectedBillingRate(value || "none")}
+                placeholder="Select billing rate (optional)"
+                showNoChargeOption={false}
+                disabled={isReadOnly}
+              />
             )}
 
             <div className="flex items-center space-x-2">

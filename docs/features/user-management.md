@@ -16,10 +16,12 @@ The user detail page serves as the central hub for individual user administratio
 - **Delete user accounts** - With comprehensive safety confirmations
 
 #### **Role & Permission Management**
-- **Comprehensive role assignment** - Add/remove roles from account memberships
+- **System role management** - Assign/remove system-wide roles with global permissions
+- **Account role assignment** - Add/remove roles from specific account memberships
 - **Account membership control** - Remove users from specific accounts
 - **Effective permissions viewer** - Visual display of all user permissions across roles
 - **Permission scope clarity** - Global vs account-scoped permission distinction
+- **Super admin protection** - Special security controls for super administrator roles
 
 #### **Security & Status Management**
 - **Account status control** - Enable/disable user accounts
@@ -46,13 +48,36 @@ Account detail pages provide user management from the account perspective:
 
 ## User Interface Components
 
+### SystemRoleManagementDialog
+
+**Purpose**: Dedicated system-wide role management interface
+**Access**: Permission-based (users:edit required, super admin for super admin roles)
+
+**Features**:
+- **System Role Assignment**:
+  - Add system roles with global permissions
+  - Remove system roles with confirmation
+  - Visual role availability filtering
+  - Special handling for super administrator roles
+- **Permission Visualization**:
+  - Detailed permission display for each system role
+  - Clear distinction between regular and super admin roles
+  - Resource-grouped permission organization
+  - Wildcard permission handling
+
+**Security**:
+- **Super Admin Protection**: Only super admins can assign/remove super admin system roles
+- **Last Admin Protection**: Cannot remove the last super administrator
+- **Destructive Action Confirmation**: All role removal operations require explicit confirmation
+- **Real-time Validation**: Immediate feedback on permission changes
+
 ### UserRoleManagementDialog
 
-**Purpose**: Comprehensive role management interface for individual users
+**Purpose**: Account-specific role management interface for individual users
 **Access**: Permission-based (users:edit required)
 
 **Features**:
-- **Role Assignment Tab**:
+- **Account Role Assignment Tab**:
   - Add roles to existing account memberships
   - Remove roles from memberships
   - Remove users from accounts entirely
@@ -100,6 +125,11 @@ All user management APIs follow consistent patterns with proper permission check
 
 #### **Role Management APIs**
 ```typescript
+// System Role Management
+POST   /api/users/[id]/system-roles         // Add system role to user
+DELETE /api/users/[id]/system-roles         // Remove system role from user
+
+// Account Role Management
 POST   /api/users/[id]/membership-roles     // Add role to membership
 DELETE /api/users/[id]/membership-roles     // Remove role from membership
 DELETE /api/users/[id]/memberships/[membershipId]  // Remove from account
@@ -161,9 +191,16 @@ Super-admin roles bypass specific permission checks but still follow security pr
 3. Verify account access and permissions
 4. Send welcome communications
 
-#### **Role Changes**
+#### **System Role Changes**
 1. Navigate to user detail page (`/users/[id]`)
-2. Click "Manage Roles" button
+2. Click "Manage System Roles" button (orange-themed)
+3. Add/remove system-wide roles with global permissions
+4. Confirm changes with explicit confirmation dialogs
+5. Verify user now has appropriate system-wide access
+
+#### **Account Role Changes**
+1. Navigate to user detail page (`/users/[id]`)
+2. Click "Manage Account Roles" button
 3. Add/remove roles from specific account memberships
 4. Verify effective permissions in permissions tab
 

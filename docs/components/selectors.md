@@ -13,9 +13,11 @@ The selector components provide enhanced user interfaces for selecting items fro
 /components/selectors/
   ├── account-selector.tsx                   # Account-specific implementation
   ├── billing-rate-selector.tsx             # Billing rate selection with account overrides
+  ├── ticket-selector.tsx                   # Enhanced ticket selection with advanced filtering
   └── simple-account-selector.tsx           # Basic account dropdown (deprecated)
 /components/users/                           # User management dialogs
-  ├── UserRoleManagementDialog.tsx          # Role management interface
+  ├── SystemRoleManagementDialog.tsx        # System-wide role management
+  ├── UserRoleManagementDialog.tsx          # Account-specific role management
   ├── UserStatusManagementDialog.tsx        # Security and status management
   └── AssignAccountDialog.tsx               # Account assignment dialog
 ```
@@ -150,6 +152,14 @@ interface Account extends HierarchicalItem {
 
 The `BillingRateSelector` is a specialized selector component designed for choosing billing rates with account-specific overrides. It provides a comprehensive interface for displaying effective rates, inheritance information, and visual indicators for different rate types.
 
+### Recent Improvements (2025-08-06)
+
+**Major enhancements to time entry form integration:**
+- **Conditional Label Rendering**: Added support for `label=""` to hide internal labels and prevent duplicates
+- **Context-Aware Loading**: Enhanced to handle missing account context gracefully
+- **Improved Integration**: Better integration with time entry forms with proper account context handling
+- **User Experience**: Added helpful guidance messages when account context is missing
+
 ### Features
 
 - **Account-Specific Overrides**: Shows rates with account-level customizations
@@ -167,6 +177,7 @@ The `BillingRateSelector` is a specialized selector component designed for choos
 - **Loading & Error States**: Proper feedback during data fetching
 - **Permission-Based Loading**: Respects user permissions
 - **Auto-Selection**: Automatically selects default billing rate (configurable)
+- **Conditional Label Display**: Support for hiding internal label to prevent duplicates
 
 ### Usage
 
@@ -403,6 +414,246 @@ The component provides feedback during data fetching:
 <Alert variant="destructive">
   <AlertDescription>Failed to load billing rates</AlertDescription>
 </Alert>
+```
+
+## TicketSelector (Enhanced Ticket Selection)
+
+The `TicketSelector` is a specialized implementation of `HierarchicalSelector` designed for comprehensive ticket selection with advanced filtering capabilities throughout the application.
+
+### Features
+
+- **Status-Based Icons**: 
+  - OPEN: Red AlertCircle icon
+  - IN_PROGRESS: Blue Clock icon  
+  - RESOLVED: Green CheckCircle icon
+  - CLOSED: Gray CheckCircle icon
+  - CANCELLED: Gray XCircle icon
+  - ON_HOLD: Yellow Pause icon
+- **Advanced Filtering**: 
+  - Status filter (OPEN, IN_PROGRESS, RESOLVED, etc.)
+  - Priority filter (LOW, MEDIUM, HIGH, CRITICAL)
+  - Account filter by account name
+  - Assignee filter (including "Unassigned" option)
+  - Creator filter by who created the ticket
+  - Customer filter by assigned account user
+  - Time tracking filter by entry count
+  - Creation date filter by relative timeframes
+- **Rich Information Display**:
+  - Ticket number and title
+  - Assignee and customer information
+  - Time tracking information when available
+  - Account grouping for organization
+  - Color-coded status badges
+
+### Usage
+
+```typescript
+import { TicketSelector, Ticket } from "@/components/selectors/ticket-selector";
+
+const [tickets, setTickets] = useState<Ticket[]>([]);
+const [selectedTicketId, setSelectedTicketId] = useState<string>("");
+
+<TicketSelector
+  tickets={tickets}
+  value={selectedTicketId}
+  onValueChange={setSelectedTicketId}
+  placeholder="Select a ticket"
+  enableFilters={true}
+  enableGrouping={true}
+  allowClear={true}
+  showSubtitle={true}
+  showTimeInfo={true}
+  maxHeight="400px"
+/>
+```
+
+### Advanced Configuration
+
+The TicketSelector provides extensive customization options:
+
+```typescript
+<TicketSelector
+  tickets={tickets}
+  value={selectedTicketId}
+  onValueChange={setSelectedTicketId}
+  
+  // Basic props
+  placeholder="Select a ticket"
+  disabled={false}
+  className="w-full"
+  allowClear={true}
+  
+  // Feature toggles
+  enableFilters={true}
+  enableGrouping={true}
+  showSubtitle={true}
+  showTimeInfo={true}
+  
+  // Filter visibility controls
+  showStatusFilter={true}
+  showPriorityFilter={true}
+  showAccountFilter={true}
+  showAssigneeFilter={true}
+  showCreatorFilter={false}      // Hidden by default
+  showCustomerFilter={true}
+  showTimeTrackingFilter={true}
+  showCreatedDateFilter={true}
+  
+  // Display options
+  maxHeight="400px"
+/>
+```
+
+### Filter Capabilities
+
+#### Status Filter
+Filters tickets by their current status:
+- **OPEN** (Red badge) - New or reopened tickets
+- **IN_PROGRESS** (Blue badge) - Currently being worked on
+- **RESOLVED** (Green badge) - Fixed but pending verification
+- **CLOSED** (Gray badge) - Completed and verified
+- **CANCELLED** (Gray badge) - Cancelled or invalid tickets
+- **ON_HOLD** (Yellow badge) - Temporarily paused
+
+#### Priority Filter  
+Filters by ticket priority levels:
+- **CRITICAL** - Urgent issues requiring immediate attention
+- **HIGH** - Important issues with significant impact
+- **MEDIUM** - Standard priority tickets
+- **LOW** - Minor issues or enhancements
+
+#### Assignee Filter
+Filters by who is assigned to work on the ticket:
+- Shows all users who can be assigned tickets
+- Includes "Unassigned" option for tickets without assignees
+- Real-time filtering as you type user names
+
+#### Time Tracking Filter
+Filters by time entry status:
+- **No Time Logged** - Tickets without any time entries
+- **1 Entry** - Tickets with exactly one time entry
+- **X Entries** - Tickets with multiple time entries
+
+#### Creation Date Filter
+Filters by when tickets were created:
+- **Today** - Created within the last 24 hours
+- **Yesterday** - Created 1 day ago
+- **This Week** - Created within the last 7 days
+- **This Month** - Created within the last 30 days
+- **Last 3 Months** - Created within the last 90 days
+- **Older** - Created more than 90 days ago
+
+### Enhanced Search
+
+The search functionality covers multiple fields:
+- Ticket number (e.g., "ACME-2025-001")
+- Ticket title and description
+- Account name
+- Assignee name
+- Creator name  
+- Customer name
+
+```typescript
+// Search example: finds tickets matching any of these fields
+searchQuery: "urgent login issue" 
+// Matches tickets with:
+// - "urgent" in title/description
+// - "login" in title/description  
+// - "issue" in title/description
+// - Assignee named "urgent"
+// - Account named "login"
+```
+
+### Visual Enhancements
+
+#### Subtitle Information
+When `showSubtitle={true}`, displays additional context:
+```
+Ticket Title
+Assigned to: John Doe • Customer: ACME Corp • Time: 4h 30m
+```
+
+#### Status Badges and Icons
+- Color-coded badges for quick status recognition
+- Contextual icons that match status semantics
+- Consistent styling across the application
+
+#### Account Grouping
+When `enableGrouping={true}`, tickets are grouped by account:
+```
+▼ ACME Corporation
+  ACME-001 - Login Issues
+  ACME-002 - Dashboard Bug
+  
+▼ Beta Industries  
+  BETA-001 - Feature Request
+```
+
+### Context-Specific Usage
+
+#### Time Entry Forms
+```typescript
+<TicketSelector
+  tickets={tickets}
+  value={selectedTicket}
+  onValueChange={setSelectedTicket}
+  
+  // Hide customer filter in time entry context
+  showCustomerFilter={false}
+  showCreatedDateFilter={false}
+  
+  // Focus on work-relevant information
+  showTimeTrackingFilter={true}
+  showAssigneeFilter={true}
+  showStatusFilter={true}
+  
+  maxHeight="300px"
+/>
+```
+
+#### Customer Service Interface
+```typescript
+<TicketSelector
+  tickets={tickets}
+  value={selectedTicket}
+  onValueChange={setSelectedTicket}
+  
+  // Emphasize customer-facing information
+  showCustomerFilter={true}
+  showCreatedDateFilter={true}
+  showStatusFilter={true}
+  
+  // Less emphasis on internal workflow
+  showAssigneeFilter={false}
+  showTimeTrackingFilter={false}
+/>
+```
+
+### Performance Considerations
+
+- **Client-side filtering**: All filtering happens in the browser for responsiveness
+- **Efficient search**: Debounced search to prevent excessive filtering
+- **Virtual scrolling**: Handles large ticket lists efficiently
+- **Memoized calculations**: Filter results cached until data changes
+
+### Integration with Ticket System
+
+The TicketSelector works seamlessly with the ticket management system:
+
+```typescript
+// Typical usage in a form
+const handleTicketSelection = (ticketId: string) => {
+  setSelectedTicket(ticketId);
+  
+  // Auto-populate related fields
+  const ticket = tickets.find(t => t.id === ticketId);
+  if (ticket) {
+    setAccountId(ticket.account.id);
+    if (ticket.assignee) {
+      setAssigneeId(ticket.assignee.id);
+    }
+  }
+};
 ```
 
 ## Usage Guidelines
@@ -878,6 +1129,38 @@ const handleNoChargeChange = (checked: boolean) => {
 - Check for network errors in browser console
 - Verify API endpoint returns proper response format
 - Ensure `accountId` is not changing rapidly (causing infinite re-fetches)
+
+**Duplicate "Billing Rate" labels appearing (Fixed 2025-08-06)**
+- **Root Cause**: Both external form labels and BillingRateSelector internal labels were rendering
+- **Fixed In**: TimeEntryEditDialog and main time page billing rate integration
+- **Solution**: Use `label=""` prop to hide internal label when external label is needed
+- **Example Fix**:
+  ```typescript
+  // Before - caused duplicate labels
+  <Label>Billing Rate</Label>
+  <BillingRateSelector {...props} />
+  
+  // After - single label only
+  <BillingRateSelector {...props} label="" />
+  // Or let BillingRateSelector handle its own label
+  <BillingRateSelector {...props} />
+  ```
+
+**Billing rates not loading in time entry forms (Fixed 2025-08-06)**
+- **Root Cause**: BillingRateSelector called with empty `accountId` before account/ticket selection
+- **Symptoms**: Loading spinner appears but no rates load, then disappears without content
+- **Fixed In**: Time entry forms now check account context before rendering BillingRateSelector
+- **Solution**: Conditional rendering based on account availability
+- **Example Fix**:
+  ```typescript
+  // Before - loaded with empty accountId
+  <BillingRateSelector accountId={""} />
+  
+  // After - conditional rendering with context check
+  {accountId && (
+    <BillingRateSelector accountId={accountId} />
+  )}
+  ```
 
 #### General Selector Issues
 

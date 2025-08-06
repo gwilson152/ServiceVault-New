@@ -1350,8 +1350,7 @@ export default function TimeTrackingPage() {
 
                     {/* Billing Rate - Only visible to users with BILLING.VIEW permission */}
                     {showBillingRates && (
-                      <div className="space-y-2">
-                        <Label htmlFor="billing-rate">Billing Rate</Label>
+                      (entryType === "account" && selectedAccount) || (entryType === "ticket" && selectedTicket) ? (
                         <BillingRateSelector
                           accountId={entryType === "account" ? selectedAccount : tickets.find(t => t.id === selectedTicket)?.account?.id || ""}
                           value={selectedBillingRate === "none" ? "" : selectedBillingRate}
@@ -1359,7 +1358,17 @@ export default function TimeTrackingPage() {
                           placeholder="Select billing rate (optional)"
                           showNoChargeOption={false}
                         />
-                      </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <Label htmlFor="billing-rate">Billing Rate</Label>
+                          <div className="flex items-center gap-2 p-2 border rounded text-sm text-muted-foreground">
+                            {entryType === "ticket" 
+                              ? "Select a ticket first to choose billing rate" 
+                              : "Select an account first to choose billing rate"
+                            }
+                          </div>
+                        </div>
+                      )
                     )}
 
                     <div className="flex items-center space-x-2">
