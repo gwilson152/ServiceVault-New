@@ -26,10 +26,10 @@ import {
 } from "lucide-react";
 
 interface DangerZoneSectionProps {
-  onSettingsChange?: () => void;
+  // No props needed - each section manages its own state
 }
 
-export function DangerZoneSection({ onSettingsChange }: DangerZoneSectionProps) {
+export function DangerZoneSection({}: DangerZoneSectionProps) {
   const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
   const [confirmationText, setConfirmationText] = useState("");
   const [includeReseed, setIncludeReseed] = useState(true);
@@ -38,6 +38,66 @@ export function DangerZoneSection({ onSettingsChange }: DangerZoneSectionProps) 
     success: boolean;
     message: string;
   } | null>(null);
+  
+  const [isSetupDialogOpen, setIsSetupDialogOpen] = useState(false);
+  const [setupConfirmationText, setSetupConfirmationText] = useState("");
+  const [isRerunningSetup, setIsRerunningSetup] = useState(false);
+  const [setupResult, setSetupResult] = useState<{
+    success: boolean;
+    message: string;
+  } | null>(null);
+
+  const handleRerunSetup = async () => {
+    if (setupConfirmationText !== "RERUN SETUP") {
+      return;
+    }
+
+    setIsRerunningSetup(true);
+    setSetupResult(null);
+
+    try {
+      const response = await fetch("/api/setup/reset", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          confirmationText: setupConfirmationText
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setSetupResult({
+          success: true,
+          message: data.message || "Setup has been reset. You can now re-run the initial setup wizard."
+        });
+        
+        // Clear form
+        setSetupConfirmationText("");
+        
+        // Auto-redirect to setup after a delay
+        setTimeout(() => {
+          window.location.href = "/setup";
+        }, 2000);
+        
+      } else {
+        setSetupResult({
+          success: false,
+          message: data.error || "Failed to reset setup"
+        });
+      }
+    } catch (error) {
+      console.error("Error during setup reset:", error);
+      setSetupResult({
+        success: false,
+        message: "Network error occurred during setup reset"
+      });
+    } finally {
+      setIsRerunningSetup(false);
+    }
+  };
 
   const handleNuclearReset = async () => {
     if (confirmationText !== "RESET DATABASE") {
@@ -70,11 +130,6 @@ export function DangerZoneSection({ onSettingsChange }: DangerZoneSectionProps) 
         // Clear form
         setConfirmationText("");
         setIncludeReseed(true);
-        
-        // Notify parent component if needed
-        if (onSettingsChange) {
-          onSettingsChange();
-        }
         
         // Auto-close dialog after success
         setTimeout(() => {
@@ -125,6 +180,46 @@ export function DangerZoneSection({ onSettingsChange }: DangerZoneSectionProps) 
           )}
 
           <div className="space-y-4">
+            {/* Re-run Setup Section */}
+            <div className="border border-orange-200 rounded-lg p-4 bg-white">
+              <div className="flex items-start justify-between">
+                <div className="space-y-2">
+                  <h3 className="font-semibold text-orange-700 flex items-center gap-2">
+                    <RefreshCw className="h-4 w-4" />
+                    Re-run Initial Setup
+                  </h3>
+                  <p className="text-sm text-orange-600">
+                    Reset the setup status and restart the initial setup wizard. 
+                    This will allow you to reconfigure system settings but preserves all data.
+                  </p>
+                  <ul className="text-xs text-orange-500 ml-4 space-y-1">
+                    <li>• Resets setup completion status</li>
+                    <li>• Allows reconfiguration of system settings</li>
+                    <li>• Preserves all user data and content</li>
+                    <li>• Redirects to setup wizard</li>
+                  </ul>
+                </div>
+                <Button
+                  onClick={() => setIsSetupDialogOpen(true)}
+                  variant="outline"
+                  className="border-orange-300 text-orange-700 hover:bg-orange-50"
+                  disabled={isRerunningSetup}
+                >
+                  {isRerunningSetup ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Resetting...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="mr-2 h-4 w-4" />
+                      Re-run Setup
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+
             <div className="border border-red-200 rounded-lg p-4 bg-white">
               <div className="flex items-start justify-between">
                 <div className="space-y-2">
@@ -261,6 +356,95 @@ export function DangerZoneSection({ onSettingsChange }: DangerZoneSectionProps) 
                 <>
                   <RefreshCw className="h-4 w-4 mr-2" />
                   Reset Database
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Re-run Setup Confirmation Dialog */}
+      <Dialog open={isSetupDialogOpen} onOpenChange={setIsSetupDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-orange-700">
+              <RefreshCw className="h-5 w-5" />
+              Re-run Initial Setup
+            </DialogTitle>
+            <DialogDescription className="text-orange-600">
+              This will reset the setup status and redirect you to the setup wizard. 
+              Your data will be preserved.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {setupResult && (
+              <Alert className={setupResult.success ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50"}>
+                {setupResult.success ? (
+                  <CheckCircle className="h-4 w-4 text-green-600" />
+                ) : (
+                  <AlertCircle className="h-4 w-4 text-red-600" />
+                )}
+                <AlertDescription className={setupResult.success ? "text-green-700" : "text-red-700"}>
+                  {setupResult.message}
+                </AlertDescription>
+              </Alert>
+            )}
+
+            <div className="space-y-2">
+              <Label htmlFor="setup-confirmation" className="text-sm font-medium">
+                Type <code className="bg-gray-100 px-1 rounded text-orange-600">RERUN SETUP</code> to confirm:
+              </Label>
+              <Input
+                id="setup-confirmation"
+                value={setupConfirmationText}
+                onChange={(e) => setSetupConfirmationText(e.target.value)}
+                placeholder="RERUN SETUP"
+                className={setupConfirmationText === "RERUN SETUP" ? "border-green-300" : "border-orange-300"}
+                disabled={isRerunningSetup}
+              />
+            </div>
+
+            <div className="bg-orange-50 border border-orange-200 rounded-md p-3">
+              <p className="text-xs text-orange-700">
+                <strong>What will happen:</strong>
+              </p>
+              <ol className="text-xs text-orange-600 mt-1 ml-4 space-y-1">
+                <li>1. Setup completion status will be reset</li>
+                <li>2. You will be redirected to the setup wizard</li>
+                <li>3. You can reconfigure system settings</li>
+                <li>4. All existing data remains intact</li>
+              </ol>
+            </div>
+          </div>
+
+          <DialogFooter className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsSetupDialogOpen(false);
+                setSetupConfirmationText("");
+                setSetupResult(null);
+              }}
+              disabled={isRerunningSetup}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="outline"
+              className="border-orange-300 text-orange-700 hover:bg-orange-50"
+              onClick={handleRerunSetup}
+              disabled={setupConfirmationText !== "RERUN SETUP" || isRerunningSetup}
+            >
+              {isRerunningSetup ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Resetting...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Re-run Setup
                 </>
               )}
             </Button>

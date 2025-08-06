@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { hasPermission } from "@/lib/permissions";
+import { permissionService } from "@/lib/permissions/PermissionService";
 
 export async function GET(request: NextRequest) {
   try {
@@ -12,7 +12,11 @@ export async function GET(request: NextRequest) {
     }
 
     // Check permission to create time entries (timers are used to create time entries)
-    const canCreateTimeEntries = await hasPermission(session.user.id, { resource: "time-entries", action: "create" });
+    const canCreateTimeEntries = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "time-entries",
+      action: "create"
+    });
     if (!canCreateTimeEntries) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
@@ -63,7 +67,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Check permission to create time entries (timers are used to create time entries)
-    const canCreateTimeEntries = await hasPermission(session.user.id, { resource: "time-entries", action: "create" });
+    const canCreateTimeEntries = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "time-entries",
+      action: "create"
+    });
     if (!canCreateTimeEntries) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
@@ -87,10 +95,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Check access permissions based on ticket assignments and permissions
-    const canCreateAccountTimeEntries = await hasPermission(session.user.id, { 
-      resource: "time-entries", 
-      action: "create", 
-      scope: "account" 
+    const canCreateAccountTimeEntries = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "time-entries",
+      action: "create",
+      accountId: ticket.accountId
     });
     
     // If user doesn't have account-wide permissions, check if they can only work on assigned tickets

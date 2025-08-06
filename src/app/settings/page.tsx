@@ -2,48 +2,30 @@
 
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useCallback } from "react";
-import { useSettingsPermissions } from "@/hooks/queries/useSettingsPermissions";
+import { useEffect, useState } from "react";
+import { usePermissions } from "@/hooks/usePermissions";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
   Settings as SettingsIcon, 
-  Save,
-  RotateCcw,
   AlertCircle
 } from "lucide-react";
 
-// Import setting section components (will be created)
+// Import setting section components
 import { GeneralSettingsSection } from "@/components/settings/GeneralSettingsSection";
+import { CompanyInfoSection } from "@/components/settings/CompanyInfoSection";
 import { TicketFieldsSection } from "@/components/settings/TicketFieldsSection";
 import { EmailSettingsSection } from "@/components/settings/EmailSettingsSection";
 import { LicenseSection } from "@/components/settings/LicenseSection";
 import { DangerZoneSection } from "@/components/settings/DangerZoneSection";
-import { useActionBar } from "@/components/providers/ActionBarProvider";
 
 export default function SettingsPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [activeTab, setActiveTab] = useState("general");
-  const { canViewSettings, canUpdateSettings, isLoading: permissionsLoading } = useSettingsPermissions();
-  const { addAction, removeAction, clearActions } = useActionBar();
-
-  // Handler functions - wrapped in useCallback for stable references
-  const handleSaveAll = useCallback(async () => {
-    // TODO: Implement save all settings
-    console.log("Saving all settings...");
-    setHasUnsavedChanges(false);
-  }, []);
-
-  const handleResetAll = useCallback(() => {
-    // TODO: Implement reset all settings
-    console.log("Resetting all settings...");
-    setHasUnsavedChanges(false);
-  }, []);
+  const { canViewSettings, canEditSettings, loading: permissionsLoading } = usePermissions();
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -58,51 +40,6 @@ export default function SettingsPage() {
     }
   }, [status, session, router, canViewSettings, permissionsLoading]);
 
-  // Permissions are now fetched via TanStack Query - no need for separate state
-
-  // Setup action bar with save/reset buttons
-  useEffect(() => {
-    if (hasUnsavedChanges && canUpdateSettings) {
-      addAction({
-        id: "reset-settings",
-        label: "Reset",
-        icon: <RotateCcw className="h-4 w-4" />,
-        onClick: handleResetAll,
-        variant: "outline"
-      });
-      addAction({
-        id: "save-settings", 
-        label: "Save All",
-        icon: <Save className="h-4 w-4" />,
-        onClick: handleSaveAll,
-        variant: "default"
-      });
-    } else {
-      removeAction("reset-settings");
-      removeAction("save-settings");
-    }
-  }, [hasUnsavedChanges, canUpdateSettings, addAction, removeAction, handleResetAll, handleSaveAll]);
-
-  // Cleanup actions only on unmount
-  useEffect(() => {
-    return () => {
-      clearActions();
-    };
-  }, []); // Empty deps - only run on mount/unmount
-
-  // Warn user about unsaved changes
-  useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (hasUnsavedChanges) {
-        e.preventDefault();
-        e.returnValue = "";
-      }
-    };
-
-    window.addEventListener("beforeunload", handleBeforeUnload);
-    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [hasUnsavedChanges]);
-
   if (status === "loading" || isLoading || permissionsLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -116,17 +53,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <>
-      {hasUnsavedChanges && (
-        <div className="bg-orange-50 border-b border-orange-200 px-4 py-2">
-          <div className="max-w-7xl mx-auto flex items-center space-x-2">
-            <AlertCircle className="h-4 w-4 text-orange-500" />
-            <span className="text-sm text-orange-600">You have unsaved changes</span>
-          </div>
-        </div>
-      )}
-      
-      <main className="max-w-7xl mx-auto p-6">
+    <main className="max-w-7xl mx-auto p-6">
         <div className="space-y-6">
           {/* Page Header */}
           <div className="space-y-2">
@@ -138,8 +65,9 @@ export default function SettingsPage() {
 
           {/* Settings Tabs */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-            <TabsList className="grid w-full grid-cols-5">
+            <TabsList className="grid w-full grid-cols-6">
               <TabsTrigger value="general">General</TabsTrigger>
+              <TabsTrigger value="company">Company</TabsTrigger>
               <TabsTrigger value="fields">Ticket Fields</TabsTrigger>
               <TabsTrigger value="email">Email</TabsTrigger>
               <TabsTrigger value="license">License</TabsTrigger>
@@ -155,13 +83,24 @@ export default function SettingsPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <GeneralSettingsSection 
-                    onSettingsChange={() => setHasUnsavedChanges(true)}
-                  />
+                  <GeneralSettingsSection />
                 </CardContent>
               </Card>
             </TabsContent>
 
+            <TabsContent value="company" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Company Information</CardTitle>
+                  <CardDescription>
+                    Manage your company details and contact information.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <CompanyInfoSection />
+                </CardContent>
+              </Card>
+            </TabsContent>
 
             <TabsContent value="fields" className="space-y-4">
               <Card>
@@ -172,9 +111,7 @@ export default function SettingsPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <TicketFieldsSection 
-                    onSettingsChange={() => setHasUnsavedChanges(true)}
-                  />
+                  <TicketFieldsSection />
                 </CardContent>
               </Card>
             </TabsContent>
@@ -189,9 +126,7 @@ export default function SettingsPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <EmailSettingsSection 
-                    onSettingsChange={() => setHasUnsavedChanges(true)}
-                  />
+                  <EmailSettingsSection />
                 </CardContent>
               </Card>
             </TabsContent>
@@ -205,17 +140,13 @@ export default function SettingsPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <LicenseSection 
-                    onSettingsChange={() => setHasUnsavedChanges(true)}
-                  />
+                  <LicenseSection />
                 </CardContent>
               </Card>
             </TabsContent>
 
             <TabsContent value="danger" className="space-y-4">
-              <DangerZoneSection 
-                onSettingsChange={() => setHasUnsavedChanges(false)} // Reset doesn't need unsaved changes tracking
-              />
+              <DangerZoneSection />
             </TabsContent>
           </Tabs>
 
@@ -226,7 +157,7 @@ export default function SettingsPage() {
                 <div className="space-y-1">
                   <p className="text-sm font-medium">Settings Management</p>
                   <p className="text-sm text-muted-foreground">
-                    Changes are saved automatically. Use the &quot;Save All&quot; button to save across all sections.
+                    Use the save buttons in each section to apply your changes.
                   </p>
                 </div>
                 <div className="flex items-center space-x-2 text-sm text-muted-foreground">
@@ -236,7 +167,6 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
         </div>
-      </main>
-    </>
+    </main>
   );
 }

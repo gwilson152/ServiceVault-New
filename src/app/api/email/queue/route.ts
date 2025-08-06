@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { hasPermission } from '@/lib/permissions';
+import { permissionService } from '@/lib/permissions/PermissionService';
 import { EmailQueueStatus } from '@prisma/client';
 import { emailService } from '@/lib/email/EmailService';
 
@@ -14,9 +14,10 @@ export async function GET(request: NextRequest) {
     }
 
     // Check email queue permission
-    const canViewEmailQueue = await hasPermission(session.user.id, {
-      resource: 'email',
-      action: 'queue'
+    const canViewEmailQueue = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "email",
+      action: "queue"
     });
 
     if (!canViewEmailQueue) {
@@ -78,9 +79,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Check email send permission
-    const canSendEmail = await hasPermission(session.user.id, {
-      resource: 'email',
-      action: 'send'
+    const canSendEmail = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "email",
+      action: "send"
     });
 
     if (!canSendEmail) {

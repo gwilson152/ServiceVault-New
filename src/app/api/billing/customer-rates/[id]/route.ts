@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { hasPermission } from "@/lib/permissions";
+import { permissionService } from "@/lib/permissions/PermissionService";
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const resolvedParams = await params;
   try {
     const session = await getServerSession(authOptions);
 
@@ -16,34 +17,38 @@ export async function PUT(
     }
 
     // Check permission to update billing rates
-    const canUpdateBilling = await hasPermission(session.user.id, { resource: "billing", action: "update" });
-    if (!canUpdateBilling) {
+    const canUpdate = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "billing",
+      action: "update"
+    });
+    if (!canUpdate) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const body = await request.json();
-    const { overrideRate } = body;
+    const { rate } = body;
 
-    if (!overrideRate) {
+    if (!rate) {
       return NextResponse.json(
-        { error: "Override rate is required" },
+        { error: "Rate is required" },
         { status: 400 }
       );
     }
 
-    const customerRate = await prisma.customerBillingRate.update({
-      where: { id: params.id },
+    const accountRate = await prisma.accountBillingRate.update({
+      where: { id: resolvedParams.id },
       data: {
-        overrideRate: parseFloat(overrideRate),
+        rate: parseFloat(rate),
       },
       include: { billingRate: true },
     });
 
-    return NextResponse.json(customerRate);
+    return NextResponse.json(accountRate);
   } catch (error) {
-    console.error("Error updating customer billing rate:", error);
+    console.error("Error updating account billing rate:", error);
     return NextResponse.json(
-      { error: "Failed to update customer billing rate" },
+      { error: "Failed to update account billing rate" },
       { status: 500 }
     );
   }
@@ -51,8 +56,9 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const resolvedParams = await params;
   try {
     const session = await getServerSession(authOptions);
 
@@ -61,20 +67,24 @@ export async function DELETE(
     }
 
     // Check permission to delete billing rates
-    const canDeleteBilling = await hasPermission(session.user.id, { resource: "billing", action: "delete" });
-    if (!canDeleteBilling) {
+    const canDelete = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "billing",
+      action: "delete"
+    });
+    if (!canDelete) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    await prisma.customerBillingRate.delete({
-      where: { id: params.id },
+    await prisma.accountBillingRate.delete({
+      where: { id: resolvedParams.id },
     });
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Error deleting customer billing rate:", error);
+    console.error("Error deleting account billing rate:", error);
     return NextResponse.json(
-      { error: "Failed to delete customer billing rate" },
+      { error: "Failed to delete account billing rate" },
       { status: 500 }
     );
   }

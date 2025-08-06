@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
-import { hasPermission } from '@/lib/permissions';
+import { permissionService } from '@/lib/permissions/PermissionService';
 import { emailService } from '@/lib/email/EmailService';
 import { prisma } from '@/lib/prisma';
 
@@ -13,9 +13,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Check email settings permission
-    const canManageEmailSettings = await hasPermission(session.user.id, {
-      resource: 'email',
-      action: 'settings'
+    const canManageEmailSettings = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "email",
+      action: "settings"
     });
 
     if (!canManageEmailSettings) {

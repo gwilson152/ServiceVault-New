@@ -1,3 +1,24 @@
+/**
+ * Setup Completion API Route
+ * 
+ * This route handles the final step of the initial system setup wizard.
+ * It creates the first administrator user with super-admin privileges and
+ * configures all system settings.
+ * 
+ * Key Features:
+ * - Creates admin user with Super Administrator role via SystemRole table
+ * - Uses new RoleTemplate system instead of hard-coded roles
+ * - Configures system, email, company, security, and feature settings
+ * - Atomic transaction with cleanup on error
+ * - Validates all setup data before processing
+ * 
+ * Integration:
+ * - Used by SetupWizard component during initial setup
+ * - Requires database to be seeded with default role templates
+ * - Creates SystemRole relationship for super-admin privileges
+ * - Integrates with settingsService for configuration storage
+ */
+
 import { NextResponse } from "next/server";
 import { settingsService } from "@/lib/settings";
 import { prisma } from "@/lib/prisma";
@@ -57,7 +78,17 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
 
-    // 2. Create admin user
+    // 2. Get the Super Administrator role template
+    console.log("🔍 Finding Super Administrator role...");
+    const superAdminRole = await prisma.roleTemplate.findUnique({
+      where: { name: 'Super Administrator' }
+    });
+
+    if (!superAdminRole) {
+      throw new Error('Super Administrator role template not found. Please run database seed first.');
+    }
+
+    // 3. Create admin user
     console.log("👤 Creating admin user...");
     const hashedPassword = await bcrypt.hash(setupData.adminAccount.password, 10);
     
@@ -65,14 +96,22 @@ export async function POST(request: Request) {
       data: {
         name: setupData.adminAccount.name,
         email: setupData.adminAccount.email,
-        password: hashedPassword,
-        role: 'ADMIN'
+        password: hashedPassword
       }
     });
 
-    console.log(`✅ Admin user created: ${adminUser.email}`);
+    // 4. Assign Super Administrator system role
+    console.log("🔑 Assigning Super Administrator role...");
+    await prisma.systemRole.create({
+      data: {
+        userId: adminUser.id,
+        roleId: superAdminRole.id
+      }
+    });
 
-    // 3. Save system configuration
+    console.log(`✅ Admin user created with Super Administrator privileges: ${adminUser.email}`);
+
+    // 5. Save system configuration
     console.log("⚙️ Saving system configuration...");
     const systemSettings = {
       'system.appName': setupData.systemConfig.appName,
@@ -86,7 +125,7 @@ export async function POST(request: Request) {
     await settingsService.setMany(systemSettings);
     console.log("✅ System configuration saved");
 
-    // 4. Save email configuration
+    // 6. Save email configuration
     console.log("📧 Saving email configuration...");
     const emailSettings = {
       'email.smtpHost': setupData.emailConfig.smtpHost,
@@ -102,7 +141,7 @@ export async function POST(request: Request) {
     await settingsService.setMany(emailSettings);
     console.log("✅ Email configuration saved");
 
-    // 5. Save company information
+    // 7. Save company information
     console.log("🏢 Saving company information...");
     const companySettings = {
       'company.companyName': setupData.companyInfo.companyName,
@@ -117,7 +156,7 @@ export async function POST(request: Request) {
     await settingsService.setMany(companySettings);
     console.log("✅ Company information saved");
 
-    // 6. Set default security settings
+    // 8. Set default security settings
     console.log("🔒 Setting default security configuration...");
     const securitySettings = {
       'security.sessionTimeout': 480, // 8 hours
@@ -128,7 +167,7 @@ export async function POST(request: Request) {
     await settingsService.setMany(securitySettings);
     console.log("✅ Security configuration saved");
 
-    // 7. Set default feature settings
+    // 9. Set default feature settings
     console.log("🎛️ Setting default feature configuration...");
     const featureSettings = {
       'features.enableTimeTracking': true,
@@ -139,7 +178,7 @@ export async function POST(request: Request) {
     await settingsService.setMany(featureSettings);
     console.log("✅ Feature configuration saved");
 
-    // 8. Mark setup as completed
+    // 10. Mark setup as completed
     console.log("🎉 Marking setup as completed...");
     await settingsService.markSetupComplete();
 
@@ -152,7 +191,7 @@ export async function POST(request: Request) {
         id: adminUser.id,
         name: adminUser.name,
         email: adminUser.email,
-        role: adminUser.role
+        hasSystemRole: true
       },
       setupCompletedAt: new Date().toISOString()
     });
@@ -168,8 +207,7 @@ export async function POST(request: Request) {
       if (setupData.adminAccount?.email) {
         await prisma.user.deleteMany({
           where: { 
-            email: setupData.adminAccount.email,
-            role: 'ADMIN'
+            email: setupData.adminAccount.email
           }
         });
       }

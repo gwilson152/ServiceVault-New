@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { hasPermission } from '@/lib/permissions';
+import { permissionService } from '@/lib/permissions/PermissionService';
 import { emailService } from '@/lib/email/EmailService';
 import crypto from 'crypto';
 
@@ -15,9 +15,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Check user invitation permission
-    const canInviteUsers = await hasPermission(session.user.id, {
-      resource: 'users',
-      action: 'invite'
+    const canInviteUsers = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "users",
+      action: "invite"
     });
 
     if (!canInviteUsers) {

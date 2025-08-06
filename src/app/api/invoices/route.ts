@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { hasPermission } from "@/lib/permissions";
+import { permissionService } from "@/lib/permissions/PermissionService";
+import { applyPermissionFilter } from "@/lib/permissions/withPermissions";
 
 export async function GET(request: NextRequest) {
   try {
@@ -13,8 +14,13 @@ export async function GET(request: NextRequest) {
     }
 
     // Check permission to view invoices
-    const canViewInvoices = await hasPermission(session.user.id, { resource: "invoices", action: "view" });
-    if (!canViewInvoices) {
+    const canView = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "invoices",
+      action: "view"
+    });
+    
+    if (!canView) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -30,7 +36,8 @@ export async function GET(request: NextRequest) {
       whereClause.status = status;
     }
 
-    const invoices = await prisma.invoice.findMany({
+    // Build query with permission filtering
+    const query = {
       where: whereClause,
       include: {
         account: true,
@@ -42,7 +49,7 @@ export async function GET(request: NextRequest) {
                 user: true,
               },
             },
-            ticketAddon: {
+            addon: {
               include: {
                 ticket: true,
               },
@@ -51,8 +58,17 @@ export async function GET(request: NextRequest) {
         },
         creator: true,
       },
-      orderBy: { createdAt: "desc" },
-    });
+      orderBy: { createdAt: "desc" as const },
+    };
+
+    // Apply permission filtering
+    const filteredQuery = await applyPermissionFilter(
+      session.user.id,
+      "invoices",
+      query
+    );
+
+    const invoices = await prisma.invoice.findMany(filteredQuery);
 
     return NextResponse.json(invoices);
   } catch (error) {
@@ -68,8 +84,19 @@ export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
 
-    if (!session || session.user?.role !== "ADMIN") {
+    if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Check permission to create invoices
+    const canCreate = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "invoices",
+      action: "create"
+    });
+    
+    if (!canCreate) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const body = await request.json();
@@ -80,6 +107,18 @@ export async function POST(request: NextRequest) {
         { error: "Customer ID is required" },
         { status: 400 }
       );
+    }
+
+    // Check permission to create invoices for this specific account
+    const canCreateForAccount = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "invoices",
+      action: "create",
+      accountId: customerId
+    });
+    
+    if (!canCreateForAccount) {
+      return NextResponse.json({ error: "No permission to create invoices for this account" }, { status: 403 });
     }
 
     // Start transaction

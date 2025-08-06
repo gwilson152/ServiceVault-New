@@ -10,10 +10,14 @@ export async function GET() {
     const userCount = await prisma.user.count();
     const hasUsers = userCount > 0;
 
-    // Check if any admin users exist specifically
-    const adminCount = await prisma.user.count({
-      where: { role: 'ADMIN' }
+    // Check if any super admin users exist specifically
+    const superAdminRole = await prisma.roleTemplate.findUnique({
+      where: { name: 'Super Administrator' }
     });
+    
+    const adminCount = superAdminRole ? await prisma.systemRole.count({
+      where: { roleId: superAdminRole.id }
+    }) : 0;
     const hasAdminUsers = adminCount > 0;
 
     // Check if core system settings exist

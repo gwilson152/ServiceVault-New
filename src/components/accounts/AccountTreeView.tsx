@@ -16,7 +16,8 @@ import {
   ChevronRight, 
   ChevronDown,
   Clock,
-  FileText
+  FileText,
+  ArrowRight
 } from "lucide-react";
 import { AccountWithHierarchy, buildAccountHierarchy, toggleAccountExpansion } from "@/utils/hierarchy";
 
@@ -24,6 +25,7 @@ interface AccountTreeViewProps {
   accounts: AccountWithHierarchy[];
   searchTerm?: string;
   onAccountSelect?: (accountId: string) => void;
+  onAssignParent?: (account: AccountWithHierarchy) => void;
 }
 
 interface TreeNodeProps {
@@ -31,9 +33,10 @@ interface TreeNodeProps {
   depth: number;
   onToggleExpansion: (accountId: string) => void;
   onAccountSelect?: (accountId: string) => void;
+  onAssignParent?: (account: AccountWithHierarchy) => void;
 }
 
-function TreeNode({ account, depth, onToggleExpansion, onAccountSelect }: TreeNodeProps) {
+function TreeNode({ account, depth, onToggleExpansion, onAccountSelect, onAssignParent }: TreeNodeProps) {
   const router = useRouter();
   const hasChildren = account.children && account.children.length > 0;
 
@@ -147,6 +150,20 @@ function TreeNode({ account, depth, onToggleExpansion, onAccountSelect }: TreeNo
           >
             <Eye className="h-3 w-3" />
           </Button>
+          {onAssignParent && (
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="h-7 w-7 p-0"
+              onClick={(e) => {
+                e.stopPropagation();
+                onAssignParent(account);
+              }}
+              title="Assign Parent Account"
+            >
+              <ArrowRight className="h-3 w-3" />
+            </Button>
+          )}
           <Button 
             variant="ghost" 
             size="sm" 
@@ -166,7 +183,7 @@ function TreeNode({ account, depth, onToggleExpansion, onAccountSelect }: TreeNo
             onClick={(e) => {
               e.stopPropagation();
               // Open email compose for account users
-              const accountUsers = account.accountUsers.filter(au => au.user).map(au => au.email);
+              const accountUsers = account.memberships.filter(m => m.user).map(m => m.user!.email);
               if (accountUsers.length > 0) {
                 const emailSubject = `Regarding ${account.name} Account`;
                 const mailtoLink = `mailto:${accountUsers.join(',')}?subject=${encodeURIComponent(emailSubject)}`;
@@ -174,7 +191,7 @@ function TreeNode({ account, depth, onToggleExpansion, onAccountSelect }: TreeNo
               }
             }}
             title="Email Account Users"
-            disabled={!account.accountUsers.some(au => au.user)}
+            disabled={!account.memberships.some(m => m.user)}
           >
             <Mail className="h-3 w-3" />
           </Button>
@@ -205,6 +222,7 @@ function TreeNode({ account, depth, onToggleExpansion, onAccountSelect }: TreeNo
                 depth={depth + 1}
                 onToggleExpansion={onToggleExpansion}
                 onAccountSelect={onAccountSelect}
+                onAssignParent={onAssignParent}
               />
             </div>
           ))}
@@ -214,7 +232,7 @@ function TreeNode({ account, depth, onToggleExpansion, onAccountSelect }: TreeNo
   );
 }
 
-export function AccountTreeView({ accounts, searchTerm = "", onAccountSelect }: AccountTreeViewProps) {
+export function AccountTreeView({ accounts, searchTerm = "", onAccountSelect, onAssignParent }: AccountTreeViewProps) {
   const [hierarchicalAccounts, setHierarchicalAccounts] = useState<AccountWithHierarchy[]>([]);
 
   // Build hierarchy when accounts change
@@ -284,6 +302,7 @@ export function AccountTreeView({ accounts, searchTerm = "", onAccountSelect }: 
               depth={0}
               onToggleExpansion={handleToggleExpansion}
               onAccountSelect={onAccountSelect}
+              onAssignParent={onAssignParent}
             />
           ))}
         </div>

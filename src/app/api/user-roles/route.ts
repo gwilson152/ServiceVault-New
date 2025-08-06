@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { hasPermission } from '@/lib/permissions';
+import { permissionService } from '@/lib/permissions/PermissionService';
 
 export async function GET(request: NextRequest) {
   try {
@@ -13,9 +13,10 @@ export async function GET(request: NextRequest) {
     }
 
     // Check if user has permission to view user roles
-    const canViewRoles = await hasPermission(session.user.id, {
-      resource: 'system',
-      action: 'admin'
+    const canViewRoles = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "system",
+      action: "admin"
     });
 
     if (!canViewRoles) {
@@ -64,9 +65,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if user has permission to assign roles
-    const canAssignRoles = await hasPermission(session.user.id, {
-      resource: 'system',
-      action: 'admin'
+    const canAssignRoles = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "system",
+      action: "admin"
     });
 
     if (!canAssignRoles) {
@@ -221,9 +223,10 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Check if user has permission to remove role assignments
-    const canRemoveRoles = await hasPermission(session.user.id, {
-      resource: 'system',
-      action: 'admin'
+    const canRemoveRoles = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "system",
+      action: "admin"
     });
 
     if (!canRemoveRoles) {

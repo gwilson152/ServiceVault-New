@@ -1,6 +1,7 @@
 import nodemailer from 'nodemailer';
 import { prisma } from '@/lib/prisma';
 import { EmailTemplateType, EmailQueueStatus } from '@prisma/client';
+import { settingsService } from '@/lib/settings';
 
 export interface EmailSettings {
   smtpHost: string;
@@ -59,29 +60,59 @@ export class EmailService {
     this.initializeTransporter();
   }
 
+  /**
+   * Refresh email settings and reinitialize transporter
+   */
+  async refreshSettings(): Promise<void> {
+    await this.initializeTransporter();
+  }
+
   private async initializeTransporter(): Promise<void> {
     try {
-      // Get email settings from database
-      const emailSettings = await prisma.emailSettings.findFirst({
-        where: { isActive: true },
-        orderBy: { createdAt: 'desc' }
+      // Get email settings from SystemSettings using standard keys
+      const emailSettings = await prisma.systemSettings.findMany({
+        where: {
+          key: {
+            in: [
+              'email.smtpHost', 
+              'email.smtpPort', 
+              'email.smtpUser', 
+              'email.smtpPassword', 
+              'email.fromAddress', 
+              'email.fromName',
+              'email.smtpSecure'
+            ]
+          }
+        }
       });
 
-      if (!emailSettings) {
-        console.warn('No active email settings found. Email functionality disabled.');
+      if (emailSettings.length === 0) {
+        console.warn('No email settings found. Email functionality disabled.');
+        return;
+      }
+
+      // Convert settings array to object
+      const settingsMap = emailSettings.reduce((acc, setting) => {
+        acc[setting.key] = setting.value;
+        return acc;
+      }, {} as Record<string, string>);
+
+      // Check for required settings
+      if (!settingsMap['email.smtpHost'] || !settingsMap['email.smtpPort'] || !settingsMap['email.smtpUser'] || !settingsMap['email.smtpPassword']) {
+        console.warn('Missing required SMTP settings. Email functionality disabled.');
         return;
       }
 
       this.settings = {
-        smtpHost: emailSettings.smtpHost,
-        smtpPort: emailSettings.smtpPort,
-        smtpUsername: emailSettings.smtpUsername,
-        smtpPassword: emailSettings.smtpPassword, // TODO: Decrypt password
-        smtpSecure: emailSettings.smtpSecure,
-        fromEmail: emailSettings.fromEmail,
-        fromName: emailSettings.fromName,
-        replyToEmail: emailSettings.replyToEmail || undefined,
-        testMode: emailSettings.testMode
+        smtpHost: settingsMap['email.smtpHost'],
+        smtpPort: parseInt(settingsMap['email.smtpPort']),
+        smtpUsername: settingsMap['email.smtpUser'],
+        smtpPassword: settingsMap['email.smtpPassword'], // TODO: Decrypt password
+        smtpSecure: settingsMap['email.smtpSecure'] === 'true',
+        fromEmail: settingsMap['email.fromAddress'] || settingsMap['email.smtpUser'],
+        fromName: settingsMap['email.fromName'] || 'Service Vault',
+        replyToEmail: settingsMap['email.replyToEmail'] || undefined,
+        testMode: settingsMap['email.testMode'] === 'true'
       };
 
       // Create nodemailer transporter configuration

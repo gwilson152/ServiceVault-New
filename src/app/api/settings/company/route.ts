@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { hasPermission } from '@/lib/permissions';
+import { permissionService } from '@/lib/permissions/PermissionService';
 
 export async function GET(request: NextRequest) {
   try {
@@ -13,9 +13,10 @@ export async function GET(request: NextRequest) {
     }
 
     // Check permission to view settings
-    const canViewSettings = await hasPermission(session.user.id, {
-      resource: 'settings',
-      action: 'read'
+    const canViewSettings = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "settings",
+      action: "read"
     });
 
     if (!canViewSettings) {
@@ -72,9 +73,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Check permission to update settings
-    const canUpdateSettings = await hasPermission(session.user.id, {
-      resource: 'settings',
-      action: 'update'
+    const canUpdateSettings = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "settings",
+      action: "update"
     });
 
     if (!canUpdateSettings) {

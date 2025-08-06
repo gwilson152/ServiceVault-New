@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { hasPermission } from "@/lib/permissions";
+import { permissionService } from "@/lib/permissions/PermissionService";
 
 export async function GET(
   request: NextRequest,
@@ -17,8 +17,12 @@ export async function GET(
     const resolvedParams = await params;
     
     // Check permission to view users
-    const canViewUsers = await hasPermission(session.user.id, { resource: "users", action: "view" });
-    if (!canViewUsers) {
+    const canView = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "users",
+      action: "view"
+    });
+    if (!canView) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -79,8 +83,12 @@ export async function PATCH(
     const resolvedParams = await params;
     
     // Check permission to update users
-    const canUpdateUsers = await hasPermission(session.user.id, { resource: "users", action: "update" });
-    if (!canUpdateUsers) {
+    const canUpdate = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "users",
+      action: "update"
+    });
+    if (!canUpdate) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -177,8 +185,12 @@ export async function DELETE(
     const resolvedParams = await params;
     
     // Check permission to delete users
-    const canDeleteUsers = await hasPermission(session.user.id, { resource: "users", action: "delete" });
-    if (!canDeleteUsers) {
+    const canDelete = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "users",
+      action: "delete"
+    });
+    if (!canDelete) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

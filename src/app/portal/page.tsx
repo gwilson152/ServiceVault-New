@@ -17,8 +17,12 @@ export default function CustomerPortal() {
     if (status === "unauthenticated") {
       router.push("/");
     } else if (status === "authenticated") {
-      // Allow both CUSTOMER (legacy) and ACCOUNT_USER roles
-      if (session.user?.role !== "CUSTOMER" && session.user?.role !== "ACCOUNT_USER") {
+      // Check if user has account memberships but no system roles (portal user)
+      const hasAccountMemberships = session.user?.memberships && session.user.memberships.length > 0;
+      const hasSystemRoles = session.user?.systemRoles && session.user.systemRoles.length > 0;
+      const isPortalUser = hasAccountMemberships && !hasSystemRoles;
+      
+      if (!isPortalUser) {
         router.push("/dashboard");
       } else {
         setIsLoading(false);
@@ -34,7 +38,12 @@ export default function CustomerPortal() {
     );
   }
 
-  if (!session || (session.user?.role !== "CUSTOMER" && session.user?.role !== "ACCOUNT_USER")) {
+  // Check if user is a portal user
+  const hasAccountMemberships = session?.user?.memberships && session.user.memberships.length > 0;
+  const hasSystemRoles = session?.user?.systemRoles && session.user.systemRoles.length > 0;
+  const isPortalUser = hasAccountMemberships && !hasSystemRoles;
+
+  if (!session || !isPortalUser) {
     return null;
   }
 

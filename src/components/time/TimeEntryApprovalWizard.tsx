@@ -58,7 +58,7 @@ type ApprovalAction = 'approve' | 'skip' | 'edit';
 
 export function TimeEntryApprovalWizard({ open, onOpenChange, onSuccess }: ApprovalWizardProps) {
   const { data: session } = useSession();
-  const { canApproveTimeEntries, canUpdateTimeEntries, canViewBilling } = usePermissions();
+  const { canApproveTimeEntries, canEditTimeEntries, canViewBilling } = usePermissions();
   
   // Wizard state
   const [currentStep, setCurrentStep] = useState<WizardStep>('loading');
@@ -86,20 +86,14 @@ export function TimeEntryApprovalWizard({ open, onOpenChange, onSuccess }: Appro
 
   // Check permissions
   useEffect(() => {
-    const checkPermissions = async () => {
-      const [approvePermission, updatePermission, billingPermission] = await Promise.all([
-        canApproveTimeEntries(),
-        canUpdateTimeEntries(),
-        canViewBilling()
-      ]);
-      
-      setCanApprove(approvePermission);
-      setCanUpdate(updatePermission);      
-      setShowBillingRates(billingPermission);
+    const checkPermissions = () => {
+      setCanApprove(canApproveTimeEntries);
+      setCanUpdate(canEditTimeEntries);      
+      setShowBillingRates(canViewBilling);
     };
     
     checkPermissions();
-  }, [canApproveTimeEntries, canUpdateTimeEntries, canViewBilling]);
+  }, [canApproveTimeEntries, canEditTimeEntries, canViewBilling]);
 
   // Load pending entries when dialog opens
   useEffect(() => {

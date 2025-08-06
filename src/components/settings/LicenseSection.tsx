@@ -21,10 +21,10 @@ interface LicenseStatus {
 }
 
 interface LicenseSectionProps {
-  onSettingsChange: () => void;
+  // No props needed - each section manages its own state
 }
 
-export function LicenseSection({ onSettingsChange }: LicenseSectionProps) {
+export function LicenseSection({}: LicenseSectionProps) {
   const [licenseKey, setLicenseKey] = useState("");
   const [licenseStatus, setLicenseStatus] = useState<LicenseStatus | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -68,7 +68,7 @@ export function LicenseSection({ onSettingsChange }: LicenseSectionProps) {
         const status = await response.json();
         setLicenseStatus(status);
         setLicenseKey(status.licenseKey || "");
-        onSettingsChange();
+        // Settings change handled by component state
       } else {
         const error = await response.json();
         alert("Failed to verify license: " + error.error);
@@ -209,7 +209,7 @@ export function LicenseSection({ onSettingsChange }: LicenseSectionProps) {
                 value={newLicenseKey}
                 onChange={(e) => {
                   setNewLicenseKey(e.target.value);
-                  onSettingsChange();
+                  // Settings change handled by component state
                 }}
                 placeholder="Enter your license key (e.g., XXXX-XXXX-XXXX-XXXX)"
                 className="font-mono"

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { hasPermission } from '@/lib/permissions';
+import { permissionService } from '@/lib/permissions/PermissionService';
 import { DEFAULT_EMAIL_TEMPLATES } from '@/lib/email/templates';
 
 export async function POST(request: NextRequest) {
@@ -13,9 +13,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Check email templates permission
-    const canManageEmailTemplates = await hasPermission(session.user.id, {
-      resource: 'email',
-      action: 'templates'
+    const canManageEmailTemplates = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "email",
+      action: "templates"
     });
 
     if (!canManageEmailTemplates) {

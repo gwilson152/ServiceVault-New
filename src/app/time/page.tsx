@@ -56,7 +56,7 @@
 
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -123,6 +123,7 @@ export default function TimeTrackingPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("entries");
+  const initialDataFetched = useRef(false);
   
   // Permission hooks
   const {
@@ -180,7 +181,6 @@ export default function TimeTrackingPage() {
     id: string;
     name: string;
     email: string;
-    role: string;
   }>>([]);
   const [timeEntries, setTimeEntries] = useState<Array<{
     id: string;
@@ -335,9 +335,9 @@ export default function TimeTrackingPage() {
           })
           .reduce((sum: number, entry: any) => sum + entry.minutes, 0);
         
-        // Calculate billable amount (only for ADMIN users)
+        // Calculate billable amount (only for users with billing permissions)
         let billableAmount = undefined;
-        if (session?.user?.role === 'ADMIN') {
+        if (canViewBilling) {
           billableAmount = billableEntries
             .filter((entry: any) => {
               const entryDate = new Date(entry.date);
@@ -364,30 +364,9 @@ export default function TimeTrackingPage() {
     } catch (error) {
       console.error('Error fetching time entries:', error);
     }
-  }, [session?.user?.role, session?.user?.id, filterTicket]);
+  }, [session?.user?.id, filterTicket, canViewBilling]);
 
   // calculateStatistics function moved inline to fetchTimeEntries to avoid circular dependency
-  
-  // Stable fetch function wrappers - defined before useEffect to avoid initialization errors
-  const stableFetchAccounts = useCallback(() => {
-    fetchAccounts();
-  }, [fetchAccounts]);
-
-  const stableFetchBillingRates = useCallback(() => {
-    fetchBillingRates();
-  }, [fetchBillingRates]);
-
-  const stableFetchTickets = useCallback(() => {
-    fetchTickets();
-  }, [fetchTickets]);
-
-  const stableFetchUsers = useCallback(() => {
-    fetchUsers();
-  }, [fetchUsers]);
-
-  const stableFetchTimeEntries = useCallback(() => {
-    fetchTimeEntries();
-  }, [fetchTimeEntries]);
 
   // Permissions are now handled by useTimeEntryPermissions hook using TanStack Query
   // This avoids the infinite loop caused by state updates in async functions
@@ -397,9 +376,8 @@ export default function TimeTrackingPage() {
       router.push("/");
     } else if (status === "authenticated" && !permissionsLoading && !preferencesLoading) {
       // Check if user has permission to view time entries
-      const checkAccess = async () => {
-        const hasAccess = await canViewTimeEntries();
-        if (!hasAccess) {
+      const checkAccess = () => {
+        if (!canViewTimeEntries) {
           console.log(`Access denied to /time page for user: ${session.user?.email}. Redirecting to dashboard.`);
           router.push("/dashboard");
           return;
@@ -424,8 +402,7 @@ export default function TimeTrackingPage() {
         setIsLoading(false);
         
         // Check billing permissions
-        const billingPermission = await canViewBilling();
-        setShowBillingRates(billingPermission);
+        setShowBillingRates(canViewBilling);
         
         // Setup action bar actions (use pre-fetched value)
         if (canApproveTimeEntriesValue) {
@@ -439,16 +416,24 @@ export default function TimeTrackingPage() {
           });
         }
         
-        stableFetchAccounts();
-        stableFetchBillingRates();
-        stableFetchTickets();
-        stableFetchUsers();
-        stableFetchTimeEntries();
+        // Data fetching will be handled by separate useEffect
       };
       
       checkAccess();
     }
-  }, [status, session?.user?.email, router, permissionsLoading, preferencesLoading, canViewTimeEntries, canViewBilling, canApproveTimeEntriesValue, getTimePageFilters, addAction, stableFetchAccounts, stableFetchBillingRates, stableFetchTickets, stableFetchUsers, stableFetchTimeEntries]);
+  }, [status, session?.user?.email, router, permissionsLoading, preferencesLoading, canViewTimeEntries, canViewBilling, canApproveTimeEntriesValue]);
+
+  // Initial data fetching after access is granted
+  useEffect(() => {
+    if (!isLoading && canViewTimeEntries && session?.user && !initialDataFetched.current) {
+      initialDataFetched.current = true;
+      fetchAccounts();
+      fetchBillingRates();
+      fetchTickets();
+      fetchUsers();
+      fetchTimeEntries();
+    }
+  }, [isLoading, canViewTimeEntries, session?.user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cleanup actions when component unmounts
   useEffect(() => {
@@ -460,18 +445,18 @@ export default function TimeTrackingPage() {
   // Register for timer logged events to auto-refresh data
   useEffect(() => {
     const unregisterCallback = registerTimerLoggedCallback(() => {
-      stableFetchTimeEntries(); // Refresh time entries which will also recalculate statistics
+      fetchTimeEntries(); // Refresh time entries which will also recalculate statistics
     });
 
     return unregisterCallback;
-  }, [registerTimerLoggedCallback, stableFetchTimeEntries]);
+  }, [registerTimerLoggedCallback]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Refresh time entries when filters change (only for server-side filters)
   useEffect(() => {
     if (session?.user && !isLoading) {
-      stableFetchTimeEntries();
+      fetchTimeEntries();
     }
-  }, [filterTicket, session?.user?.id, isLoading, stableFetchTimeEntries]);
+  }, [filterTicket, session?.user?.id, isLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Handle custom date range and period filter interaction
   useEffect(() => {
@@ -520,9 +505,9 @@ export default function TimeTrackingPage() {
     filterDateEnd,
     showAdvancedFilters,
     isLoading,
-    preferencesLoading,
-    updateTimePageFilters
-  ]);
+    preferencesLoading
+    // Removed updateTimePageFilters from dependencies to prevent infinite loop
+  ]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Handler functions - must be declared before early returns to maintain hooks order
   const handleEditEntry = useCallback((entry: any) => {
@@ -541,7 +526,7 @@ export default function TimeTrackingPage() {
       });
 
       if (response.ok) {
-        stableFetchTimeEntries(); // Refresh the time entries list
+        fetchTimeEntries(); // Refresh the time entries list
       } else {
         alert("Failed to delete time entry");
       }
@@ -549,7 +534,7 @@ export default function TimeTrackingPage() {
       console.error('Failed to delete time entry:', error);
       alert("Failed to delete time entry");
     }
-  }, [stableFetchTimeEntries]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleOpenApprovalWizard = useCallback(() => {
     // Use the pre-fetched permission value instead of async call
@@ -615,7 +600,7 @@ export default function TimeTrackingPage() {
         setSelectedBillingRate("none");
         
         // Refresh data
-        stableFetchTimeEntries();
+        fetchTimeEntries();
         setActiveTab("entries");
       } else {
         const errorData = await response.json();
@@ -627,8 +612,8 @@ export default function TimeTrackingPage() {
     }
   }, [
     minutes, description, date, time, entryType, selectedTicket, selectedAccount,
-    noCharge, selectedBillingRate, stableFetchTimeEntries
-  ]);
+    noCharge, selectedBillingRate
+  ]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Timer functions are now handled globally by MultiTimerWidget - removed from this page
 
@@ -1038,7 +1023,7 @@ export default function TimeTrackingPage() {
                               <SelectItem value="all">All Users</SelectItem>
                               {users.map(user => (
                                 <SelectItem key={user.id} value={user.id}>
-                                  {user.name} ({user.role})
+                                  {user.name} ({user.email})
                                 </SelectItem>
                               ))}
                             </SelectContent>
@@ -1399,7 +1384,7 @@ export default function TimeTrackingPage() {
         open={editDialogOpen}
         onOpenChange={setEditDialogOpen}
         onSuccess={() => {
-          stableFetchTimeEntries();
+          fetchTimeEntries();
           setSelectedTimeEntry(null);
         }}
       />
@@ -1408,7 +1393,7 @@ export default function TimeTrackingPage() {
         open={approvalWizardOpen}
         onOpenChange={setApprovalWizardOpen}
         onSuccess={() => {
-          stableFetchTimeEntries();
+          fetchTimeEntries();
         }}
       />
     </div>

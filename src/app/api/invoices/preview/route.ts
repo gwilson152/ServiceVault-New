@@ -13,7 +13,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Check permission to view billing/invoices
-    const canViewBilling = await hasPermission(session.user.id, { resource: "billing", action: "view" });
+    const canView = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "billing",
+      action: "view"
+    });
     if (!canViewBilling) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }

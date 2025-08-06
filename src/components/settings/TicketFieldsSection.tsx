@@ -16,10 +16,10 @@ import {
 } from "@/lib/ticket-number-generator";
 
 interface TicketFieldsSectionProps {
-  onSettingsChange: () => void;
+  // No props needed - each section manages its own state
 }
 
-export function TicketFieldsSection({ onSettingsChange }: TicketFieldsSectionProps) {
+export function TicketFieldsSection({}: TicketFieldsSectionProps) {
   const [template, setTemplate] = useState("");
   const [originalTemplate, setOriginalTemplate] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -94,7 +94,6 @@ export function TicketFieldsSection({ onSettingsChange }: TicketFieldsSectionPro
 
       if (response.ok) {
         setOriginalTemplate(template);
-        onSettingsChange();
       } else {
         const error = await response.json();
         console.error("Error updating template:", error);

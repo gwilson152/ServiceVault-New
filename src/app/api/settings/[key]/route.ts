@@ -1,16 +1,18 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { permissionService } from "@/lib/permissions/PermissionService";
 import { settingsService } from "@/lib/settings";
 
 interface RouteParams {
-  params: {
+  params: Promise<{
     key: string;
-  };
+  }>;
 }
 
 // GET /api/settings/[key] - Get a specific setting
 export async function GET(request: Request, { params }: RouteParams) {
+  const resolvedParams = await params;
   try {
     const session = await getServerSession(authOptions);
     
@@ -18,12 +20,18 @@ export async function GET(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Only admin users can access settings
-    if (session.user.role !== "ADMIN") {
+    // Check if user has permission to view settings
+    const hasPermission = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: 'settings',
+      action: 'view'
+    });
+
+    if (!hasPermission) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const { key } = params;
+    const { key } = resolvedParams;
     
     if (!key) {
       return NextResponse.json({ 
@@ -39,7 +47,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       exists: value !== null && value !== undefined
     });
   } catch (error) {
-    console.error(`Error fetching setting ${params.key}:`, error);
+    console.error(`Error fetching setting:`, error);
     return NextResponse.json({ 
       error: "Internal server error" 
     }, { status: 500 });
@@ -48,6 +56,7 @@ export async function GET(request: Request, { params }: RouteParams) {
 
 // PUT /api/settings/[key] - Set a specific setting
 export async function PUT(request: Request, { params }: RouteParams) {
+  const resolvedParams = await params;
   try {
     const session = await getServerSession(authOptions);
     
@@ -55,12 +64,18 @@ export async function PUT(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Only admin users can modify settings
-    if (session.user.role !== "ADMIN") {
+    // Check if user has permission to update settings
+    const hasPermission = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: 'settings',
+      action: 'update'
+    });
+
+    if (!hasPermission) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const { key } = params;
+    const { key } = resolvedParams;
     const body = await request.json();
     const { value, description } = body;
 
@@ -85,7 +100,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
       value
     });
   } catch (error) {
-    console.error(`Error updating setting ${params.key}:`, error);
+    console.error(`Error updating setting:`, error);
     return NextResponse.json({ 
       error: error instanceof Error ? error.message : "Failed to update setting" 
     }, { status: 500 });
@@ -94,6 +109,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
 
 // DELETE /api/settings/[key] - Delete a specific setting
 export async function DELETE(request: Request, { params }: RouteParams) {
+  const resolvedParams = await params;
   try {
     const session = await getServerSession(authOptions);
     
@@ -101,12 +117,18 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Only admin users can delete settings
-    if (session.user.role !== "ADMIN") {
+    // Check if user has permission to delete settings
+    const hasPermission = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: 'settings',
+      action: 'delete'
+    });
+
+    if (!hasPermission) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const { key } = params;
+    const { key } = resolvedParams;
     
     if (!key) {
       return NextResponse.json({ 
@@ -122,7 +144,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       key
     });
   } catch (error) {
-    console.error(`Error deleting setting ${params.key}:`, error);
+    console.error(`Error deleting setting:`, error);
     return NextResponse.json({ 
       error: "Failed to delete setting" 
     }, { status: 500 });

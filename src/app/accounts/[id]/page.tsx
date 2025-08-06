@@ -44,6 +44,7 @@ import { CreateAccountUserDialog } from "@/components/accounts/CreateAccountUser
 import { EditAccountUserDialog } from "@/components/accounts/EditAccountUserDialog";
 import { AccountUserPermissionDialog } from "@/components/accounts/AccountUserPermissionDialog";
 import { AccountUserRoleManager } from "@/components/accounts/AccountUserRoleManager";
+import { AddExistingUserDialog } from "@/components/accounts/AddExistingUserDialog";
 import { usePermissions } from "@/hooks/usePermissions";
 import { AccountUserWithStatus, getAccountUserStatusDisplay } from "@/types/account-user";
 
@@ -108,6 +109,7 @@ export default function AccountDetailsPage() {
     phone: ''
   });
   const [isCreateUserDialogOpen, setIsCreateUserDialogOpen] = useState(false);
+  const [isAddExistingUserDialogOpen, setIsAddExistingUserDialogOpen] = useState(false);
   const [isEditUserDialogOpen, setIsEditUserDialogOpen] = useState(false);
   const [isPermissionDialogOpen, setIsPermissionDialogOpen] = useState(false);
   const [showMoveUserDialog, setShowMoveUserDialog] = useState(false);
@@ -116,7 +118,14 @@ export default function AccountDetailsPage() {
   const [userToEdit, setUserToEdit] = useState<AccountUserWithStatus | null>(null);
   const [userToDelete, setUserToDelete] = useState<AccountUserWithStatus | null>(null);
   
-  const { canCreateUsers, canResendInvitations, canUpdateUsers, canDeleteUsers } = usePermissions();
+  const { 
+    canCreateUsers, 
+    canResendInvitations, 
+    canUpdateUsers, 
+    canDeleteUsers, 
+    canViewAccounts,
+    loading: permissionsLoading 
+  } = usePermissions();
 
   const handleMoveUser = (accountUser: AccountUserWithStatus) => {
     setUserToMove(accountUser);
@@ -299,14 +308,14 @@ export default function AccountDetailsPage() {
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/");
-    } else if (status === "authenticated") {
-      if (session.user?.role !== "ADMIN" && session.user?.role !== "EMPLOYEE") {
+    } else if (status === "authenticated" && !permissionsLoading) {
+      if (!canViewAccounts) {
         router.push("/dashboard");
       } else {
         fetchAccount();
       }
     }
-  }, [status, session, router, accountId]);
+  }, [status, session, router, accountId, canViewAccounts, permissionsLoading]);
 
   const handleSave = async () => {
     try {
@@ -330,7 +339,7 @@ export default function AccountDetailsPage() {
     }
   };
 
-  if (status === "loading" || isLoading) {
+  if (status === "loading" || isLoading || permissionsLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-lg">Loading...</div>
@@ -338,7 +347,7 @@ export default function AccountDetailsPage() {
     );
   }
 
-  if (!session || (session.user?.role !== "ADMIN" && session.user?.role !== "EMPLOYEE")) {
+  if (!session || !canViewAccounts) {
     return null;
   }
 
@@ -630,12 +639,20 @@ export default function AccountDetailsPage() {
                         {account.allAccountUsers && ` (${account.allAccountUsers.length} total)`}
                       </CardDescription>
                     </div>
-                    {canCreateUsers && (
-                      <Button onClick={() => setIsCreateUserDialogOpen(true)}>
-                        <Plus className="mr-2 h-4 w-4" />
-                        Invite User
-                      </Button>
-                    )}
+                    <div className="flex gap-2">
+                      {canCreateUsers && (
+                        <Button onClick={() => setIsCreateUserDialogOpen(true)}>
+                          <Plus className="mr-2 h-4 w-4" />
+                          Invite User
+                        </Button>
+                      )}
+                      {canCreateUsers && (
+                        <Button variant="outline" onClick={() => setIsAddExistingUserDialogOpen(true)}>
+                          <Users className="mr-2 h-4 w-4" />
+                          Add Existing User
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -975,6 +992,15 @@ export default function AccountDetailsPage() {
         accountId={accountId}
         accountName={account?.name || ''}
         onUserCreated={fetchAccount}
+      />
+
+      {/* Add Existing User Dialog */}
+      <AddExistingUserDialog
+        open={isAddExistingUserDialogOpen}
+        onOpenChange={setIsAddExistingUserDialogOpen}
+        accountId={accountId}
+        accountName={account?.name || ''}
+        onUserAdded={fetchAccount}
       />
 
       {/* Edit User Dialog */}

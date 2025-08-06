@@ -11,7 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { AccountSelector } from "@/components/selectors/account-selector";
-import { usePermissions, useTimeEntryPermissions } from "@/hooks/usePermissions";
+import { usePermissions } from "@/hooks/usePermissions";
+import { useTimeEntryPermissions } from "@/hooks/queries/useTimeEntryPermissions";
 import { formatMinutes } from "@/lib/time-utils";
 import { Lock, FileText, Building, DollarSign, AlertTriangle } from "lucide-react";
 

@@ -10,11 +10,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Save, AlertCircle, CheckCircle, Settings, Globe, Clock, RotateCcw } from "lucide-react";
-import { CompanyInfoSection } from "./CompanyInfoSection";
 import { useToast } from "@/hooks/useToast";
 
 interface GeneralSettingsSectionProps {
-  onSettingsChange: () => void;
+  // No props needed - each section manages its own state
 }
 
 interface SystemSettings {
@@ -72,7 +71,7 @@ const DEFAULT_SETTINGS: SystemSettings = {
   maintenanceMode: false,
 };
 
-export function GeneralSettingsSection({ onSettingsChange }: GeneralSettingsSectionProps) {
+export function GeneralSettingsSection({}: GeneralSettingsSectionProps) {
   const [settings, setSettings] = useState<SystemSettings>(DEFAULT_SETTINGS);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -85,13 +84,64 @@ export function GeneralSettingsSection({ onSettingsChange }: GeneralSettingsSect
 
   const loadSettings = async () => {
     try {
-      const response = await fetch('/api/settings/system');
-      if (response.ok) {
-        const data = await response.json();
-        setSettings({ ...DEFAULT_SETTINGS, ...data });
-      } else {
-        console.log('No system settings found, using defaults');
+      // Use individual API calls for each setting key to match SettingsService approach
+      const settingKeys = [
+        'system.appName',
+        'system.appDescription', 
+        'system.timezone',
+        'system.dateFormat',
+        'system.language',
+        'system.maintenanceMode',
+        'email.enableEmailNotifications',
+        'company.defaultTaxRate',
+        'company.companyEmail'
+      ];
+
+      const settingsData: Partial<SystemSettings> = {};
+      
+      for (const key of settingKeys) {
+        try {
+          const response = await fetch(`/api/settings/${encodeURIComponent(key)}`);
+          if (response.ok) {
+            const data = await response.json();
+            
+            // Map settings keys to local properties
+            switch(key) {
+              case 'system.appName':
+                settingsData.appName = data.value;
+                break;
+              case 'system.appDescription':
+                settingsData.appDescription = data.value;
+                break;
+              case 'system.timezone':
+                settingsData.timezone = data.value;
+                break;
+              case 'system.dateFormat':
+                settingsData.dateFormat = data.value;
+                break;
+              case 'system.language':
+                settingsData.language = data.value;
+                break;
+              case 'system.maintenanceMode':
+                settingsData.maintenanceMode = data.value;
+                break;
+              case 'email.enableEmailNotifications':
+                settingsData.enableEmailNotifications = data.value;
+                break;
+              case 'company.defaultTaxRate':
+                settingsData.defaultTaxRate = data.value;
+                break;
+              case 'company.companyEmail':
+                settingsData.supportEmail = data.value;
+                break;
+            }
+          }
+        } catch (err) {
+          console.log(`Setting ${key} not found, using default`);
+        }
       }
+
+      setSettings({ ...DEFAULT_SETTINGS, ...settingsData });
     } catch (err) {
       console.error('Failed to load system settings:', err);
       error('Failed to load system settings');
@@ -103,27 +153,42 @@ export function GeneralSettingsSection({ onSettingsChange }: GeneralSettingsSect
   const handleSettingChange = (key: keyof SystemSettings, value: string | number | boolean) => {
     setSettings(prev => ({ ...prev, [key]: value }));
     setHasChanges(true);
-    onSettingsChange();
   };
 
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      const response = await fetch('/api/settings/system', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(settings),
+      // Use individual PUT requests to match SettingsService approach
+      const settingsToSave = [
+        { key: 'system.appName', value: settings.appName },
+        { key: 'system.appDescription', value: settings.appDescription },
+        { key: 'system.timezone', value: settings.timezone },
+        { key: 'system.dateFormat', value: settings.dateFormat },
+        { key: 'system.language', value: settings.language },
+        { key: 'system.maintenanceMode', value: settings.maintenanceMode },
+        { key: 'email.enableEmailNotifications', value: settings.enableEmailNotifications },
+        { key: 'company.defaultTaxRate', value: settings.defaultTaxRate },
+        { key: 'company.companyEmail', value: settings.supportEmail },
+      ];
+
+      const savePromises = settingsToSave.map(async ({ key, value }) => {
+        const response = await fetch(`/api/settings/${encodeURIComponent(key)}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ value }),
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Failed to save ${key}`);
+        }
       });
 
-      if (response.ok) {
-        setHasChanges(false);
-        success('System settings saved successfully');
-      } else {
-        const data = await response.json();
-        error('Failed to save system settings', data.error);
-      }
+      await Promise.all(savePromises);
+      
+      setHasChanges(false);
+      success('System settings saved successfully');
     } catch (err) {
       console.error('Failed to save system settings:', err);
       error('Failed to save system settings');
@@ -150,9 +215,6 @@ export function GeneralSettingsSection({ onSettingsChange }: GeneralSettingsSect
 
   return (
     <div className="space-y-6">
-      {/* Company Information Section */}
-      <CompanyInfoSection onSettingsChange={onSettingsChange} />
-
       {/* Application Information */}
       <Card>
         <CardHeader>

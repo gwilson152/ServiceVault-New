@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { hasPermission } from '@/lib/permissions';
+import { permissionService } from '@/lib/permissions/PermissionService';
 
 export async function GET(request: NextRequest) {
   try {
@@ -13,9 +13,10 @@ export async function GET(request: NextRequest) {
     }
 
     // Check if user has permission to view roles
-    const canViewRoles = await hasPermission(session.user.id, {
-      resource: 'system',
-      action: 'admin'
+    const canViewRoles = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "system",
+      action: "admin"
     });
 
     if (!canViewRoles) {
@@ -27,7 +28,8 @@ export async function GET(request: NextRequest) {
       include: {
         _count: {
           select: {
-            userRoles: true
+            membershipRoles: true,
+            systemRoles: true
           }
         }
       }
@@ -53,9 +55,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if user has permission to create roles
-    const canCreateRoles = await hasPermission(session.user.id, {
-      resource: 'system',
-      action: 'admin'
+    const canCreateRoles = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "system",
+      action: "admin"
     });
 
     if (!canCreateRoles) {
@@ -63,7 +66,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, description, permissions, isTemplate, applicableTo, defaultScope } = body;
+    const { name, description, permissions, inheritAllPermissions, isSystemRole, scope } = body;
 
     if (!name || !Array.isArray(permissions)) {
       return NextResponse.json(
@@ -72,20 +75,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate applicableTo field
-    const validApplicableTo = ['system', 'account', 'both'];
-    if (applicableTo && !validApplicableTo.includes(applicableTo)) {
+    // Validate scope field
+    const validScopes = ['account', 'system', 'global'];
+    if (scope && !validScopes.includes(scope)) {
       return NextResponse.json(
-        { error: 'Invalid applicableTo value. Must be "system", "account", or "both"' },
-        { status: 400 }
-      );
-    }
-
-    // Validate defaultScope field
-    const validScopes = ['own', 'account', 'subsidiary'];
-    if (defaultScope && !validScopes.includes(defaultScope)) {
-      return NextResponse.json(
-        { error: 'Invalid defaultScope value. Must be "own", "account", or "subsidiary"' },
+        { error: 'Invalid scope value. Must be "account", "system", or "global"' },
         { status: 400 }
       );
     }
@@ -108,9 +102,9 @@ export async function POST(request: NextRequest) {
         name,
         description,
         permissions,
-        isTemplate: isTemplate || false,
-        applicableTo: applicableTo || 'system',
-        defaultScope: defaultScope || 'own'
+        inheritAllPermissions: inheritAllPermissions || false,
+        isSystemRole: isSystemRole || false,
+        scope: scope || 'account'
       }
     });
 
@@ -134,9 +128,10 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Check if user has permission to delete roles
-    const canDeleteRoles = await hasPermission(session.user.id, {
-      resource: 'system',
-      action: 'admin'
+    const canDeleteRoles = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "system",
+      action: "admin"
     });
 
     if (!canDeleteRoles) {
@@ -159,7 +154,8 @@ export async function DELETE(request: NextRequest) {
       include: {
         _count: {
           select: {
-            userRoles: true
+            membershipRoles: true,
+            systemRoles: true
           }
         }
       }
@@ -170,7 +166,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Prevent deletion if role is assigned to users
-    if (role._count.userRoles > 0) {
+    if (role._count.membershipRoles > 0 || role._count.systemRoles > 0) {
       return NextResponse.json(
         { error: 'Cannot delete role that is assigned to users' },
         { status: 400 }
@@ -201,9 +197,10 @@ export async function PUT(request: NextRequest) {
     }
 
     // Check if user has permission to update roles
-    const canUpdateRoles = await hasPermission(session.user.id, {
-      resource: 'system',
-      action: 'admin'
+    const canUpdateRoles = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "system",
+      action: "admin"
     });
 
     if (!canUpdateRoles) {
@@ -211,7 +208,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { id, name, description, permissions, isTemplate, applicableTo, defaultScope } = body;
+    const { id, name, description, permissions, inheritAllPermissions, isSystemRole, scope } = body;
 
     if (!id) {
       return NextResponse.json(
@@ -250,9 +247,9 @@ export async function PUT(request: NextRequest) {
         ...(name && { name }),
         ...(description !== undefined && { description }),
         ...(permissions && { permissions }),
-        ...(isTemplate !== undefined && { isTemplate }),
-        ...(applicableTo && { applicableTo }),
-        ...(defaultScope && { defaultScope })
+        ...(inheritAllPermissions !== undefined && { inheritAllPermissions }),
+        ...(isSystemRole !== undefined && { isSystemRole }),
+        ...(scope && { scope })
       }
     });
 

@@ -2,12 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { hasPermission, PERMISSIONS } from "@/lib/permissions";
+import { permissionService } from "@/lib/permissions/PermissionService";
 
 // ABAC permission check for time entry editing
 async function checkTimeEntryEditPermission(user: { id: string; role: string }, timeEntry: { userId: string }): Promise<boolean> {
   // Check base permission to update time entries
-  const canUpdateTimeEntries = await hasPermission(user.id, { resource: "time-entries", action: "update" });
+  const canUpdateTimeEntries = await permissionService.hasPermission({
+    userId: user.id,
+    resource: "time-entries",
+    action: "update"
+  });
   if (!canUpdateTimeEntries) {
     return false;
   }
@@ -19,10 +23,10 @@ async function checkTimeEntryEditPermission(user: { id: string; role: string }, 
 
   // For additional business logic (like managers editing subordinate entries), 
   // we could check if user has update permission with "account" scope
-  const canUpdateAccountTimeEntries = await hasPermission(user.id, { 
-    resource: "time-entries", 
-    action: "update", 
-    scope: "account" 
+  const canUpdateAccountTimeEntries = await permissionService.hasPermission({
+    userId: user.id,
+    resource: "time-entries",
+    action: "update-account"
   });
   
   return canUpdateAccountTimeEntries;
@@ -79,18 +83,22 @@ export async function GET(
     }
 
     // Check permission to view time entries
-    const canViewTimeEntries = await hasPermission(session.user.id, { resource: "time-entries", action: "view" });
+    const canView = await permissionService.hasPermission(
+      session.user.id,
+      "time-entries",
+      "view"
+    );
     if (!canViewTimeEntries) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     // Additional scope-based access check
     const isOwner = timeEntry.userId === session.user.id;
-    const canViewAccountTimeEntries = await hasPermission(session.user.id, { 
-      resource: "time-entries", 
-      action: "view", 
-      scope: "account" 
-    });
+    const canViewAccountTimeEntries = await permissionService.hasPermission(
+      session.user.id, 
+      "time-entries", 
+      "view-account"
+    );
 
     if (!isOwner && !canViewAccountTimeEntries) {
       // For account users, check if they have access to the related account
@@ -172,7 +180,11 @@ export async function PUT(
     // Handle approval actions
     if (action === 'approve' || action === 'reject') {
       // Check approval permissions
-      const canApprove = await hasPermission(session.user.id, PERMISSIONS.TIME_ENTRIES.APPROVE);
+      const canApprove = await permissionService.hasPermission({
+        userId: session.user.id,
+        resource: "time-entries",
+        action: "approve"
+      });
       if (!canApprove) {
         return NextResponse.json({ error: "Access denied - approval permission required" }, { status: 403 });
       }

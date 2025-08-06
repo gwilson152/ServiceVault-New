@@ -13,7 +13,11 @@ export async function GET(request: NextRequest) {
     }
 
     // Check permission for system admin operations
-    const canAdminSystem = await hasPermission(session.user.id, { resource: "system", action: "admin" });
+    const canAdminSystem = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "system",
+      action: "admin"
+    });
     if (!canAdminSystem) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
@@ -38,7 +42,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Check permission for system admin operations
-    const canAdminSystem = await hasPermission(session.user.id, { resource: "system", action: "admin" });
+    const canAdminSystem = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "system",
+      action: "admin"
+    });
     if (!canAdminSystem) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }

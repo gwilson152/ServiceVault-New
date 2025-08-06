@@ -8,14 +8,30 @@ interface UsePermissionsReturn {
   isSuperAdmin: boolean;
   loading: boolean;
   permissions: UserPermissions | undefined;
-  canViewTimeEntries: () => boolean;
-  canCreateTimeEntries: () => boolean;
-  canEditTimeEntries: () => boolean;
-  canApproveTimeEntries: () => boolean;
-  canViewBilling: () => boolean;
-  canCreateInvoices: () => boolean;
-  canViewAccounts: () => boolean;
-  canManageUsers: () => boolean;
+  canViewTimeEntries: boolean;
+  canCreateTimeEntries: boolean;
+  canEditTimeEntries: boolean;
+  canApproveTimeEntries: boolean;
+  canViewBilling: boolean;
+  canViewInvoices: boolean;
+  canCreateInvoices: boolean;
+  canViewAccounts: boolean;
+  canViewUsers: boolean;
+  canCreateUsers: boolean;
+  canEditUsers: boolean;
+  canDeleteUsers: boolean;
+  canManageUsers: boolean;
+  canViewTickets: boolean;
+  canCreateTickets: boolean;
+  canEditTickets: boolean;
+  canDeleteTickets: boolean;
+  canViewSettings: boolean;
+  canEditSettings: boolean;
+  canViewReports: boolean;
+  canViewRoleTemplates: boolean;
+  canCreateRoleTemplates: boolean;
+  canEditRoleTemplates: boolean;
+  canDeleteRoleTemplates: boolean;
 }
 
 /**
@@ -87,30 +103,31 @@ export function usePermissions(): UsePermissionsReturn {
     return false;
   }, [permissions]);
 
-  // Convenience methods for common permissions
-  const canViewTimeEntries = useCallback(() => 
-    hasPermission('time-entries', 'view'), [hasPermission]);
-  
-  const canCreateTimeEntries = useCallback(() => 
-    hasPermission('time-entries', 'create'), [hasPermission]);
-  
-  const canEditTimeEntries = useCallback(() => 
-    hasPermission('time-entries', 'update'), [hasPermission]);
-  
-  const canApproveTimeEntries = useCallback(() => 
-    hasPermission('time-entries', 'approve'), [hasPermission]);
-  
-  const canViewBilling = useCallback(() => 
-    hasPermission('billing', 'view'), [hasPermission]);
-  
-  const canCreateInvoices = useCallback(() => 
-    hasPermission('invoices', 'create'), [hasPermission]);
-  
-  const canViewAccounts = useCallback(() => 
-    hasPermission('accounts', 'view'), [hasPermission]);
-  
-  const canManageUsers = useCallback(() => 
-    hasPermission('users', 'manage'), [hasPermission]);
+  // Convenience computed values for common permissions
+  const canViewTimeEntries = hasPermission('time-entries', 'view');
+  const canCreateTimeEntries = hasPermission('time-entries', 'create');
+  const canEditTimeEntries = hasPermission('time-entries', 'update');
+  const canApproveTimeEntries = hasPermission('time-entries', 'approve');
+  const canViewBilling = hasPermission('billing', 'view');
+  const canViewInvoices = hasPermission('invoices', 'view');
+  const canCreateInvoices = hasPermission('invoices', 'create');
+  const canViewAccounts = hasPermission('accounts', 'view');
+  const canViewUsers = hasPermission('users', 'view');
+  const canCreateUsers = hasPermission('users', 'create');
+  const canEditUsers = hasPermission('users', 'edit');
+  const canDeleteUsers = hasPermission('users', 'delete');
+  const canManageUsers = hasPermission('users', 'manage');
+  const canViewTickets = hasPermission('tickets', 'view');
+  const canCreateTickets = hasPermission('tickets', 'create');
+  const canEditTickets = hasPermission('tickets', 'update');
+  const canDeleteTickets = hasPermission('tickets', 'delete');
+  const canViewSettings = hasPermission('system', 'admin');
+  const canEditSettings = hasPermission('settings', 'edit');
+  const canViewReports = hasPermission('reports', 'view');
+  const canViewRoleTemplates = hasPermission('role-templates', 'view');
+  const canCreateRoleTemplates = hasPermission('role-templates', 'create');
+  const canEditRoleTemplates = hasPermission('role-templates', 'edit');
+  const canDeleteRoleTemplates = hasPermission('role-templates', 'delete');
 
   return {
     hasPermission,
@@ -122,9 +139,25 @@ export function usePermissions(): UsePermissionsReturn {
     canEditTimeEntries,
     canApproveTimeEntries,
     canViewBilling,
+    canViewInvoices,
     canCreateInvoices,
     canViewAccounts,
-    canManageUsers
+    canViewUsers,
+    canCreateUsers,
+    canEditUsers,
+    canDeleteUsers,
+    canManageUsers,
+    canViewTickets,
+    canCreateTickets,
+    canEditTickets,
+    canDeleteTickets,
+    canViewSettings,
+    canEditSettings,
+    canViewReports,
+    canViewRoleTemplates,
+    canCreateRoleTemplates,
+    canEditRoleTemplates,
+    canDeleteRoleTemplates
   };
 }
 

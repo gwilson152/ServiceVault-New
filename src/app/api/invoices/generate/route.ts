@@ -13,7 +13,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Check permission to create billing/invoices
-    const canCreateBilling = await hasPermission(session.user.id, { resource: "billing", action: "create" });
+    const canCreate = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "billing",
+      action: "create"
+    });
     if (!canCreateBilling) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }

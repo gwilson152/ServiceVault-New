@@ -3,7 +3,7 @@
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, use, useCallback } from "react";
-import { useInvoicePermissions } from "@/hooks/usePermissions";
+import { usePermissions } from "@/hooks/usePermissions";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -108,8 +108,14 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   const resolvedParams = use(params);
   const { addAction, clearActions } = useActionBar();
 
-  // Use base permissions hook for batch checking
-  const { hasPermission, checkPermissions } = usePermissions();
+  // Use base permissions hook
+  const { 
+    canViewInvoices, 
+    canEditInvoices, 
+    canDeleteInvoices, 
+    canCreateInvoices,
+    loading: permissionsLoading 
+  } = usePermissions();
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -424,7 +430,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     }
   }, [invoice]);
 
-  if (status === "loading" || isLoading) {
+  if (status === "loading" || isLoading || permissionsLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-lg">Loading...</div>
@@ -432,7 +438,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     );
   }
 
-  if (!session || (session.user?.role !== "ADMIN" && session.user?.role !== "EMPLOYEE")) {
+  if (!session || !canViewInvoices) {
     return null;
   }
 

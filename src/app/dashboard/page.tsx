@@ -50,6 +50,7 @@ import { Badge } from "@/components/ui/badge";
 import { Clock, Users, FileText, DollarSign, Plus, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { RecentTimeEntries } from "@/components/dashboard/RecentTimeEntries";
+import { usePermissions } from "@/hooks/usePermissions";
 
 interface DashboardStats {
   activeTickets: number;
@@ -90,13 +91,28 @@ export default function Dashboard() {
   const [recentTickets, setRecentTickets] = useState<RecentTicket[]>([]);
   const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([]);
 
+  const {
+    canViewTickets,
+    canCreateTimeEntries,
+    canViewAccounts,
+    canCreateInvoices,
+    canViewInvoices,
+    isSuperAdmin,
+    loading: permissionsLoading
+  } = usePermissions();
+
+  // Check if user has account memberships (portal user)
+  const hasAccountMemberships = session?.user?.memberships && session.user.memberships.length > 0;
+  const hasSystemRoles = session?.user?.systemRoles && session.user.systemRoles.length > 0;
+  const isPortalUser = hasAccountMemberships && !hasSystemRoles;
+
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/");
-    } else if (status === "authenticated" && (session?.user?.role === "CUSTOMER" || session?.user?.role === "ACCOUNT_USER")) {
+    } else if (status === "authenticated" && isPortalUser) {
       router.push("/portal");
     }
-  }, [status, session, router]);
+  }, [status, session, router, isPortalUser]);
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -126,7 +142,7 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, [status]);
 
-  if (status === "loading") {
+  if (status === "loading" || permissionsLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-lg">Loading...</div>
@@ -138,8 +154,9 @@ export default function Dashboard() {
     return null;
   }
 
-  const isAdmin = session.user?.role === "ADMIN";
-  const isEmployee = session.user?.role === "EMPLOYEE" || isAdmin;
+  // Permission-based access instead of role-based
+  const canManageSystem = isSuperAdmin;
+  const canManageTickets = canViewTickets;
 
   const statsCards = [
     {
@@ -218,11 +235,11 @@ export default function Dashboard() {
           <Tabs defaultValue="overview" className="space-y-4">
             <TabsList>
               <TabsTrigger value="overview">Overview</TabsTrigger>
-              {isEmployee && (
-                <>
-                  <TabsTrigger value="tickets">Recent Tickets</TabsTrigger>
-                  <TabsTrigger value="time">Time Entries</TabsTrigger>
-                </>
+              {canViewTickets && (
+                <TabsTrigger value="tickets">Recent Tickets</TabsTrigger>
+              )}
+              {canCreateTimeEntries && (
+                <TabsTrigger value="time">Time Entries</TabsTrigger>
               )}
             </TabsList>
 
@@ -275,51 +292,51 @@ export default function Dashboard() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-2">
-                    {isEmployee && (
-                      <>
-                        <Button 
-                          className="w-full justify-start"
-                          onClick={() => router.push("/tickets/new")}
-                        >
-                          <Plus className="mr-2 h-4 w-4" />
-                          Create New Ticket
-                        </Button>
-                        <Button 
-                          variant="outline" 
-                          className="w-full justify-start"
-                          onClick={() => router.push("/time")}
-                        >
-                          <Clock className="mr-2 h-4 w-4" />
-                          Log Time Entry
-                        </Button>
-                      </>
+                    {canViewTickets && (
+                      <Button 
+                        className="w-full justify-start"
+                        onClick={() => router.push("/tickets/new")}
+                      >
+                        <Plus className="mr-2 h-4 w-4" />
+                        Create New Ticket
+                      </Button>
                     )}
-                    {isAdmin && (
-                      <>
-                        <Button 
-                          variant="outline" 
-                          className="w-full justify-start"
-                          onClick={() => router.push("/accounts/new")}
-                        >
-                          <Users className="mr-2 h-4 w-4" />
-                          Add New Account
-                        </Button>
-                        <Button 
-                          variant="outline" 
-                          className="w-full justify-start"
-                          onClick={() => router.push("/invoices/generate")}
-                        >
-                          <DollarSign className="mr-2 h-4 w-4" />
-                          Generate Invoice
-                        </Button>
-                      </>
+                    {canCreateTimeEntries && (
+                      <Button 
+                        variant="outline" 
+                        className="w-full justify-start"
+                        onClick={() => router.push("/time")}
+                      >
+                        <Clock className="mr-2 h-4 w-4" />
+                        Log Time Entry
+                      </Button>
+                    )}
+                    {canViewAccounts && (
+                      <Button 
+                        variant="outline" 
+                        className="w-full justify-start"
+                        onClick={() => router.push("/accounts/new")}
+                      >
+                        <Users className="mr-2 h-4 w-4" />
+                        Add New Account
+                      </Button>
+                    )}
+                    {canCreateInvoices && (
+                      <Button 
+                        variant="outline" 
+                        className="w-full justify-start"
+                        onClick={() => router.push("/invoices/generate")}
+                      >
+                        <DollarSign className="mr-2 h-4 w-4" />
+                        Generate Invoice
+                      </Button>
                     )}
                   </CardContent>
                 </Card>
               </div>
             </TabsContent>
 
-            {isEmployee && (
+            {canViewTickets && (
               <TabsContent value="tickets" className="space-y-4">
                 <Card>
                   <CardHeader>
@@ -380,7 +397,7 @@ export default function Dashboard() {
               </TabsContent>
             )}
 
-            {isEmployee && (
+            {canCreateTimeEntries && (
               <TabsContent value="time" className="space-y-4">
                 <RecentTimeEntries userId={session.user?.id} limit={10} />
               </TabsContent>

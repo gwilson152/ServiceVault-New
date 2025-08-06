@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { hasPermission } from '@/lib/permissions';
+import { permissionService } from '@/lib/permissions/PermissionService';
 
 export async function GET(
   request: NextRequest,
@@ -16,8 +16,12 @@ export async function GET(
     }
 
     // Check permission to view time entries
-    const canViewTimeEntries = await hasPermission(session.user.id, { resource: 'time-entries', action: 'view' });
-    if (!canViewTimeEntries) {
+    const canView = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "time-entries",
+      action: "view"
+    });
+    if (!canView) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -140,8 +144,12 @@ export async function POST(
     }
 
     // Check permission to view time entries
-    const canViewTimeEntries = await hasPermission(session.user.id, { resource: 'time-entries', action: 'view' });
-    if (!canViewTimeEntries) {
+    const canView = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "time-entries",
+      action: "view"
+    });
+    if (!canView) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { hasPermission } from '@/lib/permissions';
+import { permissionService } from '@/lib/permissions/PermissionService';
 
 export async function GET(
   request: NextRequest,
@@ -16,8 +16,12 @@ export async function GET(
     }
 
     // Check permission to view accounts
-    const canViewAccounts = await hasPermission(session.user.id, { resource: 'accounts', action: 'view' });
-    if (!canViewAccounts) {
+    const canView = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "accounts",
+      action: "view"
+    });
+    if (!canView) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -26,7 +30,7 @@ export async function GET(
     const account = await prisma.account.findUnique({
       where: { id },
       include: {
-        accountUsers: {
+        memberships: {
           include: {
             user: {
               select: { id: true, email: true, name: true, createdAt: true }
@@ -39,7 +43,7 @@ export async function GET(
             assignee: {
               select: { id: true, name: true, email: true }
             },
-            accountUserCreator: {
+            creator: {
               select: { id: true, name: true, email: true }
             },
             _count: {
@@ -73,17 +77,17 @@ export async function GET(
         settings: true,
         billingRates: {
           include: {
-            user: {
-              select: { id: true, name: true, email: true }
+            billingRate: {
+              select: { id: true, name: true, rate: true }
             }
           }
         },
-        parentAccount: {
+        parent: {
           select: { id: true, name: true, accountType: true }
         },
-        childAccounts: {
+        children: {
           include: {
-            accountUsers: {
+            memberships: {
               include: {
                 user: {
                   select: { id: true, email: true, name: true, createdAt: true }
@@ -103,9 +107,9 @@ export async function GET(
     // Calculate detailed statistics
     const stats = {
       users: {
-        total: account.accountUsers.length,
-        active: account.accountUsers.filter(au => au.user !== null).length,
-        pending: account.accountUsers.filter(au => au.user === null).length,
+        total: account.memberships.length,
+        active: account.memberships.filter(m => m.user !== null).length,
+        pending: account.memberships.filter(m => m.user === null).length,
       },
       tickets: {
         total: account.tickets.length,
@@ -129,43 +133,47 @@ export async function GET(
     };
 
     // Add status information and statistics to account users
-    const processAccountUser = (accountUser: any, sourceAccountName?: string) => {
+    const processAccountUser = (membership: any, sourceAccountName?: string) => {
       const userStats = {
         tickets: {
-          created: account.tickets.filter(t => t.accountUserCreator?.id === accountUser.id).length,
-          assigned: account.tickets.filter(t => t.assignedAccountUserId === accountUser.id).length,
+          created: account.tickets.filter(t => t.creator?.id === membership.user?.id).length,
+          assigned: account.tickets.filter(t => t.assignee?.id === membership.user?.id).length,
         },
         timeEntries: {
-          total: account.timeEntries.filter(te => te.userId === accountUser.user?.id).length,
+          total: account.timeEntries.filter(te => te.userId === membership.user?.id).length,
           totalMinutes: account.timeEntries
-            .filter(te => te.userId === accountUser.user?.id)
+            .filter(te => te.userId === membership.user?.id)
             .reduce((sum, te) => sum + te.minutes, 0),
           billableMinutes: account.timeEntries
-            .filter(te => te.userId === accountUser.user?.id && !te.noCharge)
+            .filter(te => te.userId === membership.user?.id && !te.noCharge)
             .reduce((sum, te) => sum + te.minutes, 0),
         }
       };
 
       return {
-        ...accountUser,
-        hasLogin: !!accountUser.user,
-        canBeAssigned: accountUser.isActive,
-        invitationStatus: accountUser.user ? 'activated' : 
-                         accountUser.invitationToken ? 'pending' : 'none',
+        ...membership,
+        // Convert membership to accountUser format for backward compatibility
+        id: membership.id,
+        userId: membership.user?.id,
+        email: membership.user?.email,
+        name: membership.user?.name,
+        hasLogin: !!membership.user,
+        canBeAssigned: true, // Memberships are active by default
+        invitationStatus: membership.user ? 'activated' : 'pending',
         sourceAccount: sourceAccountName || account.name,
         stats: userStats
       };
     };
 
     // Process direct account users
-    const directAccountUsers = account.accountUsers.map(accountUser => 
-      processAccountUser(accountUser)
+    const directAccountUsers = account.memberships.map(membership => 
+      processAccountUser(membership)
     );
 
     // Process child account users
-    const childAccountUsers = account.childAccounts.flatMap(childAccount => 
-      childAccount.accountUsers.map(accountUser => 
-        processAccountUser(accountUser, childAccount.name)
+    const childAccountUsers = account.children.flatMap(childAccount => 
+      childAccount.memberships.map(membership => 
+        processAccountUser(membership, childAccount.name)
       )
     );
 
@@ -176,11 +184,11 @@ export async function GET(
       ...account,
       accountUsers: directAccountUsers, // Keep original for backward compatibility
       allAccountUsers: allAccountUsers, // New field with all users including child accounts
-      childAccounts: account.childAccounts.map(child => ({
+      childAccounts: account.children.map(child => ({
         id: child.id,
         name: child.name,
         accountType: child.accountType
-      })), // Remove the accountUsers from childAccounts to avoid duplication
+      })), // Remove the memberships from children to avoid duplication
       stats
     };
 
@@ -207,8 +215,12 @@ export async function PUT(
     }
 
     // Check permission to update accounts
-    const canUpdateAccounts = await hasPermission(session.user.id, { resource: 'accounts', action: 'update' });
-    if (!canUpdateAccounts) {
+    const canUpdate = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "accounts",
+      action: "update"
+    });
+    if (!canUpdate) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -243,10 +255,10 @@ export async function PUT(
         customFields,
       },
       include: {
-        parentAccount: {
+        parent: {
           select: { id: true, name: true, accountType: true }
         },
-        childAccounts: {
+        children: {
           select: { id: true, name: true, accountType: true }
         }
       }
@@ -275,8 +287,12 @@ export async function DELETE(
     }
 
     // Check permission to update accounts
-    const canUpdateAccounts = await hasPermission(session.user.id, { resource: 'accounts', action: 'update' });
-    if (!canUpdateAccounts) {
+    const canUpdate = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "accounts",
+      action: "update"
+    });
+    if (!canUpdate) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -291,8 +307,8 @@ export async function DELETE(
             tickets: true,
             timeEntries: true,
             invoices: true,
-            accountUsers: true,
-            childAccounts: true,
+            memberships: true,
+            children: true,
           }
         }
       }
@@ -303,7 +319,7 @@ export async function DELETE(
     }
 
     // Prevent deletion if account has child accounts
-    if (account._count.childAccounts > 0) {
+    if (account._count.children > 0) {
       return NextResponse.json(
         { error: 'Cannot delete account with subsidiary accounts' },
         { status: 400 }
@@ -320,8 +336,8 @@ export async function DELETE(
 
     // Delete related data in transaction
     await prisma.$transaction([
-      // Delete account users (this will also handle invitation cleanup)
-      prisma.accountUser.deleteMany({
+      // Delete account memberships (this will also handle invitation cleanup)
+      prisma.accountMembership.deleteMany({
         where: { accountId: id }
       }),
       // Delete time entries

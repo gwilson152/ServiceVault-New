@@ -5,12 +5,9 @@ export interface AccountWithHierarchy {
   name: string;
   accountType: string;
   companyName?: string;
-  parentAccount?: { id: string; name: string; accountType: string };
-  childAccounts: Array<{ id: string; name: string; accountType: string }>;
-  accountUsers: Array<{
+  parent?: { id: string; name: string; accountType: string };
+  memberships: Array<{
     id: string;
-    name: string;
-    email: string;
     user?: { id: string; name: string; email: string };
   }>;
   stats: {
@@ -44,9 +41,9 @@ export function buildAccountHierarchy(accounts: AccountWithHierarchy[]): Account
   accounts.forEach(account => {
     const currentAccount = accountMap.get(account.id)!;
     
-    if (account.parentAccount?.id) {
+    if (account.parent?.id) {
       // This is a child account
-      const parent = accountMap.get(account.parentAccount.id);
+      const parent = accountMap.get(account.parent.id);
       if (parent) {
         parent.children!.push(currentAccount);
         currentAccount.depth = (parent.depth || 0) + 1;

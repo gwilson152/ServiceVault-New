@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { permissionService } from "@/lib/permissions/PermissionService";
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,8 +11,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Only employees and admins can use timers
-    if (session.user.role !== 'EMPLOYEE' && session.user.role !== 'ADMIN') {
+    // Check if user has permission to create time entries (can use timers)
+    const hasPermission = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: 'time-entries',
+      action: 'create'
+    });
+
+    if (!hasPermission) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

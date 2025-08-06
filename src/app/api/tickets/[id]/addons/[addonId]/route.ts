@@ -5,8 +5,9 @@ import { prisma } from "@/lib/prisma";
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string; addonId: string } }
+  { params }: { params: Promise<{ id: string; addonId: string }> }
 ) {
+  const resolvedParams = await params;
   try {
     const session = await getServerSession(authOptions);
 
@@ -26,7 +27,7 @@ export async function PATCH(
 
     // Check if addon exists and user has access
     const addon = await prisma.ticketAddon.findUnique({
-      where: { id: params.addonId },
+      where: { id: resolvedParams.addonId },
       include: { 
         ticket: { 
           include: { account: true } 
@@ -38,7 +39,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Addon not found" }, { status: 404 });
     }
 
-    if (addon.ticketId !== params.id) {
+    if (addon.ticketId !== resolvedParams.id) {
       return NextResponse.json({ error: "Addon does not belong to this ticket" }, { status: 400 });
     }
 
@@ -55,7 +56,7 @@ export async function PATCH(
     }
 
     const updatedAddon = await prisma.ticketAddon.update({
-      where: { id: params.addonId },
+      where: { id: resolvedParams.addonId },
       data: {
         name,
         description: description || null,
@@ -87,7 +88,7 @@ export async function DELETE(
 
     // Check if addon exists and user has access
     const addon = await prisma.ticketAddon.findUnique({
-      where: { id: params.addonId },
+      where: { id: resolvedParams.addonId },
       include: { 
         ticket: { 
           include: { account: true } 
@@ -99,7 +100,7 @@ export async function DELETE(
       return NextResponse.json({ error: "Addon not found" }, { status: 404 });
     }
 
-    if (addon.ticketId !== params.id) {
+    if (addon.ticketId !== resolvedParams.id) {
       return NextResponse.json({ error: "Addon does not belong to this ticket" }, { status: 400 });
     }
 
@@ -116,7 +117,7 @@ export async function DELETE(
     }
 
     await prisma.ticketAddon.delete({
-      where: { id: params.addonId },
+      where: { id: resolvedParams.addonId },
     });
 
     return NextResponse.json({ success: true });

@@ -150,7 +150,7 @@ async function main() {
     update: {},
     create: {
       key: 'default_billing_rate',
-      value: '100.00',
+      value: '90.00',
     }
   });
 
@@ -175,31 +175,55 @@ async function main() {
   // Create default billing rates
   console.log('Creating default billing rates...');
 
-  const defaultRate = await prisma.billingRate.upsert({
-    where: { name: 'Standard Rate' },
+  const standardRate = await prisma.billingRate.upsert({
+    where: { name: 'Standard Hourly Rate' },
     update: {},
     create: {
-      name: 'Standard Rate',
-      description: 'Default hourly rate for time entries',
-      rate: 100.00,
+      name: 'Standard Hourly Rate',
+      description: 'Default hourly rate for general consulting and support',
+      rate: 90.00,
       isDefault: true
     }
   });
 
-  const seniorRate = await prisma.billingRate.upsert({
-    where: { name: 'Senior Rate' },
+  const criticalRate = await prisma.billingRate.upsert({
+    where: { name: 'Critical Hourly Rate' },
     update: {},
     create: {
-      name: 'Senior Rate',
-      description: 'Senior consultant hourly rate',
-      rate: 150.00,
+      name: 'Critical Hourly Rate',
+      description: 'Premium rate for urgent and critical work',
+      rate: 130.00,
+      isDefault: false
+    }
+  });
+
+  const travelRate = await prisma.billingRate.upsert({
+    where: { name: 'Travel' },
+    update: {},
+    create: {
+      name: 'Travel',
+      description: 'Rate for travel time and expenses',
+      rate: 50.00,
+      isDefault: false
+    }
+  });
+
+  const developmentRate = await prisma.billingRate.upsert({
+    where: { name: 'Development Hourly' },
+    update: {},
+    create: {
+      name: 'Development Hourly',
+      description: 'Rate for development and programming work',
+      rate: 65.00,
       isDefault: false
     }
   });
 
   console.log('✅ Created default billing rates:');
-  console.log(`  - Standard Rate: $${defaultRate.rate}/hour (Default)`);
-  console.log(`  - Senior Rate: $${seniorRate.rate}/hour`);
+  console.log(`  - Standard Hourly Rate: $${standardRate.rate}/hour (Default)`);
+  console.log(`  - Critical Hourly Rate: $${criticalRate.rate}/hour`);
+  console.log(`  - Travel: $${travelRate.rate}/hour`);
+  console.log(`  - Development Hourly: $${developmentRate.rate}/hour`);
 
   // Create sample accounts for development (optional)
   if (process.env.NODE_ENV === 'development') {

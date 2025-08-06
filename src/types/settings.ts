@@ -11,6 +11,9 @@ export interface SettingDefinition {
   description: string;
   defaultValue?: any;
   encrypted?: boolean;
+  readPermissions?: string[]; // Permissions required to read this setting
+  writePermissions?: string[]; // Permissions required to write this setting
+  scope?: 'system' | 'account' | 'user'; // Which scope this setting applies to
 }
 
 export interface SystemSetting {
@@ -161,7 +164,10 @@ export const SETTING_DEFINITIONS: Record<string, SettingDefinition> = {
     type: 'string',
     category: SettingsCategory.EMAIL,
     required: true,
-    description: 'SMTP server hostname'
+    description: 'SMTP server hostname',
+    scope: 'system',
+    readPermissions: ['settings:view', 'email:view'],
+    writePermissions: ['settings:edit', 'system:admin']
   },
   'email.smtpPort': {
     key: 'email.smtpPort',
@@ -200,14 +206,20 @@ export const SETTING_DEFINITIONS: Record<string, SettingDefinition> = {
     category: SettingsCategory.EMAIL,
     required: true,
     description: 'Default from email address',
-    validation: (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+    validation: (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value),
+    scope: 'system',
+    readPermissions: ['settings:view', 'email:view'],
+    writePermissions: ['settings:edit', 'system:admin']
   },
   'email.fromName': {
     key: 'email.fromName',
     type: 'string',
     category: SettingsCategory.EMAIL,
     required: true,
-    description: 'Default from name for emails'
+    description: 'Default from name for emails',
+    scope: 'system',
+    readPermissions: ['settings:view', 'email:view'],
+    writePermissions: ['settings:edit', 'system:admin']
   },
   'email.enableEmailNotifications': {
     key: 'email.enableEmailNotifications',
@@ -215,7 +227,10 @@ export const SETTING_DEFINITIONS: Record<string, SettingDefinition> = {
     category: SettingsCategory.EMAIL,
     required: true,
     description: 'Enable email notifications system-wide',
-    defaultValue: true
+    defaultValue: true,
+    scope: 'system',
+    readPermissions: ['settings:view'],
+    writePermissions: ['settings:edit', 'system:admin']
   },
 
   // Company settings

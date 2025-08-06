@@ -10,7 +10,6 @@ interface User {
   id: string;
   name: string;
   email: string;
-  role: string;
 }
 
 interface Ticket {
@@ -64,6 +63,7 @@ import {
 } from "lucide-react";
 import { formatMinutes } from "@/lib/time-utils";
 import { useActionBar } from "@/components/providers/ActionBarProvider";
+import { usePermissions } from "@/hooks/usePermissions";
 
 export default function TicketsPage() {
   const { data: session, status } = useSession();
@@ -97,12 +97,19 @@ export default function TicketsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isCreateMode, setIsCreateMode] = useState(false);
 
-  // Permission checks
-  const isAdmin = session?.user?.role === "ADMIN";
-  const isEmployee = session?.user?.role === "EMPLOYEE";
-  const canCreateTickets = isAdmin || isEmployee;
-  const canEditAllTickets = isAdmin;
-  const canDeleteTickets = isAdmin;
+  // Permission checks using new system
+  const { 
+    canViewTickets, 
+    canCreateTickets: canCreate, 
+    canEditTickets, 
+    canDeleteTickets,
+    loading: permissionsLoading 
+  } = usePermissions();
+  
+  // Derived permissions for backward compatibility
+  const canCreateTickets = canCreate;
+  const canEditAllTickets = canEditTickets;
+  const canDeleteTicketsPermission = canDeleteTickets;
 
   // Data fetching functions
   const fetchTickets = useCallback(async () => {
@@ -160,25 +167,18 @@ export default function TicketsPage() {
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/");
-    } else if (status === "authenticated") {
-      // Handle different user roles
-      const role = session.user?.role;
-      if (role === "ACCOUNT_USER") {
-        // Account users can view tickets but with restricted access
-        Promise.all([fetchTickets(), fetchAccounts(), fetchUsers(), fetchCustomFields()]).then(() => {
-          setIsLoading(false);
-        });
-      } else if (role === "EMPLOYEE" || role === "ADMIN") {
-        // Employees and admins have full access
-        Promise.all([fetchTickets(), fetchAccounts(), fetchUsers(), fetchCustomFields()]).then(() => {
-          setIsLoading(false);
-        });
-      } else {
-        // Other roles redirect to dashboard
+    } else if (status === "authenticated" && !permissionsLoading) {
+      // Check if user has permission to view tickets
+      if (!canViewTickets) {
         router.push("/dashboard");
+      } else {
+        // User has permission to view tickets - load data
+        Promise.all([fetchTickets(), fetchAccounts(), fetchUsers(), fetchCustomFields()]).then(() => {
+          setIsLoading(false);
+        });
       }
     }
-  }, [status, session, router, fetchTickets, fetchAccounts, fetchUsers, fetchCustomFields]);
+  }, [status, session, router, fetchTickets, fetchAccounts, fetchUsers, fetchCustomFields, canViewTickets, permissionsLoading]);
 
   // Register for timer logged events to auto-refresh tickets
   useEffect(() => {
@@ -215,7 +215,7 @@ export default function TicketsPage() {
     };
   }, [canCreateTickets, addAction, clearActions]);
 
-  if (status === "loading" || isLoading) {
+  if (status === "loading" || isLoading || permissionsLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-lg">Loading...</div>

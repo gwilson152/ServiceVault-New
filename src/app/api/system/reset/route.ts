@@ -19,7 +19,11 @@ export async function POST(request: Request) {
     }
 
     // Check permission for system admin operations
-    const canAdminSystem = await hasPermission(session.user.id, { resource: "system", action: "admin" });
+    const canAdminSystem = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "system",
+      action: "admin"
+    });
     if (!canAdminSystem) {
       return NextResponse.json({ error: "Forbidden - System admin permission required" }, { status: 403 });
     }

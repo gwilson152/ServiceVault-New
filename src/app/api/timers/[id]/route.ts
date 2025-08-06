@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { permissionService } from "@/lib/permissions/PermissionService";
 
 export async function GET(
   request: NextRequest,
@@ -37,8 +38,14 @@ export async function GET(
       return NextResponse.json({ error: "Timer not found" }, { status: 404 });
     }
 
-    // Check permissions - only the owner or admin can view
-    if (session.user.role !== 'ADMIN' && timer.userId !== session.user.id) {
+    // Check if user has permission to view time entries and owns this timer
+    const hasPermission = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: 'time-entries',
+      action: 'view'
+    });
+
+    if (!hasPermission || timer.userId !== session.user.id) {
       return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }
 
@@ -73,8 +80,14 @@ export async function PUT(
       return NextResponse.json({ error: "Timer not found" }, { status: 404 });
     }
 
-    // Check permissions - only the owner or admin can update
-    if (session.user.role !== 'ADMIN' && existingTimer.userId !== session.user.id) {
+    // Check if user has permission to update time entries and owns this timer
+    const hasPermission = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: 'time-entries',
+      action: 'update'
+    });
+
+    if (!hasPermission || existingTimer.userId !== session.user.id) {
       return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }
 
@@ -152,8 +165,14 @@ export async function DELETE(
       return NextResponse.json({ error: "Timer not found" }, { status: 404 });
     }
 
-    // Check permissions - only the owner or admin can delete
-    if (session.user.role !== 'ADMIN' && existingTimer.userId !== session.user.id) {
+    // Check if user has permission to delete time entries and owns this timer
+    const hasPermission = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: 'time-entries',
+      action: 'delete'
+    });
+
+    if (!hasPermission || existingTimer.userId !== session.user.id) {
       return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }
 

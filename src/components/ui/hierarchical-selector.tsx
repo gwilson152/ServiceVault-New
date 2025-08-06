@@ -53,6 +53,7 @@ export interface HierarchicalSelectorProps<T extends HierarchicalItem> {
   enableGrouping?: boolean;
   enableSearch?: boolean;
   enableFilters?: boolean;
+  allowClear?: boolean;
   searchPlaceholder?: string;
   emptyMessage?: string;
   className?: string;
@@ -68,6 +69,7 @@ export function HierarchicalSelector<T extends HierarchicalItem>({
   enableGrouping = true,
   enableSearch = true,
   enableFilters = false,
+  allowClear = false,
   searchPlaceholder = "Search items...",
   emptyMessage = "No items found",
   className = ""
@@ -219,24 +221,40 @@ export function HierarchicalSelector<T extends HierarchicalItem>({
                   placeholder={searchPlaceholder}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className={`pl-8 h-9 ${enableFilters ? 'pr-20' : ''}`}
+                  className={`pl-8 h-9 ${(enableFilters || allowClear) ? 'pr-20' : ''}`}
                   onClick={(e) => e.stopPropagation()}
                   onKeyDown={(e) => e.stopPropagation()}
                 />
-                {enableFilters && (
+                {(enableFilters || allowClear) && (
                   <div className="absolute right-1 top-1 flex gap-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShowFilters(!showFilters);
-                      }}
-                    >
-                      <Filter className="h-3 w-3" />
-                    </Button>
-                    {(searchQuery || activeFilters.size > 0) && (
+                    {enableFilters && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowFilters(!showFilters);
+                        }}
+                      >
+                        <Filter className="h-3 w-3" />
+                      </Button>
+                    )}
+                    {allowClear && value && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onValueChange("");
+                        }}
+                        title="Clear selection"
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    )}
+                    {enableFilters && (searchQuery || activeFilters.size > 0) && (
                       <Button
                         variant="ghost"
                         size="sm"
@@ -245,6 +263,7 @@ export function HierarchicalSelector<T extends HierarchicalItem>({
                           e.stopPropagation();
                           clearAllFilters();
                         }}
+                        title="Clear filters"
                       >
                         <X className="h-3 w-3" />
                       </Button>

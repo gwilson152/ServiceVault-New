@@ -24,6 +24,7 @@ import {
   PieChart,
   LineChart
 } from "lucide-react";
+import { usePermissions } from "@/hooks/usePermissions";
 
 interface ReportStats {
   accounts: {
@@ -59,6 +60,7 @@ export default function ReportsPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
   const [dateRange, setDateRange] = useState("30");
+  const { canViewReports, loading: permissionsLoading } = usePermissions();
   const [stats, setStats] = useState<ReportStats>({
     accounts: {
       total: 0,
@@ -134,14 +136,14 @@ export default function ReportsPage() {
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/");
-    } else if (status === "authenticated") {
-      if (session.user?.role !== "ADMIN" && session.user?.role !== "EMPLOYEE") {
+    } else if (status === "authenticated" && !permissionsLoading) {
+      if (!canViewReports) {
         router.push("/dashboard");
       } else {
         fetchReportData();
       }
     }
-  }, [status, session, router]);
+  }, [status, session, router, canViewReports, permissionsLoading]);
 
   useEffect(() => {
     if (!isLoading) {
@@ -149,7 +151,7 @@ export default function ReportsPage() {
     }
   }, [dateRange]);
 
-  if (status === "loading" || isLoading) {
+  if (status === "loading" || isLoading || permissionsLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-lg">Loading reports...</div>
@@ -157,7 +159,7 @@ export default function ReportsPage() {
     );
   }
 
-  if (!session || (session.user?.role !== "ADMIN" && session.user?.role !== "EMPLOYEE")) {
+  if (!session || !canViewReports) {
     return null;
   }
 

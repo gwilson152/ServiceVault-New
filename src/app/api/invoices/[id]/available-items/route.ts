@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { hasPermission } from "@/lib/permissions";
+import { permissionService } from "@/lib/permissions/PermissionService";
 
 export async function GET(
   request: NextRequest,
@@ -27,11 +27,12 @@ export async function GET(
     }
 
     // Check permission to view invoice items with account context
-    const canEditItems = await hasPermission(session.user.id, {
-      resource: "invoices",
-      action: "edit-items",
-      accountId: invoiceForAuth.accountId
-    });
+    const canEditItems = await permissionService.hasPermission(
+      session.user.id, 
+      "invoices", 
+      "edit-items",
+      invoiceForAuth.accountId
+    );
 
     if (!canEditItems) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });

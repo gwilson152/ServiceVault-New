@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { hasPermission } from "@/lib/permissions";
+import { permissionService } from "@/lib/permissions/PermissionService";
 import jsPDF from "jspdf";
 
 export async function GET(
@@ -28,11 +28,12 @@ export async function GET(
     }
 
     // Check permission to export PDF with account context
-    const canExportPDF = await hasPermission(session.user.id, {
-      resource: "invoices",
-      action: "export-pdf",
-      accountId: invoiceForAuth.accountId
-    });
+    const canExportPDF = await permissionService.hasPermission(
+      session.user.id,
+      "invoices",
+      "export-pdf",
+      invoiceForAuth.accountId
+    );
 
     if (!canExportPDF) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });

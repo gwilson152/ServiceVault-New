@@ -28,7 +28,12 @@ export default function CustomerTickets() {
     if (status === "unauthenticated") {
       router.push("/");
     } else if (status === "authenticated") {
-      if (session.user?.role !== "CUSTOMER") {
+      // Check if user is a portal user (has account memberships but no system roles)
+      const hasAccountMemberships = session.user?.memberships && session.user.memberships.length > 0;
+      const hasSystemRoles = session.user?.systemRoles && session.user.systemRoles.length > 0;
+      const isPortalUser = hasAccountMemberships && !hasSystemRoles;
+      
+      if (!isPortalUser) {
         router.push("/dashboard");
       } else {
         setIsLoading(false);
@@ -44,7 +49,12 @@ export default function CustomerTickets() {
     );
   }
 
-  if (!session || session.user?.role !== "CUSTOMER") {
+  // Check if user is a portal user
+  const hasAccountMemberships = session?.user?.memberships && session.user.memberships.length > 0;
+  const hasSystemRoles = session?.user?.systemRoles && session.user.systemRoles.length > 0;
+  const isPortalUser = hasAccountMemberships && !hasSystemRoles;
+
+  if (!session || !isPortalUser) {
     return null;
   }
 

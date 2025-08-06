@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { SETTING_DEFINITIONS, SettingsCategory, type SettingDefinition, type SystemSetting } from '@/types/settings';
+import { permissionService } from '@/lib/permissions/PermissionService';
 
 // Initialize Prisma client
 const prisma = new PrismaClient();
@@ -10,10 +11,18 @@ const prisma = new PrismaClient();
  */
 export class SettingsService {
   /**
-   * Get a setting value with optional default
+   * Get a setting value with optional default and permission checking
    */
-  async get<T = any>(key: string, defaultValue?: T): Promise<T> {
+  async get<T = any>(key: string, defaultValue?: T, userId?: string): Promise<T> {
     try {
+      // Check read permissions if userId provided
+      if (userId) {
+        const canRead = await this.checkReadPermission(userId, key);
+        if (!canRead) {
+          throw new Error(`Access denied: User ${userId} cannot read setting ${key}`);
+        }
+      }
+
       const setting = await prisma.systemSettings.findUnique({
         where: { key }
       });
@@ -25,10 +34,6 @@ export class SettingsService {
       }
 
       // Return appropriate value based on setting type
-      if (setting.jsonValue !== null && setting.jsonValue !== undefined) {
-        return setting.jsonValue as T;
-      }
-
       if (setting.value !== null) {
         const definition = SETTING_DEFINITIONS[key];
         return this.parseValue(setting.value, definition?.type || 'string') as T;
@@ -42,10 +47,18 @@ export class SettingsService {
   }
 
   /**
-   * Set a setting value with validation
+   * Set a setting value with validation and permission checking
    */
-  async set(key: string, value: any, description?: string): Promise<void> {
+  async set(key: string, value: any, description?: string, userId?: string): Promise<void> {
     try {
+      // Check write permissions if userId provided
+      if (userId) {
+        const canWrite = await this.checkWritePermission(userId, key);
+        if (!canWrite) {
+          throw new Error(`Access denied: User ${userId} cannot write setting ${key}`);
+        }
+      }
+
       const definition = SETTING_DEFINITIONS[key];
       
       // Validate the value if definition exists
@@ -53,24 +66,18 @@ export class SettingsService {
         throw new Error(`Invalid value for setting ${key}`);
       }
 
-      // Determine storage method based on type
-      const isJsonValue = typeof value === 'object' || definition?.type === 'json';
-      const stringValue = isJsonValue ? null : String(value);
-      const jsonValue = isJsonValue ? value : null;
+      // Store all values as strings, parse on retrieval
+      const stringValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
 
       await prisma.systemSettings.upsert({
         where: { key },
         update: {
           value: stringValue,
-          jsonValue: jsonValue,
-          description: description || definition?.description || null,
           updatedAt: new Date()
         },
         create: {
           key,
-          value: stringValue,
-          jsonValue: jsonValue,
-          description: description || definition?.description || null
+          value: stringValue
         }
       });
     } catch (error) {
@@ -126,9 +133,7 @@ export class SettingsService {
       const result: Record<string, any> = {};
 
       for (const setting of allSettings) {
-        if (setting.jsonValue !== null && setting.jsonValue !== undefined) {
-          result[setting.key] = setting.jsonValue;
-        } else if (setting.value !== null) {
+        if (setting.value !== null) {
           const definition = SETTING_DEFINITIONS[setting.key];
           result[setting.key] = this.parseValue(setting.value, definition?.type || 'string');
         }
@@ -283,6 +288,56 @@ export class SettingsService {
         [SettingsCategory.FEATURES]: {}
       };
     }
+  }
+
+  /**
+   * Check if user has read permission for a setting
+   */
+  private async checkReadPermission(userId: string, key: string): Promise<boolean> {
+    const definition = SETTING_DEFINITIONS[key];
+    if (!definition?.readPermissions?.length) {
+      return true; // No read restrictions
+    }
+
+    // Check if user has any of the required read permissions
+    for (const permission of definition.readPermissions) {
+      const [resource, action] = permission.split(':');
+      const hasPermission = await permissionService.hasPermission({
+        userId,
+        resource,
+        action
+      });
+      if (hasPermission) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Check if user has write permission for a setting
+   */
+  private async checkWritePermission(userId: string, key: string): Promise<boolean> {
+    const definition = SETTING_DEFINITIONS[key];
+    if (!definition?.writePermissions?.length) {
+      return true; // No write restrictions
+    }
+
+    // Check if user has any of the required write permissions
+    for (const permission of definition.writePermissions) {
+      const [resource, action] = permission.split(':');
+      const hasPermission = await permissionService.hasPermission({
+        userId,
+        resource,
+        action
+      });
+      if (hasPermission) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   /**

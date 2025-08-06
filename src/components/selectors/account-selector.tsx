@@ -34,6 +34,7 @@ export interface AccountSelectorProps {
   placeholder?: string;
   enableFilters?: boolean;
   enableGrouping?: boolean;
+  allowClear?: boolean;
   className?: string;
 }
 
@@ -44,6 +45,7 @@ export function AccountSelector({
   placeholder = "Select an account",
   enableFilters = true,
   enableGrouping = true,
+  allowClear = false,
   className = ""
 }: AccountSelectorProps) {
   
@@ -131,6 +133,7 @@ export function AccountSelector({
       enableGrouping={enableGrouping}
       enableSearch={true}
       enableFilters={enableFilters}
+      allowClear={allowClear}
       searchPlaceholder="Search accounts..."
       emptyMessage="No accounts found"
       className={className}

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { hasPermission } from "@/lib/permissions";
+import { permissionService } from "@/lib/permissions/PermissionService";
 
 export async function GET(
   request: NextRequest,
@@ -27,11 +27,12 @@ export async function GET(
     }
 
     // Check permission to view this invoice with account context
-    const canViewInvoice = await hasPermission(session.user.id, {
-      resource: "invoices",
-      action: "view",
-      accountId: invoiceForAuth.accountId
-    });
+    const canViewInvoice = await permissionService.hasPermission(
+      session.user.id,
+      "invoices",
+      "view",
+      invoiceForAuth.accountId
+    );
 
     if (!canViewInvoice) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -97,11 +98,12 @@ export async function PUT(
     }
 
     // Check permission to update this invoice with account context
-    const canUpdateInvoice = await hasPermission(session.user.id, {
-      resource: "invoices",
-      action: "update",
-      accountId: invoiceForAuth.accountId
-    });
+    const canUpdateInvoice = await permissionService.hasPermission(
+      session.user.id,
+      "invoices",
+      "update",
+      invoiceForAuth.accountId
+    );
 
     if (!canUpdateInvoice) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -112,11 +114,12 @@ export async function PUT(
 
     // For date updates, check specific permission
     if ((issueDate !== undefined || dueDate !== undefined)) {
-      const canUpdateDates = await hasPermission(session.user.id, {
-        resource: "invoices",
-        action: "update-dates",
-        accountId: invoiceForAuth.accountId
-      });
+      const canUpdateDates = await permissionService.hasPermission(
+        session.user.id,
+        "invoices",
+        "update-dates",
+        invoiceForAuth.accountId
+      );
 
       if (!canUpdateDates) {
         return NextResponse.json({ 
@@ -204,11 +207,12 @@ export async function DELETE(
     }
 
     // Check permission to delete this invoice with account context
-    const canDeleteInvoice = await hasPermission(session.user.id, {
-      resource: "invoices",
-      action: "delete",
-      accountId: invoiceForAuth.accountId
-    });
+    const canDeleteInvoice = await permissionService.hasPermission(
+      session.user.id,
+      "invoices",
+      "delete",
+      invoiceForAuth.accountId
+    );
 
     if (!canDeleteInvoice) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });

@@ -5,20 +5,21 @@ import { useRouter, usePathname } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { 
-  Menu, 
+import {
+  Menu,
   X,
   Home,
-  FileText, 
-  Users, 
-  Clock, 
-  DollarSign, 
-  Settings, 
+  FileText,
+  Users,
+  Clock,
+  DollarSign,
+  Settings,
   LogOut,
   Building,
   Timer,
   BarChart3,
-  Shield
+  Shield,
+  Crown
 } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 import { ActionBar } from "@/components/ui/ActionBar";
@@ -37,64 +38,73 @@ export function AppNavigation({ children }: AppNavigationProps) {
     canViewInvoices,
     canViewBilling,
     canViewSettings,
-    canViewReports
+    canViewReports,
+    canViewUsers,
+    canViewAccounts,
+    canViewTickets,
+    canViewTimeEntries,
+    canViewRoleTemplates
   } = usePermissions();
 
-  const isAdmin = session?.user?.role === "ADMIN";
-  const isEmployee = session?.user?.role === "EMPLOYEE";
-  const isAccountUser = session?.user?.role === "ACCOUNT_USER";
+  // Check if user has system-wide admin privileges
+  const isSystemAdmin = session?.user?.systemRoles?.some(
+    (sr: any) => sr.role.inheritAllPermissions
+  ) || false;
 
   const navigationItems = [
     {
       href: "/dashboard",
       icon: Home,
       label: "Dashboard",
-      show: isAdmin || isEmployee
+      show: true // All authenticated users can view dashboard
     },
     {
       href: "/tickets",
       icon: FileText,
       label: "Tickets",
-      show: true // All roles can view tickets
+      show: canViewTickets
     },
     {
       href: "/accounts",
       icon: Building,
       label: "Accounts",
-      show: isAdmin || isEmployee
+      show: canViewAccounts
+    },
+    {
+      href: "/users",
+      icon: Users,
+      label: "User Management",
+      show: canViewUsers
     },
     {
       href: "/time",
       icon: Clock,
       label: "Time Tracking",
-      show: isAdmin || isEmployee
+      show: canViewTimeEntries
     },
     {
       href: "/billing",
       icon: DollarSign,
       label: "Billing",
-      show: isAdmin || isEmployee,
-      requiresPermission: canViewInvoices || canViewBilling
+      show: canViewInvoices || canViewBilling
     },
     {
       href: "/reports",
       icon: BarChart3,
       label: "Reports",
-      show: isAdmin || isEmployee,
-      requiresPermission: canViewReports
+      show: canViewReports
     },
     {
       href: "/settings",
       icon: Settings,
       label: "Settings",
-      show: isAdmin || isEmployee,
-      requiresPermission: canViewSettings
+      show: canViewSettings
     },
     {
-      href: "/permissions",
-      icon: Shield,
-      label: "Permissions",
-      show: isAdmin // Only admins can manage permissions
+      href: "/roles",
+      icon: Crown,
+      label: "Role Templates",
+      show: canViewRoleTemplates // Super-admin only for role template management
     }
   ];
 
@@ -118,7 +128,7 @@ export function AppNavigation({ children }: AppNavigationProps) {
           >
             <Menu className="h-4 w-4" />
           </Button>
-          
+
           <div className="flex items-center space-x-2 ml-2">
             <Timer className="h-6 w-6" />
             <span className="font-semibold text-lg">Service Vault</span>
@@ -126,12 +136,14 @@ export function AppNavigation({ children }: AppNavigationProps) {
 
           <div className="ml-auto flex items-center space-x-4">
             <ActionBar />
-            
+
             <span className="text-sm text-muted-foreground hidden sm:block">
               {session?.user?.name || session?.user?.email}
             </span>
-            <Badge variant="secondary">{session?.user?.role}</Badge>
-            
+            <Badge variant="secondary">
+              {isSystemAdmin ? "System Admin" : "User"}
+            </Badge>
+
             <Button
               variant="ghost"
               size="icon"
@@ -146,9 +158,8 @@ export function AppNavigation({ children }: AppNavigationProps) {
 
       <div className="flex">
         {/* Sidebar */}
-        <aside className={`${
-          isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        } fixed inset-y-0 left-0 z-50 w-64 border-r bg-background transition-transform duration-200 ease-in-out md:translate-x-0 md:static md:inset-0`}>
+        <aside className={`${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+          } fixed inset-y-0 left-0 z-50 w-64 border-r bg-background transition-transform duration-200 ease-in-out md:translate-x-0 md:static md:inset-0`}>
           <div className="flex h-full flex-col pt-16 md:pt-0">
             {/* Mobile Header */}
             <div className="flex items-center justify-between p-4 md:hidden">
@@ -169,10 +180,9 @@ export function AppNavigation({ children }: AppNavigationProps) {
               <nav className="space-y-2">
                 {navigationItems.map((item) => {
                   const Icon = item.icon;
-                  
+
                   // Check if item should be shown
                   if (!item.show) return null;
-                  if (item.requiresPermission !== undefined && !item.requiresPermission) return null;
 
                   return (
                     <Button
@@ -200,7 +210,7 @@ export function AppNavigation({ children }: AppNavigationProps) {
                     {session?.user?.name || session?.user?.email}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {session?.user?.role}
+                    {isSystemAdmin ? "System Admin" : "User"}
                   </p>
                 </div>
               </div>

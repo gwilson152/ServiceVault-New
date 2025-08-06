@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { hasPermission } from "@/lib/permissions";
+import { permissionService } from "@/lib/permissions/PermissionService";
 
 export async function GET() {
   try {
@@ -13,8 +13,13 @@ export async function GET() {
     }
 
     // Check permission to view billing rates
-    const canViewBilling = await hasPermission(session.user.id, { resource: "billing", action: "view" });
-    if (!canViewBilling) {
+    const canView = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "billing",
+      action: "view"
+    });
+    
+    if (!canView) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -41,8 +46,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Check permission to create billing rates
-    const canCreateBilling = await hasPermission(session.user.id, { resource: "billing", action: "create" });
-    if (!canCreateBilling) {
+    const canCreate = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "billing",
+      action: "create"
+    });
+    
+    if (!canCreate) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

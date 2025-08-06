@@ -6,7 +6,6 @@ import { useEffect, useState, useCallback } from "react";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAllAccountsQuery } from "@/hooks/queries/useAccountsQuery";
 import { useBillingRatesQuery, useInvoicesQuery } from "@/hooks/queries/useBillingQuery";
-import { useCommonPermissionsQuery } from "@/hooks/queries/usePermissionsQuery";
 import { 
   useGenerateInvoiceMutation, 
   useCreateBillingRateMutation, 
@@ -48,7 +47,7 @@ export default function BillingPage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("invoices");
 
-  // Permission hooks
+  // Permission hooks - these return synchronous boolean values
   const {
     canViewInvoices,
     canCreateInvoices,
@@ -58,17 +57,17 @@ export default function BillingPage() {
     canViewBilling,
     canCreateBilling,
     canUpdateBilling,
-    canDeleteBilling
+    canDeleteBilling,
+    loading: permissionsHookLoading
   } = usePermissions();
 
   // TanStack Query hooks replace manual state management
   const { data: accounts = [], isLoading: accountsLoading } = useAllAccountsQuery();
   const { data: invoices = [], isLoading: invoicesLoading } = useInvoicesQuery();
   const { data: billingRates = [], isLoading: billingRatesLoading } = useBillingRatesQuery();
-  const { data: commonPermissions = {}, isLoading: permissionsLoading } = useCommonPermissionsQuery();
   
-  // Combined loading state from TanStack Query hooks
-  const isLoading = accountsLoading || invoicesLoading || billingRatesLoading || permissionsLoading;
+  // Combined loading state from TanStack Query hooks and permissions
+  const isLoading = accountsLoading || invoicesLoading || billingRatesLoading || permissionsHookLoading;
   
   // Permission state
   const [permissions, setPermissions] = useState({
@@ -113,34 +112,23 @@ export default function BillingPage() {
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/");
-    } else if (status === "authenticated") {
-      // Check permissions instead of hard-coded role
-      const checkPermissions = async () => {
-        const hasViewPermission = await canViewInvoices();
-        if (!hasViewPermission) {
-          router.push("/dashboard");
-          return;
-        }
+    } else if (status === "authenticated" && !permissionsHookLoading) {
+      // Check permissions using synchronous hook values
+      if (!canViewInvoices && !canViewBilling) {
+        router.push("/dashboard");
+        return;
+      }
 
-        // Check billing permissions
-        const [createBilling, updateBilling, deleteBilling] = await Promise.all([
-          canCreateBilling(),
-          canUpdateBilling(),
-          canDeleteBilling()
-        ]);
-        
-        setPermissions({
-          createBilling,
-          updateBilling,
-          deleteBilling
-        });
+      // Update local permissions state from hook values
+      setPermissions({
+        createBilling: canCreateBilling,
+        updateBilling: canUpdateBilling,
+        deleteBilling: canDeleteBilling
+      });
 
-        // Data fetching is now handled automatically by TanStack Query hooks
-      };
-
-      checkPermissions();
+      // Data fetching is now handled automatically by TanStack Query hooks
     }
-  }, [status, session, router, canViewInvoices, canCreateInvoices, canUpdateInvoices, canDeleteInvoices, canViewBilling, canCreateBilling, canUpdateBilling, canDeleteBilling, addAction]);
+  }, [status, session, router, canViewInvoices, canViewBilling, canCreateBilling, canUpdateBilling, canDeleteBilling, permissionsHookLoading]);
 
   // All useCallback hooks must be defined before any conditional returns
   const handleAddRate = useCallback(async () => {

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { hasPermission } from '@/lib/permissions';
+import { permissionService } from '@/lib/permissions/PermissionService';
 import { EmailTemplateType, EmailTemplateStatus } from '@prisma/client';
 
 interface RouteParams {
@@ -17,9 +17,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     // Check email templates permission
-    const canViewEmailTemplates = await hasPermission(session.user.id, {
-      resource: 'email',
-      action: 'templates'
+    const canViewEmailTemplates = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "email",
+      action: "templates"
     });
 
     if (!canViewEmailTemplates) {
@@ -64,9 +65,10 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     }
 
     // Check email templates permission
-    const canManageEmailTemplates = await hasPermission(session.user.id, {
-      resource: 'email',
-      action: 'templates'
+    const canManageEmailTemplates = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "email",
+      action: "templates"
     });
 
     if (!canManageEmailTemplates) {
@@ -171,9 +173,10 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     }
 
     // Check email templates permission
-    const canManageEmailTemplates = await hasPermission(session.user.id, {
-      resource: 'email',
-      action: 'templates'
+    const canManageEmailTemplates = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "email",
+      action: "templates"
     });
 
     if (!canManageEmailTemplates) {

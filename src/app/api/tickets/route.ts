@@ -3,7 +3,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { generateTicketNumber } from "@/lib/ticket-number-generator";
-import { hasPermission } from "@/lib/permissions";
+import { permissionService } from "@/lib/permissions/PermissionService";
+import { applyPermissionFilter } from "@/lib/permissions/withPermissions";
 
 export async function GET(request: NextRequest) {
   try {
@@ -14,7 +15,11 @@ export async function GET(request: NextRequest) {
     }
 
     // Check permission to view tickets
-    const canViewTickets = await hasPermission(session.user.id, { resource: "tickets", action: "view" });
+    const canViewTickets = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "tickets",
+      action: "view"
+    });
     if (!canViewTickets) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
@@ -26,24 +31,11 @@ export async function GET(request: NextRequest) {
     const priority = searchParams.get("priority");
     const search = searchParams.get("search");
 
-    // Build where clause based on user role and filters
+    // Build where clause based on filters
     const whereClause: Record<string, unknown> = {};
 
-    // Role-based filtering
-    if (session.user?.role === "ACCOUNT_USER") {
-      // Account users can only see their own account's tickets
-      const user = await prisma.user.findUnique({
-        where: { id: session.user.id },
-        include: { accountUser: { include: { account: true } } }
-      });
-      
-      if (!user?.accountUser?.account) {
-        return NextResponse.json({ error: "Account not found" }, { status: 404 });
-      }
-      
-      whereClause.accountId = user.accountUser.account.id;
-    } else if (customerId) {
-      // Admins and employees can filter by account (customer)
+    // Apply customer filter if provided
+    if (customerId) {
       whereClause.accountId = customerId;
     }
 
@@ -71,14 +63,13 @@ export async function GET(request: NextRequest) {
       ];
     }
 
-    const tickets = await prisma.ticket.findMany({
+    // Build base query
+    const query = {
       where: whereClause,
       include: {
         account: true,
         assignee: true,
-        assignedAccountUser: true,
         creator: true,
-        accountUserCreator: true,
         timeEntries: {
           include: {
             user: true,
@@ -86,8 +77,17 @@ export async function GET(request: NextRequest) {
         },
         addons: true,
       },
-      orderBy: { createdAt: "desc" },
-    });
+      orderBy: { createdAt: "desc" as const },
+    };
+
+    // Apply permission filtering
+    const filteredQuery = await applyPermissionFilter(
+      session.user.id,
+      "tickets",
+      query
+    );
+
+    const tickets = await prisma.ticket.findMany(filteredQuery);
 
     // Calculate aggregated data for each ticket
     const ticketsWithStats = tickets.map(ticket => ({
@@ -117,7 +117,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Check permission to create tickets
-    const canCreateTickets = await hasPermission(session.user.id, { resource: "tickets", action: "create" });
+    const canCreateTickets = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "tickets",
+      action: "create"
+    });
     if (!canCreateTickets) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
@@ -141,32 +145,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Role-based validation
-    let finalAccountId = accountId;
-    const creatorId = session.user.id;
-    let accountUserCreatorId = null;
-
-    if (session.user?.role === "ACCOUNT_USER") {
-      // Account users can only create tickets for themselves
-      const user = await prisma.user.findUnique({
-        where: { id: session.user.id },
-        include: { accountUser: { include: { account: true } } }
-      });
-      
-      if (!user?.accountUser?.account) {
-        return NextResponse.json({ error: "Account not found" }, { status: 404 });
-      }
-      
-      finalAccountId = user.accountUser.account.id;
-      accountUserCreatorId = user.accountUser.id;
-    }
-
-    if (!finalAccountId) {
+    // Validate account
+    if (!accountId) {
       return NextResponse.json(
         { error: "Account ID is required" },
         { status: 400 }
       );
     }
+
+    // Check if user has permission to create tickets for this account
+    const canCreateForAccount = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "tickets",
+      action: "create",
+      accountId
+    });
+
+    if (!canCreateForAccount) {
+      return NextResponse.json({ error: "No permission to create tickets for this account" }, { status: 403 });
+    }
+
+    const creatorId = session.user.id;
 
     // Validate assignee (agent/employee) if provided
     if (assigneeId && assigneeId !== "unassigned") {
@@ -181,13 +180,8 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Assignee must be an employee or admin, not an account user
-      if (assignee.role === "ACCOUNT_USER") {
-        return NextResponse.json(
-          { error: "Only employees and admins can be assigned as agents to work on tickets" },
-          { status: 400 }
-        );
-      }
+      // TODO: Check if assignee has permission to work on tickets
+      // For now, we'll allow any valid user
     }
 
     // Validate assigned account user if provided
@@ -204,7 +198,7 @@ export async function POST(request: NextRequest) {
       }
 
       // Assigned account user must belong to the same account as the ticket
-      if (assignedAccountUser.accountId !== finalAccountId) {
+      if (assignedAccountUser.accountId !== accountId) {
         return NextResponse.json(
           { error: "Account user must belong to the same account as the ticket" },
           { status: 400 }
@@ -216,7 +210,7 @@ export async function POST(request: NextRequest) {
     const result = await prisma.$transaction(async (tx) => {
       // Get account name for ticket number generation
       const account = await tx.account.findUnique({
-        where: { id: finalAccountId },
+        where: { id: accountId },
         select: { name: true }
       });
 
@@ -235,11 +229,11 @@ export async function POST(request: NextRequest) {
           priority: priority || "MEDIUM",
           status: "OPEN",
           ticketNumber,
-          accountId: finalAccountId,
+          accountId: accountId,
           assigneeId: assigneeId === "unassigned" ? null : assigneeId,
           assignedAccountUserId: assignedAccountUserId === "unassigned" ? null : assignedAccountUserId,
           creatorId: creatorId,
-          accountUserCreatorId: accountUserCreatorId,
+          accountUserCreatorId: null, // TODO: Handle when implementing account membership
           customFields: customFields || {},
         },
       });

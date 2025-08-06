@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { hasPermission } from "@/lib/permissions";
+import { permissionService } from "@/lib/permissions/PermissionService";
 
 export async function GET(request: NextRequest) {
   try {
@@ -13,8 +13,12 @@ export async function GET(request: NextRequest) {
     }
 
     // Check permission to view accounts
-    const canViewAccounts = await hasPermission(session.user.id, { resource: "accounts", action: "view" });
-    if (!canViewAccounts) {
+    const canView = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "accounts",
+      action: "view"
+    });
+    if (!canView) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -24,15 +28,15 @@ export async function GET(request: NextRequest) {
         name: true,
         accountType: true,
         companyName: true,
-        parentAccountId: true,
-        parentAccount: {
+        parentId: true,
+        parent: {
           select: {
             id: true,
             name: true,
             accountType: true,
           }
         },
-        childAccounts: {
+        children: {
           select: {
             id: true,
             name: true,

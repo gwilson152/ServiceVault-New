@@ -11,7 +11,7 @@ import { Building, Mail, Phone, Globe, DollarSign, Save, RotateCcw } from "lucid
 import { useToast } from "@/hooks/useToast";
 
 interface CompanyInfoSectionProps {
-  onSettingsChange: () => void;
+  // No props needed - each section manages its own state
 }
 
 const CURRENCY_OPTIONS = [
@@ -57,7 +57,7 @@ const DEFAULT_COMPANY_INFO: CompanyInfo = {
   description: ""
 };
 
-export function CompanyInfoSection({ onSettingsChange }: CompanyInfoSectionProps) {
+export function CompanyInfoSection({}: CompanyInfoSectionProps) {
   const [companyInfo, setCompanyInfo] = useState<CompanyInfo>(DEFAULT_COMPANY_INFO);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -70,13 +70,56 @@ export function CompanyInfoSection({ onSettingsChange }: CompanyInfoSectionProps
 
   const loadCompanyInfo = async () => {
     try {
-      const response = await fetch('/api/settings/company');
-      if (response.ok) {
-        const data = await response.json();
-        setCompanyInfo({ ...DEFAULT_COMPANY_INFO, ...data });
-      } else {
-        console.log('No company info found, using defaults');
+      // Use individual API calls for each setting key to match SettingsService approach
+      const settingKeys = [
+        'company.companyName',
+        'company.companyAddress',
+        'company.companyPhone',
+        'company.companyEmail',
+        'company.companyWebsite',
+        'company.defaultCurrency',
+        'company.defaultTaxRate'
+      ];
+
+      const companyData: Partial<CompanyInfo> = {};
+      
+      for (const key of settingKeys) {
+        try {
+          const response = await fetch(`/api/settings/${encodeURIComponent(key)}`);
+          if (response.ok) {
+            const data = await response.json();
+            
+            // Map settings keys to local properties
+            switch(key) {
+              case 'company.companyName':
+                companyData.companyName = data.value;
+                break;
+              case 'company.companyAddress':
+                companyData.address = data.value;
+                break;
+              case 'company.companyPhone':
+                companyData.phone = data.value;
+                break;
+              case 'company.companyEmail':
+                companyData.email = data.value;
+                break;
+              case 'company.companyWebsite':
+                companyData.website = data.value;
+                break;
+              case 'company.defaultCurrency':
+                companyData.currency = data.value;
+                break;
+              case 'company.defaultTaxRate':
+                // Note: defaultTaxRate is not part of CompanyInfo interface, skip for now
+                break;
+            }
+          }
+        } catch (err) {
+          console.log(`Setting ${key} not found, using default`);
+        }
       }
+
+      setCompanyInfo({ ...DEFAULT_COMPANY_INFO, ...companyData });
     } catch (err) {
       console.error('Failed to load company info:', err);
       error('Failed to load company information');
@@ -91,27 +134,39 @@ export function CompanyInfoSection({ onSettingsChange }: CompanyInfoSectionProps
       [field]: value
     }));
     setHasChanges(true);
-    onSettingsChange();
   };
 
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      const response = await fetch('/api/settings/company', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(companyInfo),
+      // Use individual PUT requests to match SettingsService approach
+      const settingsToSave = [
+        { key: 'company.companyName', value: companyInfo.companyName },
+        { key: 'company.companyAddress', value: companyInfo.address },
+        { key: 'company.companyPhone', value: companyInfo.phone },
+        { key: 'company.companyEmail', value: companyInfo.email },
+        { key: 'company.companyWebsite', value: companyInfo.website },
+        { key: 'company.defaultCurrency', value: companyInfo.currency },
+      ];
+
+      const savePromises = settingsToSave.map(async ({ key, value }) => {
+        const response = await fetch(`/api/settings/${encodeURIComponent(key)}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ value }),
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Failed to save ${key}`);
+        }
       });
 
-      if (response.ok) {
-        setHasChanges(false);
-        success('Company information saved successfully');
-      } else {
-        const data = await response.json();
-        error('Failed to save company information', data.error);
-      }
+      await Promise.all(savePromises);
+      
+      setHasChanges(false);
+      success('Company information saved successfully');
     } catch (err) {
       console.error('Failed to save company info:', err);
       error('Failed to save company information');

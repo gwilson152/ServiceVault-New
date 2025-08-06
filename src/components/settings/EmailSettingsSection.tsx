@@ -31,7 +31,7 @@ import { EmailTemplatePreviewDialog } from "./EmailTemplatePreviewDialog";
 import { EditEmailTemplateDialog } from "./EditEmailTemplateDialog";
 
 interface EmailSettingsSectionProps {
-  onSettingsChange: () => void;
+  // No props needed - each section manages its own state
 }
 
 interface SMTPSettings {
@@ -69,7 +69,7 @@ interface QueueStats {
   failed: number;
 }
 
-export function EmailSettingsSection({ onSettingsChange }: EmailSettingsSectionProps) {
+export function EmailSettingsSection({}: EmailSettingsSectionProps) {
   const [activeTab, setActiveTab] = useState("smtp");
   const [smtpSettings, setSMTPSettings] = useState<SMTPSettings>({
     smtpHost: "",
@@ -103,7 +103,7 @@ export function EmailSettingsSection({ onSettingsChange }: EmailSettingsSectionP
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [testStatus, setTestStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
-  const { canUpdateSettings } = usePermissions();
+  const { canEditSettings } = usePermissions();
 
   useEffect(() => {
     loadEmailSettings();
@@ -118,16 +118,15 @@ export function EmailSettingsSection({ onSettingsChange }: EmailSettingsSectionP
         const data = await response.json();
         if (data.settings) {
           setSMTPSettings({
-            id: data.settings.id,
-            smtpHost: data.settings.smtpHost || "",
-            smtpPort: data.settings.smtpPort || 587,
-            smtpUsername: data.settings.smtpUsername || "",
+            smtpHost: data.settings['email.smtpHost'] || "",
+            smtpPort: data.settings['email.smtpPort'] || 587,
+            smtpUsername: data.settings['email.smtpUser'] || "",
             smtpPassword: "", // Never pre-fill password for security
-            smtpSecure: data.settings.smtpSecure || false,
-            fromEmail: data.settings.fromEmail || "",
-            fromName: data.settings.fromName || "",
-            replyToEmail: data.settings.replyToEmail || "",
-            testMode: data.settings.testMode ?? false,
+            smtpSecure: data.settings['email.smtpSecure'] || false,
+            fromEmail: data.settings['email.fromAddress'] || "",
+            fromName: data.settings['email.fromName'] || "",
+            replyToEmail: data.settings['email.replyToEmail'] || "",
+            testMode: data.settings['email.testMode'] ?? false,
           });
         }
       }
@@ -164,19 +163,29 @@ export function EmailSettingsSection({ onSettingsChange }: EmailSettingsSectionP
 
   const handleSMTPSettingChange = (key: keyof SMTPSettings, value: string | number | boolean) => {
     setSMTPSettings(prev => ({ ...prev, [key]: value }));
-    onSettingsChange();
   };
 
   const handleSaveSMTP = async () => {
-    if (!canUpdateSettings) return;
+    if (!canEditSettings) return;
     
     setIsSaving(true);
     try {
-      const method = smtpSettings.id ? 'PUT' : 'POST';
       const response = await fetch('/api/email/settings', {
-        method,
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(smtpSettings),
+        body: JSON.stringify({
+          settings: {
+            'email.smtpHost': smtpSettings.smtpHost,
+            'email.smtpPort': smtpSettings.smtpPort,
+            'email.smtpUser': smtpSettings.smtpUsername,
+            'email.smtpPassword': smtpSettings.smtpPassword,
+            'email.smtpSecure': smtpSettings.smtpSecure,
+            'email.fromAddress': smtpSettings.fromEmail,
+            'email.fromName': smtpSettings.fromName,
+            'email.replyToEmail': smtpSettings.replyToEmail,
+            'email.testMode': smtpSettings.testMode,
+          }
+        }),
       });
 
       if (response.ok) {
@@ -277,7 +286,7 @@ export function EmailSettingsSection({ onSettingsChange }: EmailSettingsSectionP
   };
 
   const handleTestEmail = async () => {
-    if (!testEmail || !canUpdateSettings) return;
+    if (!testEmail || !canEditSettings) return;
     
     setIsTesting(true);
     try {
@@ -326,7 +335,7 @@ export function EmailSettingsSection({ onSettingsChange }: EmailSettingsSectionP
   };
 
   const handleDeleteTemplate = async (template: EmailTemplate) => {
-    if (!canUpdateSettings) return;
+    if (!canEditSettings) return;
     
     const confirmed = window.confirm(
       `Are you sure you want to delete the template "${template.name}"? This action cannot be undone.`
@@ -402,7 +411,7 @@ export function EmailSettingsSection({ onSettingsChange }: EmailSettingsSectionP
                     value={smtpSettings.smtpHost}
                     onChange={(e) => handleSMTPSettingChange('smtpHost', e.target.value)}
                     placeholder="smtp.example.com"
-                    disabled={!canUpdateSettings}
+                    disabled={!canEditSettings}
                   />
                 </div>
                 
@@ -414,7 +423,7 @@ export function EmailSettingsSection({ onSettingsChange }: EmailSettingsSectionP
                     value={smtpSettings.smtpPort}
                     onChange={(e) => handleSMTPSettingChange('smtpPort', parseInt(e.target.value) || 587)}
                     placeholder="587"
-                    disabled={!canUpdateSettings}
+                    disabled={!canEditSettings}
                   />
                 </div>
               </div>
@@ -427,7 +436,7 @@ export function EmailSettingsSection({ onSettingsChange }: EmailSettingsSectionP
                     value={smtpSettings.smtpUsername}
                     onChange={(e) => handleSMTPSettingChange('smtpUsername', e.target.value)}
                     placeholder="username@example.com (leave blank if no auth required)"
-                    disabled={!canUpdateSettings}
+                    disabled={!canEditSettings}
                   />
                   <p className="text-xs text-muted-foreground">
                     Leave empty if your SMTP server doesn't require authentication
@@ -442,7 +451,7 @@ export function EmailSettingsSection({ onSettingsChange }: EmailSettingsSectionP
                     value={smtpSettings.smtpPassword}
                     onChange={(e) => handleSMTPSettingChange('smtpPassword', e.target.value)}
                     placeholder="Enter password (leave blank if no auth required)"
-                    disabled={!canUpdateSettings}
+                    disabled={!canEditSettings}
                   />
                   <p className="text-xs text-muted-foreground">
                     Leave empty if your SMTP server doesn't require authentication
@@ -459,7 +468,7 @@ export function EmailSettingsSection({ onSettingsChange }: EmailSettingsSectionP
                     value={smtpSettings.fromEmail}
                     onChange={(e) => handleSMTPSettingChange('fromEmail', e.target.value)}
                     placeholder="noreply@example.com"
-                    disabled={!canUpdateSettings}
+                    disabled={!canEditSettings}
                   />
                 </div>
                 
@@ -470,7 +479,7 @@ export function EmailSettingsSection({ onSettingsChange }: EmailSettingsSectionP
                     value={smtpSettings.fromName}
                     onChange={(e) => handleSMTPSettingChange('fromName', e.target.value)}
                     placeholder="Service Vault"
-                    disabled={!canUpdateSettings}
+                    disabled={!canEditSettings}
                   />
                 </div>
               </div>
@@ -483,7 +492,7 @@ export function EmailSettingsSection({ onSettingsChange }: EmailSettingsSectionP
                   value={smtpSettings.replyToEmail}
                   onChange={(e) => handleSMTPSettingChange('replyToEmail', e.target.value)}
                   placeholder="support@example.com"
-                  disabled={!canUpdateSettings}
+                  disabled={!canEditSettings}
                 />
               </div>
 
@@ -499,7 +508,7 @@ export function EmailSettingsSection({ onSettingsChange }: EmailSettingsSectionP
                     id="smtpSecure"
                     checked={smtpSettings.smtpSecure}
                     onCheckedChange={(checked) => handleSMTPSettingChange('smtpSecure', checked)}
-                    disabled={!canUpdateSettings}
+                    disabled={!canEditSettings}
                   />
                 </div>
 
@@ -518,7 +527,7 @@ export function EmailSettingsSection({ onSettingsChange }: EmailSettingsSectionP
                       id="testMode"
                       checked={smtpSettings.testMode}
                       onCheckedChange={(checked) => handleSMTPSettingChange('testMode', checked)}
-                      disabled={!canUpdateSettings}
+                      disabled={!canEditSettings}
                     />
                   </div>
                 </div>
@@ -545,7 +554,7 @@ export function EmailSettingsSection({ onSettingsChange }: EmailSettingsSectionP
             
             <Button 
               onClick={handleSaveSMTP}
-              disabled={isSaving || !canUpdateSettings}
+              disabled={isSaving || !canEditSettings}
             >
               {isSaving && <Save className="mr-2 h-4 w-4 animate-spin" />}
               {!isSaving && <Save className="mr-2 h-4 w-4" />}
@@ -563,7 +572,7 @@ export function EmailSettingsSection({ onSettingsChange }: EmailSettingsSectionP
                 Manage email templates for system notifications and user management
               </p>
             </div>
-            {canUpdateSettings && (
+            {canEditSettings && (
               <Button onClick={() => setShowCreateDialog(true)}>
                 <Plus className="mr-2 h-4 w-4" />
                 New Template
@@ -628,7 +637,7 @@ export function EmailSettingsSection({ onSettingsChange }: EmailSettingsSectionP
                       <Badge variant={template.status === 'ACTIVE' ? 'default' : 'secondary'}>
                         {template.status}
                       </Badge>
-                      {canUpdateSettings && (
+                      {canEditSettings && (
                         <>
                           <Button 
                             variant="outline" 
@@ -765,13 +774,13 @@ export function EmailSettingsSection({ onSettingsChange }: EmailSettingsSectionP
                     value={testEmail}
                     onChange={(e) => setTestEmail(e.target.value)}
                     placeholder="test@example.com"
-                    disabled={!canUpdateSettings}
+                    disabled={!canEditSettings}
                   />
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="templateSelect">Email Template (Optional)</Label>
-                  <Select value={selectedTemplateId} onValueChange={handleTemplateChange} disabled={!canUpdateSettings}>
+                  <Select value={selectedTemplateId} onValueChange={handleTemplateChange} disabled={!canEditSettings}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select template to test" />
                     </SelectTrigger>
@@ -809,7 +818,7 @@ export function EmailSettingsSection({ onSettingsChange }: EmailSettingsSectionP
                           onChange={(e) => setTestVariables(prev => ({ ...prev, [key]: e.target.value }))}
                           placeholder={`Enter ${key}`}
                           className="text-sm"
-                          disabled={!canUpdateSettings}
+                          disabled={!canEditSettings}
                         />
                       </div>
                     ))}
@@ -837,7 +846,7 @@ export function EmailSettingsSection({ onSettingsChange }: EmailSettingsSectionP
                 
                 <Button 
                   onClick={handleTestEmail}
-                  disabled={isTesting || !testEmail || !canUpdateSettings}
+                  disabled={isTesting || !testEmail || !canEditSettings}
                 >
                   {isTesting && <Send className="mr-2 h-4 w-4 animate-spin" />}
                   {!isTesting && <Send className="mr-2 h-4 w-4" />}

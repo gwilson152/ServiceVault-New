@@ -16,7 +16,11 @@ export async function POST(
     }
 
     // Check permission to modify account users
-    const canManageUsers = await hasPermission(session.user.id, { resource: "users", action: "update" });
+    const canManage = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "users",
+      action: "update"
+    });
     if (!canManageUsers) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }

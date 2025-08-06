@@ -5,16 +5,17 @@ import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { 
-  Building, 
-  Building2, 
-  User, 
-  Users, 
-  Eye, 
-  Settings, 
+import {
+  Building,
+  Building2,
+  User,
+  Users,
+  Eye,
+  Settings,
   Mail,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  ArrowRight
 } from "lucide-react";
 import { AccountWithHierarchy } from "@/utils/hierarchy";
 
@@ -24,14 +25,16 @@ interface AccountHierarchyCardProps {
   onToggleChildren?: (accountId: string) => void;
   isChild?: boolean;
   depth?: number;
+  onAssignParent?: (account: AccountWithHierarchy) => void;
 }
 
-export function AccountHierarchyCard({ 
-  account, 
-  showChildren = true, 
+export function AccountHierarchyCard({
+  account,
+  showChildren = true,
   onToggleChildren,
   isChild = false,
-  depth = 0
+  depth = 0,
+  onAssignParent
 }: AccountHierarchyCardProps) {
   const router = useRouter();
   const [isExpanded, setIsExpanded] = useState(account.isExpanded ?? true);
@@ -66,7 +69,7 @@ export function AccountHierarchyCard({
   return (
     <div className="space-y-4">
       {/* Main Account Card */}
-      <Card 
+      <Card
         className={`hover:shadow-md transition-shadow ${isChild ? 'border-l-4 border-l-blue-200' : ''}`}
         style={{ marginLeft: `${depth * 20}px` }}
       >
@@ -79,7 +82,7 @@ export function AccountHierarchyCard({
                   <div className="w-4 h-4 border-l-2 border-b-2 border-border rounded-bl-md mr-2" />
                 </div>
               )}
-              
+
               {/* Expansion toggle for parents */}
               {hasChildren && showChildren && (
                 <Button
@@ -95,7 +98,7 @@ export function AccountHierarchyCard({
                   )}
                 </Button>
               )}
-              
+
               <div className="flex items-center space-x-2 flex-1">
                 {getAccountTypeIcon(account.accountType)}
                 <CardTitle className="text-lg">{account.name}</CardTitle>
@@ -110,24 +113,24 @@ export function AccountHierarchyCard({
               )}
             </div>
           </div>
-          
+
           {account.companyName && account.companyName !== account.name && (
             <CardDescription>{account.companyName}</CardDescription>
           )}
-          
-          {account.parentAccount && !isChild && (
+
+          {account.parent && !isChild && (
             <CardDescription className="text-blue-600">
-              Parent: {account.parentAccount.name}
+              Parent: {account.parent.name}
             </CardDescription>
           )}
-          
+
           {account.path && depth > 0 && (
             <CardDescription className="text-xs text-muted-foreground">
               Path: {account.path}
             </CardDescription>
           )}
         </CardHeader>
-        
+
         <CardContent className="space-y-4">
           {/* Stats */}
           <div className="grid grid-cols-3 gap-4 text-center">
@@ -146,17 +149,17 @@ export function AccountHierarchyCard({
           </div>
 
           {/* Users Preview */}
-          {account.accountUsers.length > 0 && (
+          {account.memberships && account.memberships.length > 0 && (
             <div className="space-y-2">
               <div className="text-sm font-medium">Users:</div>
-              {account.accountUsers.slice(0, 2).map((accountUser, index) => (
+              {account.memberships.slice(0, 2).map((membership, index) => (
                 <div key={index} className="flex items-center justify-between text-sm">
                   <div className="flex items-center space-x-2">
                     <User className="h-3 w-3" />
-                    <span>{accountUser.name}</span>
+                    <span>{membership.user?.name || membership.user?.email || 'Unknown User'}</span>
                   </div>
                   <div className="flex items-center space-x-1">
-                    {accountUser.user ? (
+                    {membership.user ? (
                       <Badge variant="outline" className="text-xs">Active</Badge>
                     ) : (
                       <Badge variant="secondary" className="text-xs">Invited</Badge>
@@ -164,9 +167,9 @@ export function AccountHierarchyCard({
                   </div>
                 </div>
               ))}
-              {account.accountUsers.length > 2 && (
+              {(account.memberships || []).length > 2 && (
                 <div className="text-xs text-muted-foreground">
-                  +{account.accountUsers.length - 2} more users
+                  +{(account.memberships || []).length - 2} more users
                 </div>
               )}
             </div>
@@ -174,37 +177,49 @@ export function AccountHierarchyCard({
 
           {/* Actions */}
           <div className="flex space-x-2 pt-2">
-            <Button 
-              variant="outline" 
-              size="sm" 
+            <Button
+              variant="outline"
+              size="sm"
               className="flex-1"
               onClick={() => router.push(`/accounts/${account.id}`)}
             >
               <Eye className="mr-2 h-3 w-3" />
               View
             </Button>
-            <Button 
-              variant="outline" 
+            {onAssignParent && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onAssignParent(account)}
+                title="Assign Parent Account"
+              >
+                <ArrowRight className="h-3 w-3" />
+              </Button>
+            )}
+            <Button
+              variant="outline"
               size="sm"
               onClick={() => router.push(`/accounts/${account.id}?tab=settings`)}
               title="Account Settings"
             >
               <Settings className="h-3 w-3" />
             </Button>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               size="sm"
               onClick={() => {
                 // Open email compose for account users
-                const accountUsers = account.accountUsers.filter(au => au.user).map(au => au.email);
-                if (accountUsers.length > 0) {
+                const userEmails = (account.memberships || [])
+                  .filter(membership => membership.user && membership.user.email)
+                  .map(membership => membership.user!.email);
+                if (userEmails.length > 0) {
                   const emailSubject = `Regarding ${account.name} Account`;
-                  const mailtoLink = `mailto:${accountUsers.join(',')}?subject=${encodeURIComponent(emailSubject)}`;
+                  const mailtoLink = `mailto:${userEmails.join(',')}?subject=${encodeURIComponent(emailSubject)}`;
                   window.open(mailtoLink, '_blank');
                 }
               }}
               title="Email Account Users"
-              disabled={!account.accountUsers.some(au => au.user)}
+              disabled={!(account.memberships || []).some(membership => membership.user)}
             >
               <Mail className="h-3 w-3" />
             </Button>
@@ -216,7 +231,7 @@ export function AccountHierarchyCard({
       {hasChildren && showChildren && isExpanded && (
         <div className="space-y-4 relative">
           {/* Connecting line for visual hierarchy */}
-          <div 
+          <div
             className="absolute top-0 bottom-0 border-l-2 border-dashed border-border"
             style={{ left: `${(depth + 1) * 20 - 10}px` }}
           />
@@ -228,6 +243,7 @@ export function AccountHierarchyCard({
               onToggleChildren={onToggleChildren}
               isChild={true}
               depth={depth + 1}
+              onAssignParent={onAssignParent}
             />
           ))}
         </div>

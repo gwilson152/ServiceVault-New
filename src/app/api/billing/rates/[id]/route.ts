@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { hasPermission } from "@/lib/permissions";
+import { permissionService } from "@/lib/permissions/PermissionService";
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const resolvedParams = await params;
   try {
     const session = await getServerSession(authOptions);
 
@@ -16,8 +17,12 @@ export async function PUT(
     }
 
     // Check permission to update billing rates
-    const canUpdateBilling = await hasPermission(session.user.id, { resource: "billing", action: "update" });
-    if (!canUpdateBilling) {
+    const canUpdate = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "billing",
+      action: "update"
+    });
+    if (!canUpdate) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -36,14 +41,14 @@ export async function PUT(
       await prisma.billingRate.updateMany({
         where: { 
           isDefault: true,
-          id: { not: params.id }
+          id: { not: resolvedParams.id }
         },
         data: { isDefault: false }
       });
     }
 
     const billingRate = await prisma.billingRate.update({
-      where: { id: params.id },
+      where: { id: resolvedParams.id },
       data: {
         name,
         rate: parseFloat(rate),
@@ -64,8 +69,9 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const resolvedParams = await params;
   try {
     const session = await getServerSession(authOptions);
 
@@ -74,13 +80,17 @@ export async function DELETE(
     }
 
     // Check permission to delete billing rates
-    const canDeleteBilling = await hasPermission(session.user.id, { resource: "billing", action: "delete" });
-    if (!canDeleteBilling) {
+    const canDelete = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "billing",
+      action: "delete"
+    });
+    if (!canDelete) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     await prisma.billingRate.delete({
-      where: { id: params.id },
+      where: { id: resolvedParams.id },
     });
 
     return NextResponse.json({ success: true });

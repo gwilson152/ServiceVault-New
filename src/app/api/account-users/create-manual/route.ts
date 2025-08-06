@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { hasPermission } from '@/lib/permissions';
+import { permissionService } from '@/lib/permissions/PermissionService';
 import { emailService } from '@/lib/email/EmailService';
 import bcrypt from 'bcryptjs';
 
@@ -15,12 +15,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Check user manual creation permission
-    const canCreateUsersManually = await hasPermission(session.user.id, {
-      resource: 'users',
-      action: 'create-manual'
+    const canCreate = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "users",
+      action: "create-manual"
     });
 
-    if (!canCreateUsersManually) {
+    if (!canCreate) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 

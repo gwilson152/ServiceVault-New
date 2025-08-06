@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { hasPermission } from '@/lib/permissions';
+import { permissionService } from '@/lib/permissions/PermissionService';
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,13 +16,14 @@ export async function GET(request: NextRequest) {
     const accountId = searchParams.get('accountId');
 
     // Check if user has permission to view account user roles
-    const canViewRoles = await hasPermission(session.user.id, {
+    const canView = await permissionService.hasPermission({
+      userId: session.user.id,
       resource: 'users',
       action: 'view',
       accountId: accountId || undefined
     });
 
-    if (!canViewRoles) {
+    if (!canView) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -102,7 +103,8 @@ export async function POST(request: NextRequest) {
           }
 
           // Check if user has permission to assign roles to this account
-          const canAssignRole = await hasPermission(session.user.id, {
+          const canAssignRole = await permissionService.hasPermission({
+            userId: session.user.id,
             resource: 'users',
             action: 'manage',
             accountId: accountUser.account.id
@@ -186,7 +188,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if user has permission to assign roles to this account
-    const canAssignRole = await hasPermission(session.user.id, {
+    const canAssignRole = await permissionService.hasPermission({
+      userId: session.user.id,
       resource: 'users',
       action: 'manage',
       accountId: accountUser.account.id
@@ -297,7 +300,8 @@ export async function DELETE(request: NextRequest) {
       }
 
       // Check permission for the account
-      const canRemoveRole = await hasPermission(session.user.id, {
+      const canRemoveRole = await permissionService.hasPermission({
+        userId: session.user.id,
         resource: 'users',
         action: 'manage',
         accountId: assignment.accountUser.account.id
@@ -335,7 +339,8 @@ export async function DELETE(request: NextRequest) {
       }
 
       // Check permission for the account
-      const canRemoveRole = await hasPermission(session.user.id, {
+      const canRemoveRole = await permissionService.hasPermission({
+        userId: session.user.id,
         resource: 'users',
         action: 'manage',
         accountId: assignment.accountUser.account.id

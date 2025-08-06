@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { hasPermission } from "@/lib/permissions";
+import { permissionService } from "@/lib/permissions/PermissionService";
 
 export async function DELETE(
   request: NextRequest,
@@ -36,11 +36,12 @@ export async function DELETE(
     }
 
     // Check permission to edit invoice items with account context
-    const canEditItems = await hasPermission(session.user.id, {
-      resource: "invoices",
-      action: "edit-items",
-      accountId: invoiceItem.invoice.accountId
-    });
+    const canEditItems = await permissionService.hasPermission(
+      session.user.id,
+      "invoices",
+      "edit-items",
+      invoiceItem.invoice.accountId
+    );
 
     if (!canEditItems) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { hasPermission } from '@/lib/permissions';
+import { permissionService } from '@/lib/permissions/PermissionService';
 import { emailService, EmailServiceError } from '@/lib/email/EmailService';
 import crypto from 'crypto';
 
@@ -18,9 +18,10 @@ export async function POST(
     }
 
     // Check permission to resend invitations
-    const canResendInvitations = await hasPermission(session.user.id, {
-      resource: 'users',
-      action: 'resend-invitation'
+    const canResendInvitations = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: "users",
+      action: "resend-invitation"
     });
 
     if (!canResendInvitations) {

@@ -64,6 +64,7 @@ import {
   Plus
 } from "lucide-react";
 import { CreateAccountDialog } from "@/components/accounts/CreateAccountDialog";
+import { AssignParentDialog } from "@/components/accounts/AssignParentDialog";
 import { AccountTreeView } from "@/components/accounts/AccountTreeView";
 import { AccountHierarchyCard } from "@/components/accounts/AccountHierarchyCard";
 import { AccountViewToggle, ViewMode } from "@/components/accounts/AccountViewToggle";
@@ -74,6 +75,7 @@ import {
   getHierarchyStats
 } from "@/utils/hierarchy";
 import { useActionBar } from "@/components/providers/ActionBarProvider";
+import { usePermissions } from "@/hooks/usePermissions";
 
 export default function AccountsPage() {
   const { data: session, status } = useSession();
@@ -85,7 +87,10 @@ export default function AccountsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [accountTypeFilter, setAccountTypeFilter] = useState("ALL");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showAssignParentDialog, setShowAssignParentDialog] = useState(false);
+  const [selectedAccountForParent, setSelectedAccountForParent] = useState<AccountWithHierarchy | null>(null);
   const { addAction, clearActions } = useActionBar();
+  const { canViewAccounts, loading: permissionsLoading } = usePermissions();
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     // Load view preference from localStorage
     if (typeof window !== 'undefined') {
@@ -132,19 +137,29 @@ export default function AccountsPage() {
     }
   }, [currentPage, searchTerm, accountTypeFilter]);
 
+  const handleAssignParent = (account: AccountWithHierarchy) => {
+    setSelectedAccountForParent(account);
+    setShowAssignParentDialog(true);
+  };
+
+  const handleParentAssigned = () => {
+    // Refresh accounts list after parent assignment
+    fetchAccounts();
+  };
+
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/");
-    } else if (status === "authenticated") {
-      // Only admins can access account management
-      if (session.user?.role !== "ADMIN") {
+    } else if (status === "authenticated" && !permissionsLoading) {
+      // Check if user has permission to view accounts
+      if (!canViewAccounts) {
         router.push("/dashboard");
       } else {
         setIsLoading(false);
         fetchAccounts();
       }
     }
-  }, [status, session, router, fetchAccounts]);
+  }, [status, session, router, fetchAccounts, canViewAccounts, permissionsLoading]);
 
   // Trigger fetchAccounts when filters change (handled by useCallback dependencies)
   useEffect(() => {
@@ -169,7 +184,7 @@ export default function AccountsPage() {
     };
   }, [addAction, clearActions]);
 
-  if (status === "loading" || isLoading) {
+  if (status === "loading" || isLoading || permissionsLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-lg">Loading...</div>
@@ -177,7 +192,7 @@ export default function AccountsPage() {
     );
   }
 
-  if (!session || session.user?.role !== "ADMIN") {
+  if (!session || !canViewAccounts) {
     return null;
   }
 
@@ -242,6 +257,7 @@ export default function AccountsPage() {
             <AccountTreeView 
               accounts={accounts}
               searchTerm={searchTerm}
+              onAssignParent={handleAssignParent}
             />
           ) : (
             <div className="space-y-6">
@@ -256,6 +272,7 @@ export default function AccountsPage() {
                     key={account.id}
                     account={account}
                     showChildren={true}
+                    onAssignParent={handleAssignParent}
                   />
                 ));
               })()}
@@ -290,6 +307,15 @@ export default function AccountsPage() {
         open={showCreateDialog}
         onOpenChange={setShowCreateDialog}
         onAccountCreated={fetchAccounts}
+      />
+
+      {/* Assign Parent Dialog */}
+      <AssignParentDialog
+        open={showAssignParentDialog}
+        onOpenChange={setShowAssignParentDialog}
+        account={selectedAccountForParent}
+        accounts={accounts}
+        onParentAssigned={handleParentAssigned}
       />
     </>
   );
