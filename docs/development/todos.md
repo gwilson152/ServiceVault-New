@@ -371,3 +371,187 @@ The core infrastructure is now solid and ready for the next development phase. T
    - Priority: LOW - Current caching is sufficient for most use cases
 6. **Documentation Updates** (maintains code quality)
    - Priority: LOW - Can be done incrementally as features are added
+
+## 🆕 New Priority Tasks (August 6, 2025)
+
+### 7. Ticket Creation Dialog Account User Selection
+
+**Priority**: HIGH
+**Description**: Fix ticket creation dialog to properly show account users when an account is selected
+
+**Issue**: On the /tickets page, the create ticket dialog's "for account user" field is not showing any users when an account is selected, despite the backend /api/account-users endpoint being updated to include child account users.
+
+**Root Cause Analysis Needed**:
+- Verify frontend dialog is correctly calling the /api/account-users endpoint with proper parameters
+- Check if the API response format matches what the frontend expects
+- Ensure proper error handling and loading states
+- Validate that the account selection properly triggers the user list refresh
+
+**Implementation Steps**:
+1. Investigate the ticket creation dialog component to identify the account user selection logic
+2. Debug the API calls being made when account is selected
+3. Verify response format matches frontend expectations  
+4. Fix any data mapping or state management issues
+5. Test with direct accounts and hierarchical child accounts
+
+### 8. RBAC Agent Assignment System
+
+**Priority**: HIGH  
+**Description**: Implement permission-based agent assignment for ticket creation
+
+**Requirement**: The "assigned agent" field should respect RBAC permissions, using a pattern like "tickets:assignable" or similar to control which users can be assigned as ticket agents.
+
+**Design Considerations**:
+- Determine optimal permission pattern ("tickets:assignable", "tickets:agent", or "tickets:assign-to")
+- Consider if assignment should be account-scoped or global
+- Define relationship between assignable agents and account hierarchy
+- Implement UI that only shows assignable users in agent dropdown
+
+**Implementation Steps**:
+1. Design permission structure for agent assignment (recommend "tickets:assignable" permission)
+2. Update role templates to include assignable permissions for appropriate roles
+3. Create API endpoint to fetch assignable agents based on permissions
+4. Update ticket creation dialog to use permission-filtered agent list
+5. Consider account-scoped vs global agent assignment policies
+
+**Permission Design Recommendation**:
+```typescript
+// Option 1: Simple assignable flag
+{ resource: "tickets", action: "assignable" }
+
+// Option 2: More specific assignment permission  
+{ resource: "tickets", action: "assign-to" }
+
+// Consider account scope for hierarchical assignment
+{ resource: "tickets", action: "assignable", accountId: "specific-account" }
+```
+
+### 9. Dynamic Ticket Custom Fields
+
+**Priority**: MEDIUM
+**Description**: Implement configurable custom fields for tickets
+
+**Requirements**: 
+- Tickets should support custom fields that can be configured per system or per account
+- Fields should support various types (text, number, dropdown, date, boolean)
+- Custom fields should be manageable through admin interface
+- Fields should integrate with ticket creation/editing workflows
+
+**Database Design Considerations**:
+- Extend existing `customFields` JSON field on Ticket model
+- Create separate CustomFieldDefinition table for field schemas
+- Support field validation and constraints
+- Consider account-level vs system-level field definitions
+
+**Implementation Steps**:
+1. Design custom field schema and validation system
+2. Create custom field definition management interface
+3. Update ticket creation/editing forms to render custom fields
+4. Implement field validation and type conversion
+5. Add permission controls for custom field management
+
+### 10. Dynamic Ticket Status System
+
+**Priority**: MEDIUM
+**Description**: Make ticket statuses configurable through application settings
+
+**Requirements**:
+- Replace hard-coded ticket statuses with dynamic system configurable through /settings
+- Allow creation, editing, and deletion of ticket statuses
+- Support status workflow transitions and permissions
+- Maintain backward compatibility with existing tickets
+
+**Current State**: Ticket status is currently stored as a string field with default "OPEN", needs to be made dynamic.
+
+**Implementation Steps**:
+1. Create ticket status management section in /settings page
+2. Design status workflow system (optional: status transitions)
+3. Update ticket creation/editing to use dynamic statuses
+4. Migrate existing hard-coded statuses to system settings
+5. Add validation to prevent deletion of statuses that are in use
+
+**Database Considerations**:
+- Add TicketStatus system settings or separate table
+- Consider status workflow/transition rules
+- Maintain referential integrity with existing tickets
+- Support status colors, icons, and display names
+
+### 11. Account-Specific Settings Implementation
+
+**Priority**: HIGH
+**Description**: Implement comprehensive account settings section on /accounts/[id] details page
+
+**Requirements**:
+- Add dedicated settings section to individual account detail pages
+- Implement domain matching CSV field management for automatic user assignment
+- Create billing rate override interface for account-specific pricing
+- Support custom account-level configurations and preferences
+- Integrate with existing account management workflow
+
+**Current State**: Account detail pages exist but lack comprehensive settings management. Database schema has `domains` CSV field and `AccountBillingRate` table ready for implementation.
+
+**Key Settings to Implement**:
+
+1. **Domain Management**:
+   - CSV field editor for email domain matching (e.g., "company.com,subsidiary.org")
+   - Domain validation and conflict detection with other accounts
+   - Preview of users who would match current domain rules
+   - Domain-based auto-assignment toggle
+
+2. **Billing Rate Overrides**:
+   - Interface to set account-specific billing rates that override system defaults
+   - Support for multiple rate tiers per account (Standard, Critical, Travel, etc.)
+   - Rate history and effective date tracking
+   - Integration with time entry billing calculations
+
+3. **Account Preferences**:
+   - Default ticket settings and custom fields for this account
+   - Time tracking preferences (approval workflows, billing defaults)
+   - Notification settings for account-specific communications
+   - Branding and customization options
+
+4. **Security & Access Settings**:
+   - Account-level permission overrides
+   - Session timeout and security policy configurations
+   - Two-factor authentication requirements
+   - API access controls and rate limiting
+
+**Database Schema References**:
+```typescript
+// Account table already has:
+domains: String? // CSV format for domain matching
+customFields: Json? // Account-specific configurations
+
+// AccountBillingRate table exists:
+accountId: String
+billingRateId: String  
+rate: Float // Override rate for this account
+```
+
+**Implementation Steps**:
+1. Create account settings tab/section in `/accounts/[id]` page layout
+2. Implement domain management interface with CSV editing and validation
+3. Build billing rate override management with rate history
+4. Add account preference management interface
+5. Create account-specific security settings panel
+6. Implement settings persistence with proper validation
+7. Add audit logging for settings changes
+8. Test integration with user assignment and billing workflows
+
+**Integration Points**:
+- User invitation/registration flows (domain matching)
+- Time entry billing calculations (rate overrides)
+- Account user management (automatic assignment)
+- System settings inheritance and override hierarchy
+
+**Permission Requirements**:
+- Only users with "accounts:manage" permission should access account settings
+- Account administrators should be able to manage their own account settings
+- Super-admins should have access to all account settings
+
+**UI/UX Considerations**:
+- Settings should be organized in logical tabs or sections
+- Provide clear feedback for settings changes and validation errors
+- Include helpful tooltips and documentation for complex settings
+- Support bulk operations where applicable (e.g., multiple billing rates)
+- Maintain consistency with system-level settings interface
