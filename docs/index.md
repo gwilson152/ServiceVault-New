@@ -25,6 +25,7 @@ Detailed documentation for major application features:
 - **[`accounts.md`](./features/accounts.md)** - Hierarchical account management system
 - **[`billing.md`](./features/billing.md)** - Billing rates system with enable/disable functionality and settings integration
 - **[`invoicing.md`](./features/invoicing.md)** - **New!** Complete invoice management system with permission patterns, API usage, and troubleshooting guide
+- **[`import-system.md`](./features/import-system.md)** - **New!** Comprehensive data import system with dynamic field mapping, multiple data sources, and real-time monitoring
 - **[`time-entries.md`](./features/time-entries.md)** - Time tracking, approval workflows, and billing integration
 - **[`tickets.md`](./features/tickets.md)** - **Updated!** Ticket system with explicit assignment permissions (assignable-to/assignable-for) and account user integration
 - **[`role-templates.md`](./features/role-templates.md)** - Role template management with ABAC permission system
@@ -186,6 +187,7 @@ Each document serves specific audiences and use cases:
 - **Permissions**: [`system/permissions.md`](./system/permissions.md) - **critical PermissionService usage**
 - **UI Standards**: [`ui/ui-design-principles.md`](./ui/ui-design-principles.md)
 - **Invoicing**: [`features/invoicing.md`](./features/invoicing.md) - **complete billing system guide**
+- **Import System**: [`features/import-system.md`](./features/import-system.md) - **data import and integration**
 - **Deployment**: [`system/deployment.md`](./system/deployment.md)
 - **Current Work**: [`development/todos.md`](./development/todos.md)
 - **Components**: [`components/selectors.md`](./components/selectors.md) - **includes BillingRateSelector**

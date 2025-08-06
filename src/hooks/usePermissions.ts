@@ -37,6 +37,11 @@ interface UsePermissionsReturn {
   canCreateRoleTemplates: boolean;
   canEditRoleTemplates: boolean;
   canDeleteRoleTemplates: boolean;
+  canViewImports: boolean;
+  canCreateImports: boolean;
+  canEditImports: boolean;
+  canExecuteImports: boolean;
+  canDeleteImports: boolean;
 }
 
 /**
@@ -138,6 +143,11 @@ export function usePermissions(): UsePermissionsReturn {
   const canCreateRoleTemplates = hasPermission('role-templates', 'create');
   const canEditRoleTemplates = hasPermission('role-templates', 'edit');
   const canDeleteRoleTemplates = hasPermission('role-templates', 'delete');
+  const canViewImports = hasPermission('imports', 'view');
+  const canCreateImports = hasPermission('imports', 'create');
+  const canEditImports = hasPermission('imports', 'edit');
+  const canExecuteImports = hasPermission('imports', 'execute');
+  const canDeleteImports = hasPermission('imports', 'delete');
 
   return {
     hasPermission,
@@ -172,7 +182,12 @@ export function usePermissions(): UsePermissionsReturn {
     canViewRoleTemplates,
     canCreateRoleTemplates,
     canEditRoleTemplates,
-    canDeleteRoleTemplates
+    canDeleteRoleTemplates,
+    canViewImports,
+    canCreateImports,
+    canEditImports,
+    canExecuteImports,
+    canDeleteImports
   };
 }
 

@@ -91,6 +91,7 @@ const PERMISSION_GROUPS = {
   'tickets': ['view', 'create', 'edit', 'delete', 'update', 'assignable-to', 'assignable-for'],
   'invoices': ['view', 'create', 'edit', 'delete', 'send'],
   'billing': ['view', 'create', 'edit'],
+  'imports': ['view', 'create', 'edit', 'execute', 'delete'],
   'reports': ['view', 'export'],
   'settings': ['view', 'edit'],
   'account-settings': ['view', 'update'],
@@ -104,6 +105,9 @@ const getPermissionLabel = (resource: string, action: string): string => {
   }
   if (resource === 'tickets' && action === 'assignable-for') {
     return 'assignable for (tickets can be created for this user)';
+  }
+  if (resource === 'imports' && action === 'execute') {
+    return 'execute (run import processes)';
   }
   return action.replace('-', ' ');
 };

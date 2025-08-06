@@ -417,3 +417,151 @@ enum EmailQueueStatus {
   FAILED
   CANCELLED
 }
+
+// Import System Models - Enhanced for multi-stage imports
+model ImportConfiguration {
+  id                String   @id @default(cuid())
+  name              String
+  description       String?
+  sourceType        ImportSourceType
+  connectionConfig  Json     // Database connection details, file settings, etc.
+  sourceTableConfig Json     // Selected source tables/sheets with their configurations
+  isMultiStage      Boolean  @default(false)  // Whether this is a multi-stage import
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  createdBy         String   // Store user ID as string, no FK constraint
+  stages            ImportStage[]
+  executions        ImportExecution[]
+
+  @@index([createdBy])
+  @@index([isMultiStage])
+  @@map("import_configurations")
+}
+
+model ImportStage {
+  id                String              @id @default(cuid())
+  configurationId   String
+  configuration     ImportConfiguration @relation(fields: [configurationId], references: [id], onDelete: Cascade)
+  order             Int                 // Stage execution order (1, 2, 3...)
+  name              String              // Stage name (e.g., "Import Accounts", "Import Users")
+  description       String?
+  sourceTable       String              // Source table/sheet name
+  targetEntity      String              // Target entity name (Account, User, etc.)
+  fieldMappings     Json                // Array of field mapping configurations
+  fieldOverrides    Json                // Field exclusions and custom overrides
+  dependsOnStages   String[]            // Array of stage IDs this stage depends on
+  crossStageMapping Json                // How to link to records from previous stages
+  validationRules   Json                // Custom validation rules for this stage
+  transformRules    Json                // Data transformation rules for this stage
+  isEnabled         Boolean             @default(true)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  executions        ImportStageExecution[]
+
+  @@index([configurationId])
+  @@index([order])
+  @@index([targetEntity])
+  @@map("import_stages")
+}
+
+model ImportExecution {
+  id                  String              @id @default(cuid())
+  configurationId     String
+  configuration       ImportConfiguration @relation(fields: [configurationId], references: [id])
+  status              ImportStatus        @default(PENDING)
+  currentStage        Int                 @default(1)     // Current executing stage number
+  totalStages         Int                 @default(1)     // Total number of stages
+  totalRecords        Int                 @default(0)
+  processedRecords    Int                 @default(0)
+  successfulRecords   Int                 @default(0)
+  failedRecords       Int                 @default(0)
+  errors              Json                // Array of error details
+  warnings            Json                // Array of warning messages
+  resultSummary       Json                // Summary of import results
+  startedAt           DateTime?
+  completedAt         DateTime?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  executedBy          String              // Store user ID as string, no FK constraint
+  stageExecutions     ImportStageExecution[]
+  logs                ImportExecutionLog[]
+
+  @@index([configurationId])
+  @@index([executedBy])
+  @@index([status])
+  @@map("import_executions")
+}
+
+model ImportStageExecution {
+  id                  String          @id @default(cuid())
+  executionId         String
+  execution           ImportExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  stageId             String
+  stage               ImportStage     @relation(fields: [stageId], references: [id])
+  order               Int             // Stage order within this execution
+  status              ImportStatus    @default(PENDING)
+  sourceTable         String          // Source table/sheet being processed
+  targetEntity        String          // Target entity being created
+  totalRecords        Int             @default(0)
+  processedRecords    Int             @default(0)
+  successfulRecords   Int             @default(0)
+  failedRecords       Int             @default(0)
+  skippedRecords      Int             @default(0)
+  createdEntityIds    Json            // IDs of created entities for cross-stage referencing
+  errors              Json            // Stage-specific errors
+  warnings            Json            // Stage-specific warnings
+  startedAt           DateTime?
+  completedAt         DateTime?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  @@index([executionId])
+  @@index([stageId])
+  @@index([status])
+  @@index([order])
+  @@map("import_stage_executions")
+}
+
+model ImportExecutionLog {
+  id          String          @id @default(cuid())
+  executionId String
+  execution   ImportExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  level       LogLevel
+  message     String
+  details     Json?
+  recordIndex Int?            // Which record this log refers to
+  timestamp   DateTime        @default(now())
+
+  @@index([executionId])
+  @@index([level])
+  @@map("import_execution_logs")
+}
+
+enum ImportSourceType {
+  DATABASE_MYSQL
+  DATABASE_POSTGRESQL
+  DATABASE_SQLITE
+  DATABASE_MONGODB
+  FILE_CSV
+  FILE_EXCEL
+  FILE_JSON
+  API_REST
+  API_GRAPHQL
+}
+
+enum ImportStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+  PAUSED
+}
+
+enum LogLevel {
+  INFO
+  WARNING
+  ERROR
+  DEBUG
+}
