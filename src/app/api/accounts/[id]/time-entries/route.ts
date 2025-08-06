@@ -143,13 +143,13 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Check permission to view time entries
-    const canView = await permissionService.hasPermission({
+    // Check permission to create time entries
+    const canCreate = await permissionService.hasPermission({
       userId: session.user.id,
       resource: "time-entries",
-      action: "view"
+      action: "create"
     });
-    if (!canView) {
+    if (!canCreate) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 

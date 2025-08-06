@@ -67,6 +67,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AccountSelector } from "@/components/selectors/account-selector";
 import { TicketSelector } from "@/components/selectors/ticket-selector";
+import { BillingRateSelector } from "@/components/selectors/billing-rate-selector";
 import { Switch } from "@/components/ui/switch";
 import { useTimeTracking } from "@/components/time/TimeTrackingProvider";
 import { TimeEntryEditDialog } from "@/components/time/TimeEntryEditDialog";
@@ -1247,7 +1248,7 @@ export default function TimeTrackingPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {entryType === "ticket" ? (
                       <div className="space-y-2">
-                        <Label htmlFor="ticket-select">Ticket</Label>
+                        <Label htmlFor="ticket-select">Ticket *</Label>
                         <TicketSelector
                           tickets={tickets}
                           value={selectedTicket}
@@ -1259,7 +1260,7 @@ export default function TimeTrackingPage() {
                       </div>
                     ) : (
                       <div className="space-y-2">
-                        <Label htmlFor="account-select">Account</Label>
+                        <Label htmlFor="account-select">Account *</Label>
                         <AccountSelector
                           accounts={accounts}
                           value={selectedAccount}
@@ -1313,24 +1314,13 @@ export default function TimeTrackingPage() {
                     {showBillingRates && (
                       <div className="space-y-2">
                         <Label htmlFor="billing-rate">Billing Rate</Label>
-                        <Select value={selectedBillingRate} onValueChange={setSelectedBillingRate}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select billing rate (optional)" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">No billing rate</SelectItem>
-                            {billingRates.map(rate => (
-                              <SelectItem key={rate.id} value={rate.id}>
-                                {rate.name} - ${rate.rate}/hr
-                                {rate.description && (
-                                  <span className="text-muted-foreground ml-1">
-                                    ({rate.description})
-                                  </span>
-                                )}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <BillingRateSelector
+                          accountId={entryType === "account" ? selectedAccount : tickets.find(t => t.id === selectedTicket)?.account?.id || ""}
+                          value={selectedBillingRate === "none" ? "" : selectedBillingRate}
+                          onValueChange={(value) => setSelectedBillingRate(value || "none")}
+                          placeholder="Select billing rate (optional)"
+                          showNoChargeOption={false}
+                        />
                       </div>
                     )}
 

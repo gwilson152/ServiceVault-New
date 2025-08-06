@@ -24,7 +24,7 @@ export interface TimeEntryPermissions {
 export function useTimeEntryPermissions(timeEntries: TimeEntry[]) {
   const { data: session } = useSession();
   const queryClient = useQueryClient();
-  const { hasPermission, loading } = usePermissions();
+  const { canEditTimeEntries, loading, isSuperAdmin } = usePermissions();
 
   // Calculate permissions for each entry based on permissions and entry state
   const entryPermissions = useMemo(() => {
@@ -46,22 +46,26 @@ export function useTimeEntryPermissions(timeEntries: TimeEntry[]) {
       
       // Can't modify locked (invoiced) entries
       if (!isLocked) {
-        // For editing: must not be approved (unless has special permission)
-        if (!isApproved) {
-          canEdit = hasPermission('time-entries', 'update') || 
-                   (hasPermission('time-entries', 'update-own') && isOwner);
+        // Super admins can edit any entry, others need specific permissions
+        if (isSuperAdmin) {
+          canEdit = true;
+          canDelete = true;
+        } else {
+          // For editing: must not be approved unless super admin or owner with edit permission
+          if (!isApproved) {
+            canEdit = canEditTimeEntries || (isOwner && canEditTimeEntries);
+          }
+          
+          // For deleting: use same logic as editing for now
+          canDelete = canEditTimeEntries || (isOwner && canEditTimeEntries);
         }
-        
-        // For deleting: check ownership and permissions
-        canDelete = hasPermission('time-entries', 'delete') || 
-                   (hasPermission('time-entries', 'delete-own') && isOwner);
       }
       
       permissionsMap.set(entry.id, { canEdit, canDelete });
     }
     
     return permissionsMap;
-  }, [timeEntries, hasPermission, session?.user?.id]);
+  }, [timeEntries, canEditTimeEntries, isSuperAdmin, session?.user?.id]);
 
   // Function to invalidate permissions cache (e.g., after role changes)
   const invalidatePermissions = () => {

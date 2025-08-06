@@ -34,6 +34,7 @@ export interface TicketSelectorProps {
   placeholder?: string;
   enableFilters?: boolean;
   enableGrouping?: boolean;
+  disabled?: boolean;
   className?: string;
 }
 
@@ -44,6 +45,7 @@ export function TicketSelector({
   placeholder = "Select a ticket",
   enableFilters = true,
   enableGrouping = true,
+  disabled = false,
   className = ""
 }: TicketSelectorProps) {
   
@@ -148,6 +150,7 @@ export function TicketSelector({
       enableFilters={enableFilters}
       searchPlaceholder="Search tickets..."
       emptyMessage="No tickets found"
+      disabled={disabled}
       className={className}
     />
   );

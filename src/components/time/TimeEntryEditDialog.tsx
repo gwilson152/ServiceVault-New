@@ -8,11 +8,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { TicketSelector } from "@/components/selectors/ticket-selector";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { AccountSelector } from "@/components/selectors/account-selector";
+import { BillingRateSelector } from "@/components/selectors/billing-rate-selector";
 import { usePermissions } from "@/hooks/usePermissions";
-import { useTimeEntryPermissions } from "@/hooks/queries/useTimeEntryPermissions";
 import { formatMinutes } from "@/lib/time-utils";
 import { Lock, FileText, Building, DollarSign, AlertTriangle } from "lucide-react";
 
@@ -44,8 +45,46 @@ interface TimeEntryEditDialogProps {
 
 export function TimeEntryEditDialog({ timeEntry, open, onOpenChange, onSuccess }: TimeEntryEditDialogProps) {
   const { data: session } = useSession();
-  const { canViewBilling } = usePermissions();
-  const { canEdit, canDelete, isLocked, getLockReason } = useTimeEntryPermissions(timeEntry);
+  const { canViewBilling, canEditTimeEntries, isSuperAdmin } = usePermissions();
+  
+  // Calculate permissions for the single time entry
+  const getTimeEntryPermissions = (entry: TimeEntry | null) => {
+    if (!entry || !session?.user?.id) {
+      return { canEdit: false, canDelete: false, isLocked: false, getLockReason: () => null };
+    }
+    
+    const isOwner = entry.userId === session.user.id;
+    const isLocked = !!(entry.invoiceItems && entry.invoiceItems.length > 0);
+    const isApproved = entry.isApproved;
+    
+    const getLockReason = () => {
+      if (!isLocked) return null;
+      const invoice = entry.invoiceItems?.[0]?.invoice;
+      if (invoice) {
+        return `This time entry is part of Invoice #${invoice.invoiceNumber} (${invoice.status}) and cannot be modified.`;
+      }
+      return "This time entry is associated with an invoice and cannot be modified.";
+    };
+    
+    let canEdit = false;
+    let canDelete = false;
+    
+    if (!isLocked) {
+      if (isSuperAdmin) {
+        canEdit = true;
+        canDelete = true;
+      } else {
+        if (!isApproved) {
+          canEdit = canEditTimeEntries || (isOwner && canEditTimeEntries);
+        }
+        canDelete = canEditTimeEntries || (isOwner && canEditTimeEntries);
+      }
+    }
+    
+    return { canEdit, canDelete, isLocked, getLockReason };
+  };
+  
+  const { canEdit, canDelete, isLocked, getLockReason } = getTimeEntryPermissions(timeEntry);
   
   // Form state
   const [entryType, setEntryType] = useState<"ticket" | "account">("ticket");
@@ -64,38 +103,16 @@ export function TimeEntryEditDialog({ timeEntry, open, onOpenChange, onSuccess }
   const [tickets, setTickets] = useState<Array<{id: string; ticketNumber: string; title: string; account: {id: string; name: string}}>>([]);
   
   // Permission state
-  const [canEditEntry, setCanEditEntry] = useState(false);
-  const [canDeleteEntry, setCanDeleteEntry] = useState(false);
-  const [entryIsLocked, setEntryIsLocked] = useState(false);
-  const [lockReason, setLockReason] = useState<string | null>(null);
   const [showBillingRates, setShowBillingRates] = useState(false);
   
   // UI state
   const [isLoading, setIsLoading] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Load permissions when timeEntry changes
+  // Set billing rates visibility based on permissions
   useEffect(() => {
-    if (timeEntry) {
-      const checkPermissions = async () => {
-        const [editPermission, deletePermission, locked, reason, billingPermission] = await Promise.all([
-          canEdit(),
-          canDelete(),
-          Promise.resolve(isLocked()),
-          Promise.resolve(getLockReason()),
-          canViewBilling()
-        ]);
-        
-        setCanEditEntry(editPermission);
-        setCanDeleteEntry(deletePermission);
-        setEntryIsLocked(locked);
-        setLockReason(reason);
-        setShowBillingRates(billingPermission);
-      };
-      
-      checkPermissions();
-    }
-  }, [timeEntry, canEdit, canDelete, isLocked, getLockReason, canViewBilling]);
+    setShowBillingRates(canViewBilling);
+  }, [canViewBilling]);
 
   // Initialize form with timeEntry data
   useEffect(() => {
@@ -162,7 +179,7 @@ export function TimeEntryEditDialog({ timeEntry, open, onOpenChange, onSuccess }
   };
 
   const handleSave = async () => {
-    if (!timeEntry || !canEditEntry) {
+    if (!timeEntry || !canEdit) {
       return;
     }
 
@@ -214,7 +231,7 @@ export function TimeEntryEditDialog({ timeEntry, open, onOpenChange, onSuccess }
   };
 
   const handleDelete = async () => {
-    if (!timeEntry || !canDeleteEntry) {
+    if (!timeEntry || !canDelete) {
       return;
     }
 
@@ -247,14 +264,14 @@ export function TimeEntryEditDialog({ timeEntry, open, onOpenChange, onSuccess }
     return null;
   }
 
-  const isReadOnly = entryIsLocked || !canEditEntry;
+  const isReadOnly = isLocked || !canEdit;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            {entryIsLocked && <Lock className="h-4 w-4 text-red-500" />}
+            {isLocked && <Lock className="h-4 w-4 text-red-500" />}
             Edit Time Entry
             {timeEntry.isApproved && (
               <Badge variant="secondary" className="text-green-700 bg-green-50">
@@ -263,15 +280,15 @@ export function TimeEntryEditDialog({ timeEntry, open, onOpenChange, onSuccess }
             )}
           </DialogTitle>
           <DialogDescription>
-            {entryIsLocked ? (
+            {isLocked ? (
               <span className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
                 <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
                 <span>
                   <span className="text-red-700 font-medium block">Entry Locked</span>
-                  <span className="text-red-600 text-sm">{lockReason}</span>
+                  <span className="text-red-600 text-sm">{getLockReason()}</span>
                 </span>
               </span>
-            ) : !canEditEntry ? (
+            ) : !canEdit ? (
               <span className="flex items-start gap-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
                 <AlertTriangle className="h-4 w-4 text-yellow-500 mt-0.5 flex-shrink-0" />
                 <span>
@@ -325,18 +342,15 @@ export function TimeEntryEditDialog({ timeEntry, open, onOpenChange, onSuccess }
             {entryType === "ticket" ? (
               <div className="space-y-2">
                 <Label htmlFor="ticket-select">Ticket *</Label>
-                <Select value={selectedTicket} onValueChange={setSelectedTicket} disabled={isReadOnly}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a ticket" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {tickets.map(ticket => (
-                      <SelectItem key={ticket.id} value={ticket.id}>
-                        {ticket.ticketNumber} - {ticket.title} ({ticket.account.name})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <TicketSelector
+                  tickets={tickets}
+                  value={selectedTicket}
+                  onValueChange={setSelectedTicket}
+                  placeholder="Select a ticket"
+                  enableFilters={true}
+                  enableGrouping={true}
+                  disabled={isReadOnly}
+                />
               </div>
             ) : (
               <div className="space-y-2">
@@ -398,24 +412,14 @@ export function TimeEntryEditDialog({ timeEntry, open, onOpenChange, onSuccess }
             {showBillingRates && (
               <div className="space-y-2">
                 <Label htmlFor="billing-rate">Billing Rate</Label>
-                <Select value={selectedBillingRate} onValueChange={setSelectedBillingRate} disabled={isReadOnly}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select billing rate (optional)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">No billing rate</SelectItem>
-                    {billingRates.map(rate => (
-                      <SelectItem key={rate.id} value={rate.id}>
-                        {rate.name} - ${rate.rate}/hr
-                        {rate.description && (
-                          <span className="text-muted-foreground ml-1">
-                            ({rate.description})
-                          </span>
-                        )}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <BillingRateSelector
+                  accountId={entryType === "account" ? selectedAccount : tickets.find(t => t.id === selectedTicket)?.account?.id || timeEntry?.account?.id || ""}
+                  value={selectedBillingRate === "none" ? "" : selectedBillingRate}
+                  onValueChange={(value) => setSelectedBillingRate(value || "none")}
+                  placeholder="Select billing rate (optional)"
+                  showNoChargeOption={false}
+                  disabled={isReadOnly}
+                />
               </div>
             )}
 
@@ -493,7 +497,7 @@ export function TimeEntryEditDialog({ timeEntry, open, onOpenChange, onSuccess }
             Cancel
           </Button>
           
-          {canDeleteEntry && !entryIsLocked && (
+          {canDelete && !isLocked && (
             <Button 
               variant="destructive" 
               onClick={handleDelete}
@@ -503,7 +507,7 @@ export function TimeEntryEditDialog({ timeEntry, open, onOpenChange, onSuccess }
             </Button>
           )}
           
-          {canEditEntry && !isReadOnly && (
+          {canEdit && !isReadOnly && (
             <Button 
               onClick={handleSave}
               disabled={isLoading || !minutes || !description.trim() || !date || !time}
