@@ -371,3 +371,75 @@ The core permission system architecture is now stable and battle-tested. All maj
 - **Type safety**: Full TypeScript coverage for permission system
 
 The system is now production-ready with a solid foundation for future development.
+
+### 2025-08-06 - Comprehensive User Management Implementation
+
+**Feature**: Complete user management system with role administration and security controls.
+**Changes**:
+- **Created UserRoleManagementDialog component** for comprehensive role management:
+  - Add/remove roles from user account memberships
+  - Remove users from accounts entirely  
+  - View effective permissions across all memberships and system roles
+  - Permission-based access control with confirmation dialogs
+- **Created UserStatusManagementDialog component** for user security management:
+  - Enable/disable user accounts
+  - Force password reset with confirmation requirements
+  - Revoke active sessions (all or individual)
+  - Unlock locked accounts
+  - View login history and security status
+- **Added comprehensive API endpoints** for user management:
+  - `/api/users/[id]/membership-roles` - Role assignment/removal
+  - `/api/users/[id]/memberships/[membershipId]` - Account membership removal
+  - `/api/users/[id]/status` - User status and session information
+  - `/api/users/[id]/disable`, `/enable`, `/unlock` - User status management
+  - `/api/users/[id]/force-password-reset` - Security actions
+  - `/api/users/[id]/revoke-sessions` - Session management
+  - `/api/users/[id]/effective-permissions` - Permission viewer
+  - `/api/users/[id]/sessions/[sessionId]` - Individual session revocation
+- **Enhanced user detail page** (`/users/[id]`):
+  - Added "Manage Roles" and "Manage Status" buttons
+  - Enhanced account membership cards with quick actions
+  - Integrated comprehensive management dialogs
+- **Enhanced accounts detail page** (`/accounts/[id]`):
+  - Added "View User Details" option in user dropdown menus
+  - Direct navigation between account and user management
+- **Improved effective permissions display**:
+  - Human-readable permission labels and account names
+  - Visual distinction for global vs account-scoped permissions
+  - Special handling for wildcard permissions with orange badges
+  - Cleaner layout with organized permission grouping
+
+**Benefits**:
+- **Enterprise-level user administration** with comprehensive management capabilities
+- **Security-first approach** with confirmation dialogs and permission checks
+- **Self-protection mechanisms** preventing users from disabling themselves
+- **Real-time updates** with immediate data refresh after changes
+- **Intuitive UI** with clear visual hierarchy and readable permission displays
+- **Audit-ready design** with all actions designed for audit trail integration
+
+**Files Added**:
+- `src/components/users/UserRoleManagementDialog.tsx` - Role management interface
+- `src/components/users/UserStatusManagementDialog.tsx` - User status management
+- `src/app/api/users/[id]/membership-roles/route.ts` - Role assignment API
+- `src/app/api/users/[id]/memberships/[membershipId]/route.ts` - Membership removal API
+- `src/app/api/users/[id]/status/route.ts` - User status API
+- `src/app/api/users/[id]/disable/route.ts` - Account disable API
+- `src/app/api/users/[id]/enable/route.ts` - Account enable API
+- `src/app/api/users/[id]/force-password-reset/route.ts` - Password reset API
+- `src/app/api/users/[id]/unlock/route.ts` - Account unlock API
+- `src/app/api/users/[id]/revoke-sessions/route.ts` - Session revocation API
+- `src/app/api/users/[id]/effective-permissions/route.ts` - Permission viewer API
+- `src/app/api/users/[id]/sessions/[sessionId]/route.ts` - Individual session API
+
+**Files Changed**:
+- `src/app/users/[id]/page.tsx` - Enhanced with comprehensive management options
+- `src/app/accounts/[id]/page.tsx` - Added direct user navigation links
+
+**Security Features**:
+- Permission-based access control respecting RBAC system
+- Self-protection preventing users from disabling themselves
+- Typed confirmation requirements for destructive actions
+- Comprehensive validation and error handling
+- Clean cascade handling for data integrity
+
+**Verification**: All user management features now provide enterprise-level administration capabilities with proper security controls and intuitive interfaces.

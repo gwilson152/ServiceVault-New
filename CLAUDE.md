@@ -10,7 +10,8 @@ Service Vault is a **time management and invoicing system** built with Next.js 1
 
 - **ABAC Permission System** with role templates and super-admin capabilities
 - **Hierarchical account management** with parent-child relationships  
-- **Unified user management** with account membership control
+- **Comprehensive user management** with role administration and security controls
+- **Advanced role management** with effective permissions viewer and assignment interface
 - Time tracking with cross-device timer synchronization
 - Invoice generation with billing rate overrides
 - Customizable ticket fields and email templates
@@ -58,6 +59,7 @@ npx prisma db push  # Push schema changes
   /components
     /selectors/        # AccountSelector, etc.
     /accounts/         # Hierarchy display components
+    /users/            # User management dialogs
     /layout/           # Navigation with permissions
   /hooks
     usePermissions.ts  # ABAC permission hooks
@@ -162,10 +164,13 @@ Two-tier rates: system defaults + account overrides
 
 ## Current Status
 
-**✅ COMPLETED (Major RBAC → ABAC Migration):**
+**✅ COMPLETED (Major RBAC → ABAC Migration + User Management):**
 - Permission system overhaul with RoleTemplate architecture
 - Database migration to PostgreSQL with clean schema
-- Unified user management interface (`/users`)
+- Comprehensive user management system with role administration
+- Advanced user management dialogs (UserRoleManagementDialog, UserStatusManagementDialog)
+- Complete user security controls (enable/disable, password reset, session management)
+- Effective permissions viewer with human-readable displays
 - All critical API endpoints updated with permission filtering
 - Navigation and page layouts updated for new system
 

@@ -287,6 +287,18 @@ export function UserRoleManagementDialog({
     return grouped;
   };
 
+  const getAccountNameFromId = (accountId: string) => {
+    if (accountId === 'GLOBAL') return null;
+    
+    // Look through memberships to find account name
+    for (const membership of memberships) {
+      if (membership.account.id === accountId) {
+        return membership.account.name;
+      }
+    }
+    return null;
+  };
+
   if (!canEditUsers) {
     return null;
   }
@@ -471,14 +483,33 @@ export function UserRoleManagementDialog({
                 <div className="space-y-4">
                   {Object.entries(groupPermissionsByResource(effectivePermissions)).map(([resource, permissions]) => (
                     <div key={resource} className="border rounded-lg p-4">
-                      <h3 className="font-medium mb-3 capitalize">{resource} Permissions</h3>
+                      <h3 className="font-medium mb-3 capitalize">{resource.replace('-', ' ')} Permissions</h3>
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-                        {permissions.map((permission, index) => (
-                          <Badge key={index} variant="outline">
-                            {permission.action}
-                            {permission.scope !== 'GLOBAL' && ` (${permission.scope})`}
-                          </Badge>
-                        ))}
+                        {permissions.map((permission, index) => {
+                          const isGlobal = permission.scope === 'GLOBAL';
+                          const isWildcard = permission.action === '*';
+                          const accountName = getAccountNameFromId(permission.scope);
+                          
+                          return (
+                            <Badge 
+                              key={index} 
+                              variant={isGlobal ? "default" : isWildcard ? "destructive" : "outline"}
+                              className={isWildcard ? "bg-orange-500 hover:bg-orange-600 text-white" : ""}
+                            >
+                              {isWildcard ? 'All Actions' : permission.action}
+                              {!isGlobal && (
+                                <span className="ml-1 text-xs opacity-75">
+                                  ({accountName || 'Account'})
+                                </span>
+                              )}
+                              {isGlobal && (
+                                <span className="ml-1 text-xs opacity-75">
+                                  (Global)
+                                </span>
+                              )}
+                            </Badge>
+                          );
+                        })}
                       </div>
                     </div>
                   ))}

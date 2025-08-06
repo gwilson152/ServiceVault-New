@@ -25,7 +25,8 @@ Detailed documentation for major application features:
 - **[`accounts.md`](./features/accounts.md)** - Hierarchical account management system
 - **[`billing.md`](./features/billing.md)** - Billing rates, invoicing, and payment processing  
 - **[`time-entries.md`](./features/time-entries.md)** - Time tracking, approval workflows, and billing integration
-- **[`role-templates.md`](./features/role-templates.md)** - **New!** Role template management with ABAC permission system
+- **[`role-templates.md`](./features/role-templates.md)** - Role template management with ABAC permission system
+- **[`user-management.md`](./features/user-management.md)** - **New!** Comprehensive user administration with role management and security controls
 
 ### Component Documentation
 

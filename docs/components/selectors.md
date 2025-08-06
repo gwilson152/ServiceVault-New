@@ -1,6 +1,6 @@
 # Selector Components
 
-This document describes the hierarchical selector components available in the Service Vault application, including their usage patterns, configuration options, and best practices.
+This document describes the hierarchical selector components and user management dialogs available in the Service Vault application, including their usage patterns, configuration options, and best practices.
 
 ## Overview
 
@@ -13,6 +13,10 @@ The selector components provide enhanced user interfaces for selecting items fro
 /components/selectors/
   ├── account-selector.tsx                   # Account-specific implementation
   └── simple-account-selector.tsx           # Basic account dropdown (deprecated)
+/components/users/                           # User management dialogs
+  ├── UserRoleManagementDialog.tsx          # Role management interface
+  ├── UserStatusManagementDialog.tsx        # Security and status management
+  └── AssignAccountDialog.tsx               # Account assignment dialog
 ```
 
 ## HierarchicalSelector (Generic Base)
@@ -372,3 +376,189 @@ const [selectedAccount, setSelectedAccount] = useState<string>("all");
 - Consider server-side filtering and pagination
 - Implement search debouncing
 - Use React.memo for expensive list items
+
+## User Management Dialogs
+
+The user management dialogs provide comprehensive interfaces for administering user accounts, roles, and security settings. These components integrate with the RBAC permission system and follow enterprise security best practices.
+
+### UserRoleManagementDialog
+
+**Purpose**: Comprehensive role management interface for individual users
+**Location**: `/src/components/users/UserRoleManagementDialog.tsx`
+
+#### Features
+
+- **Role Assignment Management**:
+  - Add roles to existing account memberships
+  - Remove roles from memberships
+  - Remove users from accounts entirely
+  - Real-time role availability filtering
+- **Effective Permissions Viewer**:
+  - Visual permission display grouped by resource
+  - Human-readable permission labels with account names
+  - Special handling for wildcard permissions
+  - Global vs account-scoped permission distinction
+
+#### Usage
+
+```typescript
+import { UserRoleManagementDialog } from "@/components/users/UserRoleManagementDialog";
+
+<UserRoleManagementDialog
+  open={showRoleDialog}
+  onOpenChange={setShowRoleDialog}
+  userId={user.id}
+  userName={user.name || user.email}
+  memberships={user.memberships}
+  onRoleChanged={refreshUserData}
+/>
+```
+
+#### Props
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `open` | `boolean` | Dialog visibility state |
+| `onOpenChange` | `(open: boolean) => void` | Dialog state change callback |
+| `userId` | `string` | Target user ID |
+| `userName` | `string` | User display name |
+| `memberships` | `AccountMembership[]` | User's current memberships |
+| `onRoleChanged` | `() => void` | Callback after role changes |
+
+### UserStatusManagementDialog
+
+**Purpose**: User security and status management interface
+**Location**: `/src/components/users/UserStatusManagementDialog.tsx`
+
+#### Features
+
+- **Account Status Management**:
+  - Enable/disable user accounts
+  - View current security flags and login attempts
+  - Force password reset with confirmation
+  - Unlock locked accounts
+- **Session Management**:
+  - View all active user sessions with device details
+  - Revoke individual or all sessions
+  - Current session protection
+
+#### Usage
+
+```typescript
+import { UserStatusManagementDialog } from "@/components/users/UserStatusManagementDialog";
+
+<UserStatusManagementDialog
+  open={showStatusDialog}
+  onOpenChange={setShowStatusDialog}
+  userId={user.id}
+  userName={user.name || user.email}
+  userEmail={user.email}
+  onStatusChanged={refreshUserData}
+/>
+```
+
+#### Props
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `open` | `boolean` | Dialog visibility state |
+| `onOpenChange` | `(open: boolean) => void` | Dialog state change callback |
+| `userId` | `string` | Target user ID |
+| `userName` | `string` | User display name |
+| `userEmail` | `string` | User email address |
+| `onStatusChanged` | `() => void` | Callback after status changes |
+
+### Integration Example
+
+Complete integration on user detail page:
+
+```typescript
+// User Detail Page (/users/[id])
+const [showRoleManagement, setShowRoleManagement] = useState(false);
+const [showStatusManagement, setShowStatusManagement] = useState(false);
+
+return (
+  <div>
+    {/* User action buttons */}
+    <Button onClick={() => setShowRoleManagement(true)}>
+      <Shield className="h-4 w-4 mr-2" />
+      Manage Roles
+    </Button>
+    
+    <Button onClick={() => setShowStatusManagement(true)}>
+      <UserCheck className="h-4 w-4 mr-2" />
+      Manage Status
+    </Button>
+
+    {/* Management dialogs */}
+    <UserRoleManagementDialog
+      open={showRoleManagement}
+      onOpenChange={setShowRoleManagement}
+      userId={user.id}
+      userName={user.name || user.email}
+      memberships={user.memberships}
+      onRoleChanged={loadUser}
+    />
+
+    <UserStatusManagementDialog
+      open={showStatusManagement}
+      onOpenChange={setShowStatusManagement}
+      userId={user.id}
+      userName={user.name || user.email}
+      userEmail={user.email}
+      onStatusChanged={loadUser}
+    />
+  </div>
+);
+```
+
+### Security Features
+
+#### Permission-Based Access
+- All dialogs check `canEditUsers` permission before rendering
+- API operations validate user permissions server-side
+- Self-protection prevents users from modifying their own accounts
+
+#### Confirmation Patterns
+- Destructive actions require typed confirmations
+- Critical actions show detailed impact warnings
+- Session revocation excludes current admin session
+
+#### Data Validation
+- Role assignments validate against available templates
+- Status changes verify current user state
+- Account associations validate membership permissions
+
+### API Integration
+
+The user management dialogs integrate with comprehensive API endpoints:
+
+#### Role Management APIs
+- `POST /api/users/[id]/membership-roles` - Add role to membership
+- `DELETE /api/users/[id]/membership-roles` - Remove role from membership
+- `DELETE /api/users/[id]/memberships/[membershipId]` - Remove from account
+- `GET /api/users/[id]/effective-permissions` - View computed permissions
+
+#### Status Management APIs
+- `GET /api/users/[id]/status` - Get user status and sessions
+- `POST /api/users/[id]/disable|enable|unlock` - Status control
+- `POST /api/users/[id]/force-password-reset` - Security actions
+- `POST /api/users/[id]/revoke-sessions` - Session management
+
+### Best Practices
+
+#### For Developers
+1. **Always validate permissions** before showing management dialogs
+2. **Use confirmation dialogs** for destructive actions
+3. **Refresh data after changes** using provided callbacks
+4. **Handle loading states** during API operations
+5. **Provide clear error messages** for failed operations
+
+#### For Administrators
+1. **Review effective permissions** before making role changes
+2. **Use least privilege principle** when assigning roles
+3. **Document security actions** for audit compliance
+4. **Monitor failed attempts** and locked accounts
+5. **Regular permission audits** to ensure appropriate access
+
+The user management dialogs provide enterprise-level user administration capabilities while maintaining security, usability, and proper integration with the application's permission system.

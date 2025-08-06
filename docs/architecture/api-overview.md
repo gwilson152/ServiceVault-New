@@ -456,9 +456,17 @@ const result = await prisma.$transaction(async (tx) => {
 - **Permissions**: Own/assignee access, approval permissions
 
 #### Users (`/api/users`)
-- **Purpose**: User management and authentication
-- **Key Features**: Role assignment, account association, invitations
-- **Permissions**: Admin-only for most operations
+- **Purpose**: Comprehensive user management and administration
+- **Key Features**: User profiles, role assignment, account association, security controls
+- **Sub-endpoints**: 
+  - `/api/users/[id]/membership-roles` - Role assignment/removal
+  - `/api/users/[id]/memberships/[membershipId]` - Account removal
+  - `/api/users/[id]/status` - Security status and sessions
+  - `/api/users/[id]/disable|enable|unlock` - Account status control
+  - `/api/users/[id]/force-password-reset` - Security actions
+  - `/api/users/[id]/revoke-sessions` - Session management
+  - `/api/users/[id]/effective-permissions` - Permission analysis
+- **Permissions**: Admin-only with self-protection mechanisms
 
 ### Specialized APIs
 
