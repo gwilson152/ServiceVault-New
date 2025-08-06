@@ -135,6 +135,10 @@ export async function GET(request: NextRequest) {
 
 ## Key Systems
 
+### Settings Architecture
+Unified SystemSettings with permission controls and type safety
+📖 [`/docs/system/settings-architecture.md`](./docs/system/settings-architecture.md)
+
 ### User Preferences
 Database-backed with 500ms debounced auto-save
 📖 [`/docs/system/user-preferences.md`](./docs/system/user-preferences.md)

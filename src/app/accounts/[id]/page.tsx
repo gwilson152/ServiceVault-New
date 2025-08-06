@@ -736,6 +736,12 @@ export default function AccountDetailsPage() {
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
+                                {/* View User Details */}
+                                <DropdownMenuItem onClick={() => router.push(`/users/${accountUser.userId || accountUser.id}`)}>
+                                  <User className="h-4 w-4 mr-2" />
+                                  View User Details
+                                </DropdownMenuItem>
+
                                 {/* Edit User */}
                                 {canUpdateUsers && (
                                   <DropdownMenuItem onClick={() => handleEditUser(accountUser)}>

@@ -66,11 +66,15 @@ import {
   AlertTriangle,
   Loader2,
   ExternalLink,
-  Plus
+  Plus,
+  Settings,
+  UserCheck
 } from "lucide-react";
 import { useToast } from "@/hooks/useToast";
 import { usePermissions } from "@/hooks/usePermissions";
 import { AssignAccountDialog } from "@/components/users/AssignAccountDialog";
+import { UserRoleManagementDialog } from "@/components/users/UserRoleManagementDialog";
+import { UserStatusManagementDialog } from "@/components/users/UserStatusManagementDialog";
 
 interface UserDetail {
   id: string;
@@ -173,6 +177,8 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
   const [editing, setEditing] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showAssignAccountDialog, setShowAssignAccountDialog] = useState(false);
+  const [showRoleManagementDialog, setShowRoleManagementDialog] = useState(false);
+  const [showStatusManagementDialog, setShowStatusManagementDialog] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [editForm, setEditForm] = useState({
     name: "",
@@ -377,6 +383,24 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
                 Edit User
               </Button>
             )}
+            {canEditUsers && (
+              <Button 
+                variant="outline" 
+                onClick={() => setShowRoleManagementDialog(true)}
+              >
+                <Shield className="h-4 w-4 mr-2" />
+                Manage Roles
+              </Button>
+            )}
+            {canEditUsers && (
+              <Button 
+                variant="outline" 
+                onClick={() => setShowStatusManagementDialog(true)}
+              >
+                <UserCheck className="h-4 w-4 mr-2" />
+                Manage Status
+              </Button>
+            )}
             {canDeleteUsers && (
               <Button 
                 variant="destructive" 
@@ -523,6 +547,26 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
                                 <span> • Child of {membership.account.parent.name}</span>
                               )}
                             </p>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => router.push(`/accounts/${membership.account.id}`)}
+                            >
+                              <Building className="h-4 w-4 mr-2" />
+                              View Account
+                            </Button>
+                            {canEditUsers && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setShowRoleManagementDialog(true)}
+                              >
+                                <Settings className="h-4 w-4 mr-2" />
+                                Manage Roles
+                              </Button>
+                            )}
                           </div>
                         </div>
                         <div className="flex flex-wrap gap-2">
@@ -843,6 +887,26 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
           userName={user?.name || ""}
           existingAccountIds={user?.memberships.map(m => m.account.id) || []}
           onAccountAssigned={loadUser}
+        />
+
+        {/* User Role Management Dialog */}
+        <UserRoleManagementDialog
+          open={showRoleManagementDialog}
+          onOpenChange={setShowRoleManagementDialog}
+          userId={user?.id || ""}
+          userName={user?.name || user?.email || ""}
+          memberships={user?.memberships || []}
+          onRoleChanged={loadUser}
+        />
+
+        {/* User Status Management Dialog */}
+        <UserStatusManagementDialog
+          open={showStatusManagementDialog}
+          onOpenChange={setShowStatusManagementDialog}
+          userId={user?.id || ""}
+          userName={user?.name || user?.email || ""}
+          userEmail={user?.email || ""}
+          onStatusChanged={loadUser}
         />
       </div>
     </main>
