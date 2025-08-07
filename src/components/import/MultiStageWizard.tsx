@@ -42,10 +42,16 @@ import {
   FileText,
   Info,
   Play,
-  Plus
+  Plus,
+  AlertTriangle,
+  Users,
+  Building,
+  Ticket,
+  Clock
 } from "lucide-react";
 import { SourceSchema, SourceTable, ImportStageData, ConnectionConfig } from "@/lib/import/types";
 import { StageRelationship } from "./RelationshipMapper";
+import VisualRelationshipMapper from "./VisualRelationshipMapper";
 
 const TARGET_ENTITIES = [
   { 
@@ -424,58 +430,282 @@ export default function MultiStageWizard({
         <Link className="h-4 w-4" />
         <AlertTitle>Stage Relationships</AlertTitle>
         <AlertDescription>
-          Define how data from different stages relates to each other. This ensures data integrity and proper linking.
+          Define how data from different stages relates to each other. This ensures data integrity and proper linking between your imported records.
         </AlertDescription>
       </Alert>
       
-      {/* Relationship configuration would go here */}
-      <Card>
-        <CardContent className="text-center py-12">
-          <Link className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-          <h3 className="text-lg font-semibold mb-2">Relationship Mapping</h3>
-          <p className="text-muted-foreground">
-            This feature will be enhanced with visual relationship mapping
-          </p>
-        </CardContent>
-      </Card>
+      {stages.length < 2 ? (
+        <Card>
+          <CardContent className="text-center py-12">
+            <Link className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+            <h3 className="text-lg font-semibold mb-2">Add More Stages</h3>
+            <p className="text-muted-foreground mb-4">
+              You need at least 2 stages to create relationships between them.
+            </p>
+            <Button onClick={() => setCurrentStep(1)}>
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Go Back to Configure Stages
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <VisualRelationshipMapper
+          stages={stages}
+          relationships={relationships}
+          sourceSchema={sourceSchema}
+          onChange={onRelationshipsChange || (() => {})}
+        />
+      )}
     </div>
   );
 
-  const renderPipelinePreview = () => (
-    <div className="space-y-6">
-      <Alert>
-        <Play className="h-4 w-4" />
-        <AlertTitle>Pipeline Preview</AlertTitle>
-        <AlertDescription>
-          Review your complete import pipeline before execution. You can test individual stages or the entire pipeline.
-        </AlertDescription>
-      </Alert>
+  const renderPipelinePreview = () => {
+    const validationResults = validatePipeline();
+    
+    return (
+      <div className="space-y-6">
+        <Alert>
+          <Play className="h-4 w-4" />
+          <AlertTitle>Pipeline Review</AlertTitle>
+          <AlertDescription>
+            Review your complete import pipeline configuration. Check for any issues before executing the import.
+          </AlertDescription>
+        </Alert>
 
-      <div className="grid gap-4">
-        {stages.map((stage, index) => (
-          <Card key={stage.id}>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <Badge>Stage {stage.order}</Badge>
-                  <div>
-                    <p className="font-medium">{stage.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {stage.sourceTable} → {stage.targetEntity}
-                    </p>
-                  </div>
-                </div>
-                <Button variant="outline" size="sm">
-                  <Eye className="h-4 w-4 mr-2" />
-                  Preview
-                </Button>
+        {/* Validation Summary */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              {validationResults.isValid ? (
+                <CheckCircle className="h-5 w-5 text-green-500" />
+              ) : (
+                <AlertCircle className="h-5 w-5 text-red-500" />
+              )}
+              Pipeline Validation
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {validationResults.isValid ? (
+              <Alert className="border-green-200 bg-green-50">
+                <CheckCircle className="h-4 w-4 text-green-600" />
+                <AlertDescription className="text-green-800">
+                  Your pipeline configuration is valid and ready for execution!
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <div className="space-y-3">
+                {validationResults.errors.map((error, index) => (
+                  <Alert key={index} variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                ))}
+                {validationResults.warnings.map((warning, index) => (
+                  <Alert key={index}>
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertDescription>{warning}</AlertDescription>
+                  </Alert>
+                ))}
               </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Pipeline Summary */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Execution Plan</CardTitle>
+            <CardDescription>
+              This shows how your data will be imported step by step
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {stages.map((stage, index) => {
+                const tableInfo = getTableInfo(stage.sourceTable);
+                const tableSample = tableSamples[stage.sourceTable];
+                const stageRelationships = relationships.filter(rel => rel.toStageId === stage.id);
+                
+                return (
+                  <div key={stage.id} className="border rounded-lg p-4">
+                    <div className="flex items-start justify-between">
+                      <div className="space-y-3 flex-1">
+                        <div className="flex items-center gap-3">
+                          <Badge variant="outline">Step {index + 1}</Badge>
+                          <div className="flex items-center gap-2">
+                            {getStageIcon(stage.targetEntity)}
+                            <span className="font-medium">{stage.name}</span>
+                          </div>
+                          {!stage.isEnabled && (
+                            <Badge variant="secondary">Disabled</Badge>
+                          )}
+                        </div>
+                        
+                        <div className="grid md:grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <span className="text-muted-foreground">Source:</span>
+                            <p className="font-medium">{stage.sourceTable}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {tableInfo?.fields.length} fields, {tableInfo?.recordCount?.toLocaleString() || '?'} records
+                            </p>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Target:</span>
+                            <p className="font-medium">{stage.targetEntity}</p>
+                            <p className="text-xs text-muted-foreground">
+                              System entity with relationships
+                            </p>
+                          </div>
+                        </div>
+
+                        {stageRelationships.length > 0 && (
+                          <div>
+                            <span className="text-muted-foreground text-sm">Dependencies:</span>
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {stageRelationships.map((rel) => {
+                                const fromStage = stages.find(s => s.id === rel.fromStageId);
+                                return (
+                                  <Badge key={rel.id} variant="secondary" className="text-xs">
+                                    Requires {fromStage?.targetEntity}
+                                  </Badge>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {tableSample && tableSample.rows.length > 0 && (
+                          <div>
+                            <span className="text-muted-foreground text-sm">Sample data available:</span>
+                            <p className="text-xs text-muted-foreground">
+                              Preview ready for {tableSample.rows.length} sample records
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                      
+                      <div className="flex gap-2 ml-4">
+                        <Button variant="outline" size="sm">
+                          <Eye className="h-4 w-4 mr-1" />
+                          Preview
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Pipeline Statistics */}
+        <div className="grid md:grid-cols-3 gap-4">
+          <Card>
+            <CardContent className="p-4 text-center">
+              <div className="text-2xl font-bold">{stages.length}</div>
+              <p className="text-sm text-muted-foreground">Total Stages</p>
             </CardContent>
           </Card>
-        ))}
+          <Card>
+            <CardContent className="p-4 text-center">
+              <div className="text-2xl font-bold">{relationships.length}</div>
+              <p className="text-sm text-muted-foreground">Relationships</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4 text-center">
+              <div className="text-2xl font-bold">
+                {stages.reduce((sum, stage) => {
+                  const tableInfo = getTableInfo(stage.sourceTable);
+                  return sum + (tableInfo?.recordCount || 0);
+                }, 0).toLocaleString()}
+              </div>
+              <p className="text-sm text-muted-foreground">Total Records</p>
+            </CardContent>
+          </Card>
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
+
+  const validatePipeline = () => {
+    const errors: string[] = [];
+    const warnings: string[] = [];
+
+    // Check if stages are configured
+    if (stages.length === 0) {
+      errors.push("No stages configured");
+      return { isValid: false, errors, warnings };
+    }
+
+    // Check each stage
+    stages.forEach((stage, index) => {
+      if (!stage.name.trim()) {
+        errors.push(`Stage ${index + 1}: Name is required`);
+      }
+      if (!stage.sourceTable) {
+        errors.push(`Stage ${index + 1}: Source table not selected`);
+      }
+      if (!stage.targetEntity) {
+        errors.push(`Stage ${index + 1}: Target entity not selected`);
+      }
+    });
+
+    // Check for circular dependencies in relationships
+    const hasCircularDependency = checkCircularDependencies();
+    if (hasCircularDependency) {
+      errors.push("Circular dependencies detected in relationships");
+    }
+
+    // Check for stages without relationships (might be intentional)
+    if (stages.length > 1 && relationships.length === 0) {
+      warnings.push("No relationships defined between stages - data will be imported independently");
+    }
+
+    return {
+      isValid: errors.length === 0,
+      errors,
+      warnings
+    };
+  };
+
+  const checkCircularDependencies = () => {
+    // Simple circular dependency check for relationships
+    const visited = new Set<string>();
+    const recursionStack = new Set<string>();
+
+    const hasCycle = (stageId: string): boolean => {
+      if (recursionStack.has(stageId)) return true;
+      if (visited.has(stageId)) return false;
+
+      visited.add(stageId);
+      recursionStack.add(stageId);
+
+      const dependencies = relationships.filter(rel => rel.fromStageId === stageId);
+      for (const dep of dependencies) {
+        if (hasCycle(dep.toStageId)) return true;
+      }
+
+      recursionStack.delete(stageId);
+      return false;
+    };
+
+    for (const stage of stages) {
+      if (hasCycle(stage.id)) return true;
+    }
+
+    return false;
+  };
+
+  const getStageIcon = (targetEntity: string) => {
+    const icons = {
+      Account: <Building className="h-4 w-4" />,
+      User: <Users className="h-4 w-4" />,
+      Ticket: <Ticket className="h-4 w-4" />,
+      TimeEntry: <Clock className="h-4 w-4" />
+    };
+    return icons[targetEntity as keyof typeof icons] || <Target className="h-4 w-4" />;
+  };
 
   return (
     <div className="space-y-6">
@@ -613,7 +843,7 @@ function StageEditor({
               <SelectValue placeholder="Choose source table" />
             </SelectTrigger>
             <SelectContent>
-              {[...availableTables, ...(stage.sourceTable ? [stage.sourceTable] : [])].map((tableName) => {
+              {Array.from(new Set([...availableTables, ...(stage.sourceTable ? [stage.sourceTable] : [])])).map((tableName) => {
                 const table = sourceSchema.tables?.find(t => t.name === tableName);
                 return (
                   <SelectItem key={tableName} value={tableName}>
