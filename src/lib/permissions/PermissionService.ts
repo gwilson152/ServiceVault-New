@@ -65,7 +65,13 @@ export class PermissionService {
     });
 
     if (!userData) {
-      throw new Error(`User not found: ${userId}`);
+      console.warn(`User not found: ${userId}. This may indicate a stale session or deleted user.`);
+      // Return empty permissions for non-existent users rather than throwing
+      return {
+        isSuperAdmin: false,
+        systemPermissions: new Set(),
+        accountPermissions: new Map()
+      };
     }
 
     const permissions: UserPermissions = {

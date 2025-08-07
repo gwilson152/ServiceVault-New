@@ -219,16 +219,38 @@ export interface TargetConstraint {
 }
 
 // Import Configuration Types
+export interface ImportStageData {
+  id: string;
+  order: number;
+  name: string;
+  description?: string;
+  sourceTable: string;
+  targetEntity: string;
+  fieldMappings: FieldMapping[];
+  fieldOverrides: Record<string, any>;
+  dependsOnStages: string[];
+  crossStageMapping: Record<string, string>;
+  validationRules: ValidationRule[];
+  transformRules: TransformRule[];
+  isEnabled: boolean;
+}
+
 export interface ImportConfigurationData {
   name: string;
   description?: string;
   sourceType: ImportSourceType;
   connectionConfig: ConnectionConfig;
-  targetEntity: string;
-  fieldMappings: FieldMapping[];
-  relationshipMappings: RelationshipMapping[];
-  validationRules: ValidationRule[];
-  transformRules: TransformRule[];
+  sourceTableConfig?: any;
+  isMultiStage?: boolean;
+  targetEntity?: string;
+  fieldMappings?: FieldMapping[];
+  relationshipMappings?: RelationshipMapping[];
+  validationRules?: ValidationRule[];
+  transformRules?: TransformRule[];
+  stages?: ImportStageData[];
+  relationships?: any[]; // Stage relationships
+  isActive?: boolean;
+  connectionTestPassed?: boolean;
 }
 
 // Data Processing Types

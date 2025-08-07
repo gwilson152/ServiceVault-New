@@ -8,6 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
+import TablePreviewModal from "./TablePreviewModal";
 import { 
   Table,
   TableBody,
@@ -62,6 +63,11 @@ export default function SourceTableSelector({
   onPreviewTable
 }: SourceTableSelectorProps) {
   const [previews, setPreviews] = useState<Record<string, TablePreview>>({});
+  const [previewModal, setPreviewModal] = useState<{
+    isOpen: boolean;
+    tableName: string;
+    tableInfo?: SourceTable;
+  }>({ isOpen: false, tableName: '' });
   const [expandedTables, setExpandedTables] = useState<Set<string>>(new Set());
 
   const availableTables = sourceSchema?.tables || [];
@@ -245,6 +251,18 @@ export default function SourceTableSelector({
                       )}
                       {preview?.loading ? 'Loading...' : isExpanded ? 'Hide Preview' : 'Preview'}
                     </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPreviewModal({ 
+                        isOpen: true, 
+                        tableName: table.name, 
+                        tableInfo: table 
+                      })}
+                      title="Open in fullscreen"
+                    >
+                      <Database className="h-4 w-4" />
+                    </Button>
                   </div>
                 </div>
 
@@ -322,6 +340,14 @@ export default function SourceTableSelector({
           })}
         </div>
       </CardContent>
+      
+      <TablePreviewModal
+        isOpen={previewModal.isOpen}
+        onClose={() => setPreviewModal({ isOpen: false, tableName: '' })}
+        tableName={previewModal.tableName}
+        tableInfo={previewModal.tableInfo}
+        connectionConfig={connectionConfig}
+      />
     </Card>
   );
 }

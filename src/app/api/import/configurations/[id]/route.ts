@@ -31,6 +31,18 @@ export async function GET(
     const configuration = await prisma.importConfiguration.findUnique({
       where: { id: resolvedParams.id },
       include: {
+        stages: {
+          orderBy: { order: 'asc' },
+          select: {
+            id: true,
+            order: true,
+            name: true,
+            description: true,
+            sourceTable: true,
+            targetEntity: true,
+            isEnabled: true
+          }
+        },
         executions: {
           take: 10,
           orderBy: { createdAt: 'desc' },
@@ -229,6 +241,62 @@ export async function DELETE(
     return NextResponse.json({ message: 'Configuration deleted successfully' });
   } catch (error) {
     console.error('Error deleting import configuration:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const session = await getServerSession(authOptions);
+    const resolvedParams = await params;
+
+    if (!session || !session.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Check permission to edit import configurations
+    const canEdit = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: 'imports',
+      action: 'edit'
+    });
+
+    if (!canEdit) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const body = await request.json();
+    
+    // Check if configuration exists
+    const existingConfig = await prisma.importConfiguration.findUnique({
+      where: { id: resolvedParams.id }
+    });
+
+    if (!existingConfig) {
+      return NextResponse.json({ error: 'Configuration not found' }, { status: 404 });
+    }
+
+    // Update the configuration with partial data
+    const configuration = await prisma.importConfiguration.update({
+      where: { id: resolvedParams.id },
+      data: {
+        ...body,
+        updatedAt: new Date()
+      }
+    });
+
+    return NextResponse.json({
+      message: 'Configuration updated successfully',
+      configuration
+    });
+  } catch (error) {
+    console.error('Error patching import configuration:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
