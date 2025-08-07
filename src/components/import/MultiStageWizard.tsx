@@ -569,6 +569,7 @@ export default function MultiStageWizard({
                   availableTables={getAvailableTables(selectedStageIndex)}
                   sourceSchema={sourceSchema}
                   tableSamples={tableSamples}
+                  joinedTables={joinedTables}
                   onUpdate={(updates) => handleUpdateStage(selectedStageIndex, updates)}
                   onDelete={() => handleDeleteStage(selectedStageIndex)}
                 />
@@ -972,6 +973,7 @@ interface StageEditorProps {
   availableTables: string[];
   sourceSchema: SourceSchema;
   tableSamples: Record<string, TableSample>;
+  joinedTables: JoinedTableConfig[];
   onUpdate: (updates: Partial<ImportStageData>) => void;
   onDelete: () => void;
 }
@@ -982,6 +984,7 @@ function StageEditor({
   availableTables,
   sourceSchema,
   tableSamples,
+  joinedTables,
   onUpdate,
   onDelete
 }: StageEditorProps) {

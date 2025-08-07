@@ -505,12 +505,16 @@ export default function JoinVisualization({
       <Dialog open={showPreview} onOpenChange={setShowPreview}>
         <DialogContent className="max-w-7xl max-h-[90vh] w-[95vw] overflow-hidden">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <GitMerge className="h-5 w-5" />
-              Join Preview: {joinedTable.name}
-            </DialogTitle>
-            <DialogDescription className="flex items-center justify-between">
-              <span>Preview of the joined table with real data and join explanation</span>
+            <div className="flex items-center justify-between">
+              <div>
+                <DialogTitle className="flex items-center gap-2">
+                  <GitMerge className="h-5 w-5" />
+                  Join Preview: {joinedTable.name}
+                </DialogTitle>
+                <DialogDescription>
+                  Preview of the joined table with real data and join explanation
+                </DialogDescription>
+              </div>
               <div className="relative">
                 <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -520,7 +524,7 @@ export default function JoinVisualization({
                   className="pl-10 w-64"
                 />
               </div>
-            </DialogDescription>
+            </div>
           </DialogHeader>
 
           <div className="overflow-y-auto max-h-[calc(90vh-120px)] space-y-4">
