@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +22,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
   Database,
   Search,
   ChevronLeft,
@@ -30,7 +36,9 @@ import {
   Loader2,
   AlertCircle,
   Eye,
-  X
+  EyeOff,
+  X,
+  Settings
 } from "lucide-react";
 import { ConnectionConfig, SourceTable } from "@/lib/import/types";
 
@@ -62,6 +70,10 @@ export default function TablePreviewModal({
   const [pageSize, setPageSize] = useState(50);
   const [searchTerm, setSearchTerm] = useState("");
   const [filteredData, setFilteredData] = useState<TableData | null>(null);
+  const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>({});
+  const [columnSettingsOpen, setColumnSettingsOpen] = useState(false);
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
+  const [resizing, setResizing] = useState<{ column: string; startX: number; startWidth: number } | null>(null);
 
   const totalPages = Math.ceil((filteredData?.totalCount || 0) / pageSize);
 
@@ -70,6 +82,31 @@ export default function TablePreviewModal({
       loadTableData();
     }
   }, [isOpen, tableName, currentPage, pageSize]);
+
+  // Initialize visible columns and widths when data loads
+  useEffect(() => {
+    if (tableData?.columns) {
+      const initialVisibility: Record<string, boolean> = {};
+      const initialWidths: Record<string, number> = {};
+      
+      tableData.columns.forEach(column => {
+        initialVisibility[column] = true;
+        // Calculate initial width based on content
+        const maxContentLength = Math.max(
+          column.length,
+          ...tableData.rows.slice(0, Math.min(10, tableData.rows.length)).map(row => {
+            const cellIndex = tableData.columns.indexOf(column);
+            const cellValue = row[cellIndex];
+            return String(cellValue || '').length;
+          })
+        );
+        initialWidths[column] = Math.min(Math.max(maxContentLength * 8 + 40, 120), 250);
+      });
+      
+      setVisibleColumns(initialVisibility);
+      setColumnWidths(initialWidths);
+    }
+  }, [tableData?.columns]);
 
   useEffect(() => {
     // Filter data when search term changes
@@ -152,27 +189,74 @@ export default function TablePreviewModal({
   };
 
   const formatCellValue = (value: any) => {
-    if (value === null || value === undefined) return <span className="text-muted-foreground italic">null</span>;
-    if (typeof value === 'boolean') return <Badge variant={value ? "default" : "secondary"}>{String(value)}</Badge>;
+    if (value === null || value === undefined) return <span className="text-muted-foreground italic text-xs">null</span>;
+    if (typeof value === 'boolean') return <Badge variant={value ? "default" : "secondary"} className="text-xs">{String(value)}</Badge>;
     if (typeof value === 'object') return <code className="text-xs bg-muted px-1 rounded">{JSON.stringify(value)}</code>;
     
     const stringValue = String(value);
-    if (stringValue.length > 100) {
-      return (
-        <div className="max-w-xs">
-          <div className="truncate" title={stringValue}>
-            {stringValue}
-          </div>
-        </div>
-      );
-    }
-    
-    return stringValue;
+    return <span className="text-xs">{stringValue}</span>;
   };
+
+  const toggleColumnVisibility = (columnName: string) => {
+    setVisibleColumns(prev => ({
+      ...prev,
+      [columnName]: !prev[columnName]
+    }));
+  };
+
+  const getVisibleColumns = () => {
+    return filteredData?.columns.filter(column => visibleColumns[column] !== false) || [];
+  };
+
+  const visibleColumnCount = Object.values(visibleColumns).filter(Boolean).length;
+  const totalColumnCount = Object.keys(visibleColumns).length;
+
+  // Mouse event handlers for column resizing
+  const handleMouseDown = (e: React.MouseEvent, column: string) => {
+    e.preventDefault();
+    setResizing({
+      column,
+      startX: e.clientX,
+      startWidth: columnWidths[column] || 150
+    });
+  };
+
+  const handleMouseMove = (e: MouseEvent) => {
+    if (!resizing) return;
+    
+    const diff = e.clientX - resizing.startX;
+    const newWidth = Math.max(80, Math.min(400, resizing.startWidth + diff));
+    
+    setColumnWidths(prev => ({
+      ...prev,
+      [resizing.column]: newWidth
+    }));
+  };
+
+  const handleMouseUp = () => {
+    setResizing(null);
+  };
+
+  // Global mouse events for resizing
+  useEffect(() => {
+    if (resizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+      
+      return () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      };
+    }
+  }, [resizing]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-7xl max-h-[90vh] w-[90vw]">
+      <DialogContent className="max-w-[95vw] max-h-[90vh] w-[95vw] overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Database className="h-5 w-5" />
@@ -180,7 +264,7 @@ export default function TablePreviewModal({
           </DialogTitle>
           <DialogDescription>
             {tableInfo && (
-              <div className="flex items-center gap-4 text-sm">
+              <span className="flex items-center gap-4 text-sm">
                 <span>{tableInfo.fields.length} columns</span>
                 <span>•</span>
                 <span>{tableInfo.recordCount?.toLocaleString() || 'Unknown'} records</span>
@@ -190,7 +274,7 @@ export default function TablePreviewModal({
                     <span className="text-blue-600">{filteredData.totalCount} filtered</span>
                   </>
                 )}
-              </div>
+              </span>
             )}
           </DialogDescription>
         </DialogHeader>
@@ -216,6 +300,86 @@ export default function TablePreviewModal({
             </div>
 
             <div className="flex items-center gap-2">
+              <Popover open={columnSettingsOpen} onOpenChange={setColumnSettingsOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <Settings className="h-4 w-4 mr-2" />
+                    Columns ({visibleColumnCount}/{totalColumnCount})
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-64" align="end">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-medium text-sm">Show/Hide Columns</h4>
+                      <div className="flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2 text-xs"
+                          onClick={() => {
+                            const allVisible: Record<string, boolean> = {};
+                            tableData?.columns.forEach(col => {
+                              allVisible[col] = true;
+                            });
+                            setVisibleColumns(allVisible);
+                          }}
+                        >
+                          All
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2 text-xs"
+                          onClick={() => {
+                            const noneVisible: Record<string, boolean> = {};
+                            tableData?.columns.forEach(col => {
+                              noneVisible[col] = false;
+                            });
+                            setVisibleColumns(noneVisible);
+                          }}
+                        >
+                          None
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="max-h-48 overflow-y-auto space-y-2">
+                      {tableData?.columns.map((column) => (
+                        <div key={column} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`column-${column}`}
+                            checked={visibleColumns[column] !== false}
+                            onCheckedChange={() => toggleColumnVisibility(column)}
+                          />
+                          <label
+                            htmlFor={`column-${column}`}
+                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex-1 cursor-pointer"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span>{column}</span>
+                              {tableInfo?.fields.find(f => f.name === column)?.isPrimaryKey && (
+                                <Badge variant="secondary" className="text-xs">PK</Badge>
+                              )}
+                            </div>
+                          </label>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0"
+                            onClick={() => toggleColumnVisibility(column)}
+                          >
+                            {visibleColumns[column] !== false ? (
+                              <Eye className="h-3 w-3" />
+                            ) : (
+                              <EyeOff className="h-3 w-3" />
+                            )}
+                          </Button>
+                        </div>
+                      )) || []}
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
+
               <Select value={String(pageSize)} onValueChange={(value) => setPageSize(Number(value))}>
                 <SelectTrigger className="w-32">
                   <SelectValue />
@@ -236,7 +400,7 @@ export default function TablePreviewModal({
           </div>
 
           {/* Table Content */}
-          <div className="border rounded-lg">
+          <div className="border rounded-lg overflow-hidden">
             {loading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin mr-2" />
@@ -248,47 +412,82 @@ export default function TablePreviewModal({
                 <span>{error}</span>
               </div>
             ) : filteredData ? (
-              <ScrollArea className="h-96">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-12">#</TableHead>
-                      {filteredData.columns.map((column, index) => (
-                        <TableHead key={index} className="min-w-32">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium">{column}</span>
-                            {tableInfo?.fields.find(f => f.name === column)?.isPrimaryKey && (
-                              <Badge variant="secondary" className="text-xs">PK</Badge>
-                            )}
-                          </div>
-                        </TableHead>
-                      ))}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredData.rows.slice(0, pageSize).map((row, rowIndex) => (
-                      <TableRow key={rowIndex}>
-                        <TableCell className="font-mono text-xs text-muted-foreground">
-                          {((currentPage - 1) * pageSize) + rowIndex + 1}
-                        </TableCell>
-                        {row.map((cell, cellIndex) => (
-                          <TableCell key={cellIndex} className="max-w-xs">
-                            {formatCellValue(cell)}
-                          </TableCell>
-                        ))}
+              <div className="w-full overflow-auto" style={{ maxHeight: '400px' }}>
+                <div style={{ minWidth: 'fit-content' }}>
+                  <Table>
+                    <TableHeader className="sticky top-0 bg-background z-10">
+                      <TableRow>
+                        <TableHead className="w-16 min-w-16 sticky left-0 bg-background z-20 border-r">#</TableHead>
+                        {getVisibleColumns().map((column, index) => {
+                          const width = columnWidths[column] || 150;
+                          
+                          return (
+                            <TableHead 
+                              key={index} 
+                              style={{ width: `${width}px`, minWidth: `${width}px` }}
+                              className="border-r last:border-r-0 relative group"
+                            >
+                              <div className="flex items-center gap-2 pr-6">
+                                <span className="font-medium truncate" title={column}>{column}</span>
+                                {tableInfo?.fields.find(f => f.name === column)?.isPrimaryKey && (
+                                  <Badge variant="secondary" className="text-xs flex-shrink-0">PK</Badge>
+                                )}
+                              </div>
+                              {/* Resize handle */}
+                              <div 
+                                className="absolute right-0 top-0 w-2 h-full cursor-col-resize bg-transparent hover:bg-blue-200 opacity-0 group-hover:opacity-100 transition-opacity"
+                                onMouseDown={(e) => handleMouseDown(e, column)}
+                                title="Drag to resize column"
+                              />
+                            </TableHead>
+                          );
+                        })}
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </ScrollArea>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredData.rows.slice(0, pageSize).map((row, rowIndex) => {
+                        const visibleCells = getVisibleColumns().map(visibleColumn => {
+                          const originalIndex = filteredData.columns.indexOf(visibleColumn);
+                          return row[originalIndex];
+                        });
+                        
+                        return (
+                          <TableRow key={rowIndex}>
+                            <TableCell className="font-mono text-xs text-muted-foreground sticky left-0 bg-background z-10 border-r w-16">
+                              {((currentPage - 1) * pageSize) + rowIndex + 1}
+                            </TableCell>
+                            {visibleCells.map((cell, cellIndex) => {
+                              const column = getVisibleColumns()[cellIndex];
+                              const width = columnWidths[column] || 150;
+                              
+                              return (
+                                <TableCell 
+                                  key={cellIndex} 
+                                  style={{ width: `${width}px`, minWidth: `${width}px` }}
+                                  className="border-r last:border-r-0 p-2"
+                                >
+                                  <div className="truncate" title={String(cell || '')}>
+                                    {formatCellValue(cell)}
+                                  </div>
+                                </TableCell>
+                              );
+                            })}
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
             ) : null}
           </div>
 
           {/* Pagination */}
-          {filteredData && totalPages > 1 && (
+          {tableData && totalPages > 1 && (
             <div className="flex items-center justify-between">
               <div className="text-sm text-muted-foreground">
-                Showing {Math.min((currentPage - 1) * pageSize + 1, filteredData.totalCount)} to {Math.min(currentPage * pageSize, filteredData.totalCount)} of {filteredData.totalCount} rows
+                Showing {Math.min((currentPage - 1) * pageSize + 1, tableData.totalCount)} to {Math.min(currentPage * pageSize, tableData.totalCount)} of {tableData.totalCount} rows
+                {debouncedSearchTerm && <span className="text-blue-600 ml-1">(filtered)</span>}
               </div>
               <div className="flex items-center gap-2">
                 <Button

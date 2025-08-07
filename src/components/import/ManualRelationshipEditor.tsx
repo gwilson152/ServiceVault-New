@@ -88,6 +88,7 @@ interface ManualRelationshipEditorProps {
   joinedTables: JoinedTableConfig[];
   onChange: (relationships: ExtendedStageRelationship[]) => void;
   onJoinedTablesChange: (joinedTables: JoinedTableConfig[]) => void;
+  hideRelationships?: boolean;
 }
 
 const JOIN_TYPES = [
@@ -114,7 +115,8 @@ export default function ManualRelationshipEditor({
   sourceSchema,
   joinedTables,
   onChange,
-  onJoinedTablesChange
+  onJoinedTablesChange,
+  hideRelationships = false
 }: ManualRelationshipEditorProps) {
   const [selectedRelationship, setSelectedRelationship] = useState<ExtendedStageRelationship | null>(null);
   const [isEditingRelationship, setIsEditingRelationship] = useState(false);
@@ -263,6 +265,7 @@ export default function ManualRelationshipEditor({
       </Card>
 
       {/* Manual Relationships Section */}
+      {!hideRelationships && (
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -344,6 +347,7 @@ export default function ManualRelationshipEditor({
           )}
         </CardContent>
       </Card>
+      )}
 
       {/* Relationship Editor Dialog */}
       <Dialog open={isEditingRelationship} onOpenChange={setIsEditingRelationship}>
@@ -501,10 +505,10 @@ function RelationshipConfigForm({
             <SelectContent>
               {JOIN_TYPES.map((type) => (
                 <SelectItem key={type.value} value={type.value}>
-                  <div>
-                    <p className="font-medium">{type.label}</p>
-                    <p className="text-xs text-muted-foreground">{type.description}</p>
-                  </div>
+                  <span>
+                    <span className="font-medium block">{type.label}</span>
+                    <span className="text-xs text-muted-foreground block">{type.description}</span>
+                  </span>
                 </SelectItem>
               ))}
             </SelectContent>

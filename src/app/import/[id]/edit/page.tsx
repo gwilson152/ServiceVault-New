@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, use } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -85,6 +85,7 @@ interface ImportConfiguration {
 
 export default function EditImportConfigurationPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { data: session, status } = useSession();
   const { canEditImports, loading: permissionsLoading } = usePermissions();
   const resolvedParams = use(params);
@@ -108,6 +109,7 @@ export default function EditImportConfigurationPage({ params }: { params: Promis
   const [selectedTables, setSelectedTables] = useState<string[]>([]);
   const [stages, setStages] = useState<ImportStageData[]>([]);
   const [relationships, setRelationships] = useState<StageRelationship[]>([]);
+  const [joinedTables, setJoinedTables] = useState<any[]>([]);
 
   // Connection test result
   const [connectionTest, setConnectionTest] = useState<{
@@ -330,7 +332,11 @@ export default function EditImportConfigurationPage({ params }: { params: Promis
           </Alert>
         )}
 
-        <Tabs defaultValue="basic" className="space-y-6">
+        <Tabs value={searchParams.get('tab') || "basic"} onValueChange={(value) => {
+          const params = new URLSearchParams(searchParams.toString());
+          params.set('tab', value);
+          router.push(`/import/${resolvedParams.id}/edit?${params.toString()}`, { scroll: false });
+        }} className="space-y-6">
           <TabsList>
             <TabsTrigger value="basic">Basic Settings</TabsTrigger>
             <TabsTrigger value="connection">Connection</TabsTrigger>
@@ -604,9 +610,11 @@ export default function EditImportConfigurationPage({ params }: { params: Promis
                       selectedTables={selectedTables}
                       stages={stages}
                       relationships={relationships}
+                      joinedTables={joinedTables}
                       connectionConfig={connectionConfig}
                       onChange={setStages}
                       onRelationshipsChange={setRelationships}
+                      onJoinedTablesChange={setJoinedTables}
                     />
                   ) : (
                     <Alert>

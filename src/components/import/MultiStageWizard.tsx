@@ -47,13 +47,17 @@ import {
   Users,
   Building,
   Ticket,
-  Clock
+  Clock,
+  GitMerge
 } from "lucide-react";
 import { SourceSchema, SourceTable, ImportStageData, ConnectionConfig } from "@/lib/import/types";
 import { StageRelationship } from "./RelationshipMapper";
 import VisualRelationshipMapper from "./VisualRelationshipMapper";
 import DragDropFieldMapper from "./DragDropFieldMapper";
 import StagePreview from "./StagePreview";
+import ManualRelationshipEditor from "./ManualRelationshipEditor";
+import JoinVisualization from "./JoinVisualization";
+import RelationshipDiagram from "./RelationshipDiagram";
 
 const TARGET_ENTITIES = [
   { 
@@ -82,14 +86,39 @@ const TARGET_ENTITIES = [
   }
 ];
 
+interface JoinedTableConfig {
+  id: string;
+  name: string;
+  description?: string;
+  primaryTable: string;
+  joinedTables: {
+    tableName: string;
+    joinType: 'inner' | 'left' | 'right' | 'full';
+    joinConditions: Array<{
+      id: string;
+      sourceField: string;
+      targetField: string;
+      operator: string;
+    }>;
+    alias?: string;
+  }[];
+  selectedFields: {
+    tableName: string;
+    fieldName: string;
+    alias?: string;
+  }[];
+}
+
 interface MultiStageWizardProps {
   sourceSchema: SourceSchema;
   selectedTables: string[];
   stages: ImportStageData[];
   relationships?: StageRelationship[];
+  joinedTables?: JoinedTableConfig[];
   connectionConfig: ConnectionConfig;
   onChange: (stages: ImportStageData[]) => void;
   onRelationshipsChange?: (relationships: StageRelationship[]) => void;
+  onJoinedTablesChange?: (joinedTables: JoinedTableConfig[]) => void;
 }
 
 interface TableSample {
@@ -105,9 +134,11 @@ export default function MultiStageWizard({
   selectedTables,
   stages,
   relationships = [],
+  joinedTables = [],
   connectionConfig,
   onChange,
-  onRelationshipsChange
+  onRelationshipsChange,
+  onJoinedTablesChange
 }: MultiStageWizardProps) {
   const [currentStep, setCurrentStep] = useState(0);
   const [selectedStageIndex, setSelectedStageIndex] = useState<number | null>(null);
@@ -117,6 +148,7 @@ export default function MultiStageWizard({
 
   const steps = [
     { id: 'overview', title: 'Pipeline Overview', description: 'Understand multi-stage imports' },
+    { id: 'tables', title: 'Prepare Data Sources', description: 'Configure tables and joins' },
     { id: 'stages', title: 'Configure Stages', description: 'Set up import stages' },
     { id: 'relationships', title: 'Link Data', description: 'Define relationships between stages' },
     { id: 'preview', title: 'Review & Test', description: 'Preview the complete pipeline' }
@@ -184,7 +216,14 @@ export default function MultiStageWizard({
     const usedTables = stages
       .filter((_, index) => index !== excludeStageIndex)
       .map(stage => stage.sourceTable);
-    return selectedTables.filter(tableName => !usedTables.includes(tableName));
+    
+    // Combine individual tables and joined virtual tables
+    const individualTables = selectedTables.filter(tableName => !usedTables.includes(tableName));
+    const virtualTables = joinedTables
+      .map(jt => jt.name)
+      .filter(tableName => !usedTables.includes(tableName));
+    
+    return [...individualTables, ...virtualTables];
   };
 
   const handleAddStage = () => {
@@ -306,6 +345,125 @@ export default function MultiStageWizard({
           </div>
         </CardContent>
       </Card>
+    </div>
+  );
+
+  const renderDataSourcePreparation = () => (
+    <div className="space-y-6">
+      <Alert>
+        <Database className="h-4 w-4" />
+        <AlertTitle>Data Source Preparation</AlertTitle>
+        <AlertDescription>
+          Configure your data sources before creating import stages. You can use individual tables or create joined virtual tables for complex relationships.
+        </AlertDescription>
+      </Alert>
+
+      {/* Available Tables Summary */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Available Data Sources</CardTitle>
+          <CardDescription>
+            Tables and joined configurations that can be used as import sources
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {/* Individual Tables */}
+            <div>
+              <h4 className="font-medium mb-3 flex items-center gap-2">
+                <Database className="h-4 w-4 text-blue-500" />
+                Individual Tables ({selectedTables.length})
+              </h4>
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {selectedTables.map((tableName) => {
+                  const tableInfo = getTableInfo(tableName);
+                  return (
+                    <div key={tableName} className="border rounded-lg p-3">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Database className="h-4 w-4 text-blue-500" />
+                        <span className="font-medium text-sm">{tableName}</span>
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {tableInfo?.fields.length} fields, {tableInfo?.recordCount?.toLocaleString() || '?'} records
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Joined Tables */}
+            <div>
+              <h4 className="font-medium mb-3 flex items-center gap-2">
+                <GitMerge className="h-4 w-4 text-green-500" />
+                Joined Virtual Tables ({joinedTables.length})
+              </h4>
+              {joinedTables.length === 0 ? (
+                <Alert>
+                  <Info className="h-4 w-4" />
+                  <AlertDescription>
+                    No joined tables configured. Create joined tables below to combine multiple source tables into virtual datasets.
+                  </AlertDescription>
+                </Alert>
+              ) : (
+                <div className="space-y-3">
+                  {joinedTables.map((joinedTable) => (
+                    <div key={joinedTable.id} className="border rounded-lg p-4">
+                      <div className="flex items-start justify-between">
+                        <div className="space-y-2 flex-1">
+                          <div className="flex items-center gap-2">
+                            <GitMerge className="h-4 w-4 text-green-500" />
+                            <span className="font-medium">{joinedTable.name}</span>
+                            <Badge variant="outline">{joinedTable.joinedTables.length + 1} tables</Badge>
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            {joinedTable.description || 'No description'}
+                          </p>
+                          <div className="flex items-center gap-2 text-xs">
+                            <Database className="h-3 w-3" />
+                            <span>Primary: {joinedTable.primaryTable}</span>
+                            {joinedTable.joinedTables.map((jt, index) => (
+                              <span key={index} className="flex items-center gap-1">
+                                <ArrowRight className="h-3 w-3" />
+                                {jt.joinType.toUpperCase()} {jt.tableName}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Joined Table Configuration */}
+      <ManualRelationshipEditor
+        stages={[]} // Empty for joined table config only
+        relationships={[]}
+        sourceSchema={sourceSchema}
+        joinedTables={joinedTables}
+        onChange={() => {}} // Hide relationship section
+        onJoinedTablesChange={onJoinedTablesChange || (() => {})}
+        hideRelationships={true}
+      />
+
+      {/* Visual Preview of Joined Tables */}
+      {joinedTables.length > 0 && (
+        <div className="space-y-4">
+          {joinedTables.map((joinedTable) => (
+            <JoinVisualization
+              key={joinedTable.id}
+              joinedTable={joinedTable}
+              sourceSchema={sourceSchema}
+              connectionConfig={connectionConfig}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 
@@ -452,12 +610,22 @@ export default function MultiStageWizard({
           </CardContent>
         </Card>
       ) : (
-        <VisualRelationshipMapper
-          stages={stages}
-          relationships={relationships}
-          sourceSchema={sourceSchema}
-          onChange={onRelationshipsChange || (() => {})}
-        />
+        <>
+          <VisualRelationshipMapper
+            stages={stages}
+            relationships={relationships}
+            sourceSchema={sourceSchema}
+            onChange={onRelationshipsChange || (() => {})}
+          />
+          
+          {/* Visual Relationship Diagram */}
+          <RelationshipDiagram
+            stages={stages}
+            relationships={relationships}
+            sourceSchema={sourceSchema}
+            connectionConfig={connectionConfig}
+          />
+        </>
       )}
     </div>
   );
@@ -752,9 +920,10 @@ export default function MultiStageWizard({
       {/* Step Content */}
       <div>
         {currentStep === 0 && renderStepOverview()}
-        {currentStep === 1 && renderStageConfiguration()}
-        {currentStep === 2 && renderRelationshipConfiguration()}
-        {currentStep === 3 && renderPipelinePreview()}
+        {currentStep === 1 && renderDataSourcePreparation()}
+        {currentStep === 2 && renderStageConfiguration()}
+        {currentStep === 3 && renderRelationshipConfiguration()}
+        {currentStep === 4 && renderPipelinePreview()}
       </div>
 
       {/* Navigation */}
@@ -863,17 +1032,32 @@ function StageEditor({
             <SelectContent>
               {Array.from(new Set([...availableTables, ...(stage.sourceTable ? [stage.sourceTable] : [])])).map((tableName) => {
                 const table = sourceSchema.tables?.find(t => t.name === tableName);
+                const joinedTable = joinedTables.find(jt => jt.name === tableName);
+                const isVirtual = !!joinedTable;
+                
                 return (
                   <SelectItem key={tableName} value={tableName}>
-                    <div className="flex items-center gap-2">
-                      <Database className="h-4 w-4" />
-                      <div>
-                        <p className="font-medium">{tableName}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {table?.fields.length} fields, {table?.recordCount?.toLocaleString() || '?'} records
-                        </p>
-                      </div>
-                    </div>
+                    <span className="flex items-center gap-2">
+                      {isVirtual ? (
+                        <GitMerge className="h-4 w-4 text-green-500" />
+                      ) : (
+                        <Database className="h-4 w-4" />
+                      )}
+                      <span>
+                        <span className="flex items-center gap-2">
+                          <span className="font-medium">{tableName}</span>
+                          {isVirtual && (
+                            <Badge variant="secondary" className="text-xs">Virtual</Badge>
+                          )}
+                        </span>
+                        <span className="text-xs text-muted-foreground block">
+                          {isVirtual 
+                            ? `${joinedTable.joinedTables.length + 1} joined tables`
+                            : `${table?.fields.length} fields, ${table?.recordCount?.toLocaleString() || '?'} records`
+                          }
+                        </span>
+                      </span>
+                    </span>
                   </SelectItem>
                 );
               })}

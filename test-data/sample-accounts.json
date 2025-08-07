@@ -1,0 +1,65 @@
+[
+  {
+    "id": 1,
+    "name": "Acme Corporation",
+    "domain": "acme.com",
+    "plan": "enterprise",
+    "active": true,
+    "created_at": "2024-01-01",
+    "employees": 250
+  },
+  {
+    "id": 2,
+    "name": "TechCo Limited",
+    "domain": "techco.com",
+    "plan": "professional",
+    "active": true,
+    "created_at": "2024-01-05",
+    "employees": 150
+  },
+  {
+    "id": 3,
+    "name": "Startup Innovations",
+    "domain": "startup.io",
+    "plan": "basic",
+    "active": true,
+    "created_at": "2024-01-20",
+    "employees": 45
+  },
+  {
+    "id": 4,
+    "name": "ABC Consulting",
+    "domain": "consulting.com",
+    "plan": "professional",
+    "active": false,
+    "created_at": "2024-02-01",
+    "employees": 80
+  },
+  {
+    "id": 5,
+    "name": "Big Enterprise Corp",
+    "domain": "enterprise.com",
+    "plan": "enterprise",
+    "active": true,
+    "created_at": "2024-02-10",
+    "employees": 500
+  },
+  {
+    "id": 6,
+    "name": "Innovation Labs",
+    "domain": "innovate.com",
+    "plan": "professional",
+    "active": true,
+    "created_at": "2024-02-15",
+    "employees": 120
+  },
+  {
+    "id": 7,
+    "name": "Global Solutions",
+    "domain": "global.org",
+    "plan": "enterprise",
+    "active": true,
+    "created_at": "2024-02-20",
+    "employees": 300
+  }
+]

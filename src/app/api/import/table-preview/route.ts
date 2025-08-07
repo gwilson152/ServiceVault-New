@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { connectionConfig, tableName, page = 1, limit = 50 } = body;
+    const { connectionConfig, tableName, page = 1, limit = 50, search } = body;
 
     if (!connectionConfig || !tableName) {
       return NextResponse.json(
@@ -46,13 +46,30 @@ export async function POST(request: NextRequest) {
     const offset = (page - 1) * limit;
 
     try {
-      // Get table data with pagination
+      // Debug logging
+      console.log('Table preview request:', {
+        connectionConfig,
+        tableName,
+        limit,
+        offset,
+        sourceType: connectionConfig.type
+      });
+
+      // Get table data with pagination and search
       const result = await connectionManager.getTableData(
         connectionConfig,
         tableName,
         limit,
-        offset
+        offset,
+        search
       );
+
+      console.log('Table preview result:', {
+        hasResult: !!result,
+        columnCount: result?.columns?.length || 0,
+        rowCount: result?.rows?.length || 0,
+        totalCount: result?.totalCount || 0
+      });
 
       if (!result) {
         return NextResponse.json(
