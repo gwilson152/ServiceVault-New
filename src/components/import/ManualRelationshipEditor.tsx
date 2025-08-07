@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,7 +43,8 @@ import {
   Info,
   Zap,
   GitMerge,
-  Loader2
+  Loader2,
+  Search
 } from "lucide-react";
 import { ImportStageData, SourceSchema, SourceField, ConnectionConfig } from "@/lib/import/types";
 import { StageRelationship } from "./RelationshipMapper";
@@ -704,10 +705,83 @@ function JoinedTableConfigForm({
   const [showJoinExplanation, setShowJoinExplanation] = useState(false);
   const [joinPreview, setJoinPreview] = useState<any>(null);
   const [previewRecordCount, setPreviewRecordCount] = useState(5);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filteredTableSamples, setFilteredTableSamples] = useState<Record<string, any>>({});
+  const [filteredJoinPreview, setFilteredJoinPreview] = useState<any>(null);
 
   const updateConfig = (updates: Partial<JoinedTableConfig>) => {
     setConfig(prev => ({ ...prev, ...updates }));
   };
+
+  // Debounced search functionality
+  const debouncedSearch = useCallback(
+    (() => {
+      let timeout: NodeJS.Timeout;
+      return (searchValue: string) => {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => {
+          filterData(searchValue);
+        }, 500);
+      };
+    })(),
+    [tableSamples, joinPreview]
+  );
+
+  const filterData = (searchValue: string) => {
+    if (!searchValue.trim()) {
+      setFilteredTableSamples(tableSamples);
+      setFilteredJoinPreview(joinPreview);
+      return;
+    }
+
+    const searchLower = searchValue.toLowerCase();
+
+    // Filter table samples
+    const filteredSamples: Record<string, any> = {};
+    Object.keys(tableSamples).forEach(tableName => {
+      const tableData = tableSamples[tableName];
+      if (tableData) {
+        const filteredRows = tableData.rows.filter((row: any[]) =>
+          row.some(cell =>
+            String(cell || '').toLowerCase().includes(searchLower)
+          )
+        );
+        filteredSamples[tableName] = {
+          ...tableData,
+          rows: filteredRows,
+          totalCount: filteredRows.length
+        };
+      }
+    });
+
+    // Filter join preview
+    let filteredPreview = null;
+    if (joinPreview) {
+      const filteredRows = joinPreview.rows.filter((row: any[]) =>
+        row.some((cell: any) =>
+          String(cell || '').toLowerCase().includes(searchLower)
+        )
+      );
+      filteredPreview = {
+        ...joinPreview,
+        rows: filteredRows,
+        totalCount: filteredRows.length
+      };
+    }
+
+    setFilteredTableSamples(filteredSamples);
+    setFilteredJoinPreview(filteredPreview);
+  };
+
+  // Handle search term changes
+  useEffect(() => {
+    debouncedSearch(searchTerm);
+  }, [searchTerm, debouncedSearch]);
+
+  // Initialize filtered data when original data changes
+  useEffect(() => {
+    filterData(searchTerm);
+  }, [tableSamples, joinPreview]);
 
   const loadSampleData = async (tableName: string, limit: number = previewRecordCount) => {
     if (!tableName) return;
@@ -737,20 +811,50 @@ function JoinedTableConfigForm({
     
     setLoadingSamples(true);
     try {
-      // Load sample data for all tables with current record count
+      // First load individual table samples for display
       await Promise.all([
         loadSampleData(config.primaryTable, previewRecordCount),
         ...config.joinedTables.map(jt => loadSampleData(jt.tableName, previewRecordCount))
       ]);
       
-      // Wait a bit for state to update
-      setTimeout(() => {
+      // Now execute the actual join query via API
+      const response = await fetch("/api/import/join-preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          connectionConfig,
+          primaryTable: config.primaryTable,
+          joinedTables: config.joinedTables.map(jt => ({
+            tableName: jt.tableName,
+            joinType: jt.joinType,
+            joinConditions: jt.joinConditions,
+            alias: jt.alias
+          })),
+          limit: previewRecordCount,
+          search: searchTerm
+        })
+      });
+      
+      if (response.ok) {
+        const joinResult = await response.json();
+        setJoinPreview(joinResult);
+      } else {
+        console.error('Failed to load join preview:', response.statusText);
+        // Fall back to client-side join if API fails
         const primaryData = tableSamples[config.primaryTable];
         if (primaryData) {
           const mockResult = generateMockJoinResult(primaryData, config);
           setJoinPreview(mockResult);
         }
-      }, 100);
+      }
+    } catch (error) {
+      console.error('Error generating join preview:', error);
+      // Fall back to client-side join on error
+      const primaryData = tableSamples[config.primaryTable];
+      if (primaryData) {
+        const mockResult = generateMockJoinResult(primaryData, config);
+        setJoinPreview(mockResult);
+      }
     } finally {
       setLoadingSamples(false);
     }
@@ -771,28 +875,120 @@ function JoinedTableConfigForm({
       }
     });
     
-    // Generate sample joined rows (simplified simulation)
-    const resultRows = primaryData.rows.slice(0, previewRecordCount).map((primaryRow: any[]) => {
-      let resultRow = [...primaryRow];
-      
-      joinConfig.joinedTables.forEach((jt, index) => {
-        const jtData = joinedData[index];
-        if (jtData && jtData.rows.length > 0) {
-          // Simulate join - either match or null based on join type
-          const shouldMatch = Math.random() > 0.3 || jt.joinType === 'inner';
-          if (shouldMatch) {
-            const randomRow = jtData.rows[Math.floor(Math.random() * jtData.rows.length)];
-            resultRow = [...resultRow, ...randomRow];
-          } else {
-            // Add nulls for unmatched rows in outer joins
+    // Perform actual join based on join conditions
+    const resultRows: any[][] = [];
+    
+    primaryData.rows.slice(0, previewRecordCount).forEach((primaryRow: any[]) => {
+      joinConfig.joinedTables.forEach((jt, joinTableIndex) => {
+        const jtData = joinedData[joinTableIndex];
+        if (!jtData) return;
+        
+        // Find matching rows based on join conditions
+        const matchingRows = jtData.rows.filter((joinRow: any[]) => {
+          return jt.joinConditions.every(condition => {
+            // Find column indexes
+            const primaryColIndex = primaryData.columns.indexOf(condition.sourceField);
+            const joinColIndex = jtData.columns.indexOf(condition.targetField);
+            
+            if (primaryColIndex === -1 || joinColIndex === -1) return false;
+            
+            const primaryValue = primaryRow[primaryColIndex];
+            const joinValue = joinRow[joinColIndex];
+            
+            // Handle different operators
+            switch (condition.operator) {
+              case '=':
+              default:
+                // Convert to strings for comparison to handle type mismatches
+                return String(primaryValue || '').trim() === String(joinValue || '').trim();
+              case '!=':
+                return String(primaryValue || '').trim() !== String(joinValue || '').trim();
+              case '>':
+                return Number(primaryValue) > Number(joinValue);
+              case '<':
+                return Number(primaryValue) < Number(joinValue);
+              case '>=':
+                return Number(primaryValue) >= Number(joinValue);
+              case '<=':
+                return Number(primaryValue) <= Number(joinValue);
+              case 'LIKE':
+                return String(primaryValue || '').toLowerCase().includes(String(joinValue || '').toLowerCase());
+            }
+          });
+        });
+        
+        // Handle different join types
+        if (matchingRows.length > 0) {
+          // For each matching row, create a result row
+          matchingRows.forEach(matchingRow => {
+            let resultRow = [...primaryRow];
+            
+            // Add all previous join results to this row
+            const previousJoins = joinConfig.joinedTables.slice(0, joinTableIndex);
+            previousJoins.forEach((prevJt, prevIndex) => {
+              const prevJtData = joinedData[prevIndex];
+              if (prevJtData) {
+                // For simplicity, add nulls for previous joins in this context
+                // In a real implementation, you'd need to maintain the join state
+                const nullRow = new Array(prevJtData.columns.length).fill(null);
+                resultRow = [...resultRow, ...nullRow];
+              }
+            });
+            
+            // Add the current matching row
+            resultRow = [...resultRow, ...matchingRow];
+            
+            // Add nulls for remaining joins
+            const remainingJoins = joinConfig.joinedTables.slice(joinTableIndex + 1);
+            remainingJoins.forEach((remJt, remIndex) => {
+              const remJtData = joinedData[joinTableIndex + 1 + remIndex];
+              if (remJtData) {
+                const nullRow = new Array(remJtData.columns.length).fill(null);
+                resultRow = [...resultRow, ...nullRow];
+              }
+            });
+            
+            resultRows.push(resultRow);
+          });
+        } else {
+          // No matches found
+          if (jt.joinType === 'left' || jt.joinType === 'full') {
+            // Include the primary row with nulls for the joined table
+            let resultRow = [...primaryRow];
+            
+            // Add nulls for all joined tables
+            joinConfig.joinedTables.forEach((nullJt, nullIndex) => {
+              const nullJtData = joinedData[nullIndex];
+              if (nullJtData) {
+                const nullRow = new Array(nullJtData.columns.length).fill(null);
+                resultRow = [...resultRow, ...nullRow];
+              }
+            });
+            
+            resultRows.push(resultRow);
+          }
+          // For inner joins and right joins, we exclude rows without matches
+        }
+      });
+    });
+    
+    // If no results and it's not an inner join, ensure we have some primary rows
+    if (resultRows.length === 0 && joinConfig.joinedTables.some(jt => jt.joinType !== 'inner')) {
+      primaryData.rows.slice(0, previewRecordCount).forEach((primaryRow: any[]) => {
+        let resultRow = [...primaryRow];
+        
+        // Add nulls for all joined tables
+        joinConfig.joinedTables.forEach((jt, index) => {
+          const jtData = joinedData[index];
+          if (jtData) {
             const nullRow = new Array(jtData.columns.length).fill(null);
             resultRow = [...resultRow, ...nullRow];
           }
-        }
+        });
+        
+        resultRows.push(resultRow);
       });
-      
-      return resultRow;
-    });
+    }
     
     return {
       columns: resultColumns,
@@ -1122,16 +1318,32 @@ function JoinedTableConfigForm({
           {/* Sample Data Preview */}
           {Object.keys(tableSamples).length > 0 && (
             <div className="space-y-4" style={{ maxWidth: '100%', overflow: 'hidden' }}>
-              <h4 className="font-medium">Sample Data from Source Tables</h4>
+              <div className="flex items-center justify-between">
+                <h4 className="font-medium">Sample Data from Source Tables</h4>
+                <div className="relative">
+                  <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Filter data..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10 w-64"
+                  />
+                </div>
+              </div>
               <div className="grid grid-cols-1 gap-4" style={{ maxWidth: '100%' }}>
                 {/* Primary Table Sample */}
-                {tableSamples[config.primaryTable] && (
+                {(filteredTableSamples[config.primaryTable] || tableSamples[config.primaryTable]) && (
                   <Card>
                     <CardHeader className="pb-3">
                       <CardTitle className="text-sm flex items-center gap-2">
                         <Database className="h-4 w-4 text-primary" />
                         {config.primaryTable} (Primary)
                         <Badge variant="default" className="text-xs">Primary Table</Badge>
+                        {searchTerm && (
+                          <Badge variant="secondary" className="text-xs">
+                            {(filteredTableSamples[config.primaryTable] || tableSamples[config.primaryTable])?.rows.length || 0} filtered
+                          </Badge>
+                        )}
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="p-0">
@@ -1140,7 +1352,7 @@ function JoinedTableConfigForm({
                           <Table>
                             <TableHeader>
                               <TableRow>
-                                {tableSamples[config.primaryTable].columns.map((col: string, index: number) => (
+                                {(filteredTableSamples[config.primaryTable] || tableSamples[config.primaryTable]).columns.map((col: string, index: number) => (
                                   <TableHead key={index} className="text-xs whitespace-nowrap px-3" style={{ minWidth: '100px' }}>
                                     {col}
                                   </TableHead>
@@ -1148,7 +1360,7 @@ function JoinedTableConfigForm({
                               </TableRow>
                             </TableHeader>
                             <TableBody>
-                              {tableSamples[config.primaryTable].rows.slice(0, previewRecordCount).map((row: any[], rowIndex: number) => (
+                              {(filteredTableSamples[config.primaryTable] || tableSamples[config.primaryTable]).rows.slice(0, previewRecordCount).map((row: any[], rowIndex: number) => (
                                 <TableRow key={rowIndex}>
                                   {row.map((cell: any, cellIndex: number) => (
                                     <TableCell key={cellIndex} className="text-xs px-3" style={{ minWidth: '100px' }}>
@@ -1169,13 +1381,18 @@ function JoinedTableConfigForm({
 
                 {/* Joined Tables Samples */}
                 {config.joinedTables.map((jt, index) => (
-                  tableSamples[jt.tableName] && (
+                  (filteredTableSamples[jt.tableName] || tableSamples[jt.tableName]) && (
                     <Card key={index}>
                       <CardHeader className="pb-3">
                         <CardTitle className="text-sm flex items-center gap-2">
                           <Database className="h-4 w-4 text-muted-foreground" />
                           {jt.tableName} {jt.alias && `(${jt.alias})`}
                           <Badge variant="outline" className="text-xs">{jt.joinType.toUpperCase()} JOIN</Badge>
+                          {searchTerm && (
+                            <Badge variant="secondary" className="text-xs">
+                              {(filteredTableSamples[jt.tableName] || tableSamples[jt.tableName])?.rows.length || 0} filtered
+                            </Badge>
+                          )}
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="p-0">
@@ -1184,7 +1401,7 @@ function JoinedTableConfigForm({
                             <Table>
                               <TableHeader>
                                 <TableRow>
-                                  {tableSamples[jt.tableName].columns.map((col: string, colIndex: number) => (
+                                  {(filteredTableSamples[jt.tableName] || tableSamples[jt.tableName]).columns.map((col: string, colIndex: number) => (
                                     <TableHead key={colIndex} className="text-xs whitespace-nowrap px-3" style={{ minWidth: '120px' }}>
                                       <div className="flex items-center gap-1">
                                         <span>{col}</span>
@@ -1197,7 +1414,7 @@ function JoinedTableConfigForm({
                                 </TableRow>
                               </TableHeader>
                               <TableBody>
-                                {tableSamples[jt.tableName].rows.slice(0, previewRecordCount).map((row: any[], rowIndex: number) => (
+                                {(filteredTableSamples[jt.tableName] || tableSamples[jt.tableName]).rows.slice(0, previewRecordCount).map((row: any[], rowIndex: number) => (
                                   <TableRow key={rowIndex}>
                                     {row.map((cell: any, cellIndex: number) => (
                                       <TableCell key={cellIndex} className="text-xs px-3" style={{ minWidth: '120px' }}>
@@ -1221,13 +1438,16 @@ function JoinedTableConfigForm({
           )}
 
           {/* Join Result Preview */}
-          {joinPreview && (
+          {(filteredJoinPreview || joinPreview) && (
             <Card className="border-green-200 bg-green-50">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm flex items-center gap-2">
                   <GitMerge className="h-4 w-4 text-green-600" />
                   Join Result Preview
-                  <Badge variant="secondary" className="text-xs">{joinPreview.totalCount} sample records</Badge>
+                  <Badge variant="secondary" className="text-xs">{(filteredJoinPreview || joinPreview).totalCount} sample records</Badge>
+                  {searchTerm && (
+                    <Badge variant="secondary" className="text-xs">filtered</Badge>
+                  )}
                 </CardTitle>
                 <CardDescription className="text-xs">
                   This shows how the joined data will look with your current configuration
@@ -1239,7 +1459,7 @@ function JoinedTableConfigForm({
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          {joinPreview.columns.map((col: string, index: number) => (
+                          {(filteredJoinPreview || joinPreview).columns.map((col: string, index: number) => (
                             <TableHead key={index} className="text-xs whitespace-nowrap px-3" style={{ minWidth: '120px' }}>
                               <div className="truncate" title={col}>
                                 {col}
@@ -1249,7 +1469,7 @@ function JoinedTableConfigForm({
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {joinPreview.rows.map((row: any[], rowIndex: number) => (
+                        {(filteredJoinPreview || joinPreview).rows.map((row: any[], rowIndex: number) => (
                           <TableRow key={rowIndex}>
                             {row.map((cell: any, cellIndex: number) => (
                               <TableCell key={cellIndex} className="text-xs px-3" style={{ minWidth: '120px' }}>

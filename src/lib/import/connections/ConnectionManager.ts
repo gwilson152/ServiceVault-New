@@ -1133,6 +1133,324 @@ export class ConnectionManager {
     };
   }
 
+  /**
+   * Execute a JOIN query across multiple tables
+   */
+  async executeJoinQuery(
+    connectionConfig: ConnectionConfig,
+    primaryTable: string,
+    joinedTables: Array<{
+      tableName: string;
+      joinType: 'inner' | 'left' | 'right' | 'full';
+      joinConditions: Array<{
+        sourceField: string;
+        targetField: string;
+        operator: '=' | '!=' | '>' | '<' | '>=' | '<=' | 'LIKE' | 'IN';
+      }>;
+      alias?: string;
+    }>,
+    limit: number = 20,
+    search?: string
+  ): Promise<TableDataResult | null> {
+    try {
+      switch (connectionConfig.type) {
+        case ImportSourceType.DATABASE_MYSQL:
+        case ImportSourceType.DATABASE_POSTGRESQL:
+        case ImportSourceType.DATABASE_SQLITE:
+          return await this.executeDatabaseJoin(connectionConfig, primaryTable, joinedTables, limit, search);
+        
+        case ImportSourceType.FILE_CSV:
+        case ImportSourceType.FILE_JSON:
+        case ImportSourceType.API_REST:
+          // For file and API sources, fall back to client-side join using individual table data
+          return await this.executeClientSideJoin(connectionConfig, primaryTable, joinedTables, limit, search);
+        
+        default:
+          throw new Error(`Join queries not supported for source type: ${connectionConfig.type}`);
+      }
+    } catch (error) {
+      console.error('Error executing join query:', error);
+      return null;
+    }
+  }
+
+  private async executeDatabaseJoin(
+    connectionConfig: ConnectionConfig,
+    primaryTable: string,
+    joinedTables: Array<{
+      tableName: string;
+      joinType: 'inner' | 'left' | 'right' | 'full';
+      joinConditions: Array<{
+        sourceField: string;
+        targetField: string;
+        operator: '=' | '!=' | '>' | '<' | '>=' | '<=' | 'LIKE' | 'IN';
+      }>;
+      alias?: string;
+    }>,
+    limit: number,
+    search?: string
+  ): Promise<TableDataResult> {
+    const { default: mysql } = await import('mysql2/promise');
+    const { Client } = await import('pg');
+    const { default: Database } = await import('better-sqlite3');
+
+    let connection: any;
+    let query: string;
+    let params: any[] = [];
+
+    try {
+      // Build the SQL query
+      const selectFields: string[] = [`${primaryTable}.*`];
+      
+      // Add fields from joined tables
+      joinedTables.forEach(jt => {
+        const tableAlias = jt.alias || jt.tableName;
+        selectFields.push(`${tableAlias}.*`);
+      });
+
+      // Start building the query
+      query = `SELECT ${selectFields.join(', ')} FROM ${primaryTable}`;
+
+      // Add JOIN clauses
+      joinedTables.forEach(jt => {
+        const joinTypeSQL = jt.joinType.toUpperCase().replace('FULL', 'FULL OUTER');
+        const tableAlias = jt.alias || jt.tableName;
+        const tableName = jt.tableName;
+        
+        // Build join conditions
+        const conditions = jt.joinConditions.map(cond => {
+          const operator = cond.operator;
+          return `${primaryTable}.${cond.sourceField} ${operator} ${tableAlias}.${cond.targetField}`;
+        }).join(' AND ');
+
+        query += ` ${joinTypeSQL} JOIN ${tableName}${jt.alias ? ` AS ${jt.alias}` : ''} ON ${conditions}`;
+      });
+
+      // Add search filter if provided
+      if (search && search.trim()) {
+        // For simplicity, search across all text fields in the primary table
+        query += ` WHERE CONCAT_WS(' ', ${primaryTable}.*) LIKE ?`;
+        params.push(`%${search.trim()}%`);
+      }
+
+      // Add limit
+      query += ` LIMIT ${limit}`;
+
+      console.log('Executing join query:', query, 'with params:', params);
+
+      // Execute based on database type
+      if (connectionConfig.type === ImportSourceType.DATABASE_MYSQL) {
+        connection = await mysql.createConnection({
+          host: connectionConfig.host,
+          port: connectionConfig.port || 3306,
+          user: connectionConfig.username,
+          password: connectionConfig.password,
+          database: connectionConfig.database
+        });
+
+        const [rows, fields]: any = await connection.execute(query, params);
+        const columns = fields.map((field: any) => field.name);
+        
+        return {
+          columns,
+          rows: rows.map((row: any) => columns.map(col => row[col])),
+          totalCount: rows.length // Note: This is not the actual total count, just the returned count
+        };
+
+      } else if (connectionConfig.type === ImportSourceType.DATABASE_POSTGRESQL) {
+        connection = new Client({
+          host: connectionConfig.host,
+          port: connectionConfig.port || 5432,
+          user: connectionConfig.username,
+          password: connectionConfig.password,
+          database: connectionConfig.database
+        });
+
+        await connection.connect();
+
+        // PostgreSQL uses different syntax for CONCAT_WS
+        if (search && search.trim()) {
+          query = query.replace(
+            `CONCAT_WS(' ', ${primaryTable}.*)`,
+            `CONCAT(${primaryTable}.*)`
+          );
+        }
+
+        const result = await connection.query(query, params);
+        const columns = result.fields.map(field => field.name);
+        
+        return {
+          columns,
+          rows: result.rows.map(row => columns.map(col => row[col])),
+          totalCount: result.rows.length
+        };
+
+      } else if (connectionConfig.type === ImportSourceType.DATABASE_SQLITE) {
+        const dbPath = connectionConfig.filePath || connectionConfig.database;
+        if (!dbPath) {
+          throw new Error('Database file path is required for SQLite');
+        }
+
+        const db = new Database(dbPath, { readonly: true });
+
+        // SQLite uses different syntax
+        if (search && search.trim()) {
+          // Simple search implementation for SQLite
+          const searchConditions = [`${primaryTable}.* LIKE ?`];
+          query = query.replace(
+            `CONCAT_WS(' ', ${primaryTable}.*)`,
+            searchConditions.join(' OR ')
+          );
+        }
+
+        const rows = db.prepare(query).all(...params);
+        
+        if (rows.length === 0) {
+          return { columns: [], rows: [], totalCount: 0 };
+        }
+
+        const columns = Object.keys(rows[0]);
+        
+        return {
+          columns,
+          rows: rows.map(row => columns.map(col => (row as any)[col])),
+          totalCount: rows.length
+        };
+      }
+
+      throw new Error(`Unsupported database type: ${connectionConfig.type}`);
+
+    } catch (error) {
+      console.error('Database join error:', error);
+      throw error;
+    } finally {
+      // Clean up connections
+      if (connection) {
+        if (connectionConfig.type === ImportSourceType.DATABASE_MYSQL && connection.end) {
+          await connection.end();
+        } else if (connectionConfig.type === ImportSourceType.DATABASE_POSTGRESQL && connection.end) {
+          await connection.end();
+        } else if (connectionConfig.type === ImportSourceType.DATABASE_SQLITE && connection.close) {
+          connection.close();
+        }
+      }
+    }
+  }
+
+  private async executeClientSideJoin(
+    connectionConfig: ConnectionConfig,
+    primaryTable: string,
+    joinedTables: Array<{
+      tableName: string;
+      joinType: 'inner' | 'left' | 'right' | 'full';
+      joinConditions: Array<{
+        sourceField: string;
+        targetField: string;
+        operator: '=' | '!=' | '>' | '<' | '>=' | '<=' | 'LIKE' | 'IN';
+      }>;
+      alias?: string;
+    }>,
+    limit: number,
+    search?: string
+  ): Promise<TableDataResult> {
+    // For non-database sources, fetch data from each table and join client-side
+    // This is a fallback for file and API sources
+    
+    // Fetch primary table data
+    const primaryData = await this.getTableData(connectionConfig, primaryTable, limit * 2, 0, search);
+    if (!primaryData) {
+      throw new Error(`Failed to fetch primary table data: ${primaryTable}`);
+    }
+
+    // Fetch joined table data
+    const joinedData: Array<{ data: TableDataResult; config: any }> = [];
+    for (const jt of joinedTables) {
+      const data = await this.getTableData(connectionConfig, jt.tableName, 1000, 0); // Fetch more data for better join results
+      if (data) {
+        joinedData.push({ data, config: jt });
+      }
+    }
+
+    // Perform client-side join logic (similar to the existing generateMockJoinResult but with real data)
+    const resultColumns = [...primaryData.columns];
+    
+    // Add columns from joined tables
+    joinedData.forEach(({ data, config }) => {
+      data.columns.forEach(col => {
+        const alias = config.alias ? `${config.alias}.${col}` : `${config.tableName}.${col}`;
+        resultColumns.push(alias);
+      });
+    });
+
+    const resultRows: any[][] = [];
+
+    primaryData.rows.slice(0, limit).forEach(primaryRow => {
+      // For each primary row, find matching rows in joined tables
+      let hasMatches = false;
+      const joinResults: any[][] = [];
+
+      joinedData.forEach(({ data, config }) => {
+        const matchingRows = data.rows.filter(joinRow => {
+          return config.joinConditions.every((condition: any) => {
+            const primaryColIndex = primaryData.columns.indexOf(condition.sourceField);
+            const joinColIndex = data.columns.indexOf(condition.targetField);
+            
+            if (primaryColIndex === -1 || joinColIndex === -1) return false;
+            
+            const primaryValue = primaryRow[primaryColIndex];
+            const joinValue = joinRow[joinColIndex];
+            
+            switch (condition.operator) {
+              case '=':
+              default:
+                return String(primaryValue || '').trim() === String(joinValue || '').trim();
+              case '!=':
+                return String(primaryValue || '').trim() !== String(joinValue || '').trim();
+              case '>':
+                return Number(primaryValue) > Number(joinValue);
+              case '<':
+                return Number(primaryValue) < Number(joinValue);
+              case '>=':
+                return Number(primaryValue) >= Number(joinValue);
+              case '<=':
+                return Number(primaryValue) <= Number(joinValue);
+              case 'LIKE':
+                return String(primaryValue || '').toLowerCase().includes(String(joinValue || '').toLowerCase());
+            }
+          });
+        });
+
+        if (matchingRows.length > 0) {
+          hasMatches = true;
+          joinResults.push(matchingRows[0]); // Take first match
+        } else {
+          // Handle different join types
+          if (config.joinType === 'left' || config.joinType === 'full') {
+            joinResults.push(new Array(data.columns.length).fill(null));
+          } else if (config.joinType === 'inner') {
+            // For inner joins, skip this primary row if no matches
+            return;
+          }
+        }
+      });
+
+      // Build result row
+      if (hasMatches || joinedTables.some(jt => jt.joinType !== 'inner')) {
+        let resultRow = [...primaryRow];
+        joinResults.forEach(joinRow => {
+          resultRow = [...resultRow, ...joinRow];
+        });
+        resultRows.push(resultRow);
+      }
+    });
+
+    return {
+      columns: resultColumns,
+      rows: resultRows,
+      totalCount: resultRows.length
+    };
+  }
+
   private generateMockSchema(sourceType: string): SourceSchema {
     const commonTables: SourceTable[] = [
       {

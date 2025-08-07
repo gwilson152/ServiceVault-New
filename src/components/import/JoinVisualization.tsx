@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +14,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -32,7 +33,8 @@ import {
   Square,
   Triangle,
   Info,
-  Link
+  Link,
+  Search
 } from "lucide-react";
 import { SourceSchema, ConnectionConfig } from "@/lib/import/types";
 
@@ -95,13 +97,88 @@ export default function JoinVisualization({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filteredPreviewData, setFilteredPreviewData] = useState<JoinPreviewData | null>(null);
+
+  // Debounced search functionality
+  const debouncedSearch = useCallback(
+    (() => {
+      let timeout: NodeJS.Timeout;
+      return (searchValue: string) => {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => {
+          filterData(searchValue);
+        }, 500);
+      };
+    })(),
+    [previewData]
+  );
+
+  const filterData = (searchValue: string) => {
+    if (!previewData) {
+      setFilteredPreviewData(null);
+      return;
+    }
+
+    if (!searchValue.trim()) {
+      setFilteredPreviewData(previewData);
+      return;
+    }
+
+    const searchLower = searchValue.toLowerCase();
+
+    // Filter table data
+    const filteredTables: { [tableName: string]: any } = {};
+    Object.keys(previewData.tables).forEach(tableName => {
+      const tableData = previewData.tables[tableName];
+      const filteredRows = tableData.rows.filter((row: any[]) =>
+        row.some(cell =>
+          String(cell || '').toLowerCase().includes(searchLower)
+        )
+      );
+      filteredTables[tableName] = {
+        ...tableData,
+        rows: filteredRows,
+        totalCount: filteredRows.length
+      };
+    });
+
+    // Filter join result
+    const filteredJoinRows = previewData.joinResult.rows.filter((row: any[]) =>
+      row.some(cell =>
+        String(cell || '').toLowerCase().includes(searchLower)
+      )
+    );
+
+    const filteredJoinResult = {
+      ...previewData.joinResult,
+      rows: filteredJoinRows,
+      totalCount: filteredJoinRows.length
+    };
+
+    setFilteredPreviewData({
+      ...previewData,
+      tables: filteredTables,
+      joinResult: filteredJoinResult
+    });
+  };
+
+  // Handle search term changes
+  useEffect(() => {
+    debouncedSearch(searchTerm);
+  }, [searchTerm, debouncedSearch]);
+
+  // Initialize filtered data when original data changes
+  useEffect(() => {
+    filterData(searchTerm);
+  }, [previewData]);
 
   const loadJoinPreview = async () => {
     setLoading(true);
     setError(null);
 
     try {
-      // Load sample data for each table
+      // Load individual table samples for display
       const tableData: { [tableName: string]: any } = {};
       
       // Load primary table data
@@ -136,8 +213,37 @@ export default function JoinVisualization({
         }
       }
 
-      // Generate mock join result
-      const joinResult = generateJoinResult(tableData, joinedTable);
+      // Execute actual join query via API
+      let joinResult;
+      try {
+        const joinResponse = await fetch("/api/import/join-preview", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            connectionConfig,
+            primaryTable: joinedTable.primaryTable,
+            joinedTables: joinedTable.joinedTables.map(jt => ({
+              tableName: jt.tableName,
+              joinType: jt.joinType,
+              joinConditions: jt.joinConditions,
+              alias: jt.alias
+            })),
+            limit: 20,
+            search: searchTerm
+          })
+        });
+        
+        if (joinResponse.ok) {
+          joinResult = await joinResponse.json();
+        } else {
+          // Fall back to mock join if API fails
+          joinResult = generateJoinResult(tableData, joinedTable);
+        }
+      } catch (joinError) {
+        console.error('Join API error, falling back to mock:', joinError);
+        joinResult = generateJoinResult(tableData, joinedTable);
+      }
+
       const joinExplanation = generateJoinExplanation(joinedTable, tableData);
 
       setPreviewData({
@@ -403,8 +509,17 @@ export default function JoinVisualization({
               <GitMerge className="h-5 w-5" />
               Join Preview: {joinedTable.name}
             </DialogTitle>
-            <DialogDescription>
-              Preview of the joined table with real data and join explanation
+            <DialogDescription className="flex items-center justify-between">
+              <span>Preview of the joined table with real data and join explanation</span>
+              <div className="relative">
+                <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Filter preview data..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10 w-64"
+                />
+              </div>
             </DialogDescription>
           </DialogHeader>
 
@@ -418,7 +533,7 @@ export default function JoinVisualization({
               <Alert variant="destructive">
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
-            ) : previewData ? (
+            ) : (filteredPreviewData || previewData) ? (
               <>
                 {/* Join Explanation */}
                 <Card style={{ maxWidth: '100%', overflow: 'hidden' }}>
@@ -427,7 +542,7 @@ export default function JoinVisualization({
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="space-y-2">
-                      {previewData.joinExplanation.steps.map((step, index) => (
+                      {(filteredPreviewData || previewData).joinExplanation.steps.map((step, index) => (
                         <div key={index} className="flex items-center gap-3">
                           <Badge variant="outline">{index + 1}</Badge>
                           <span className="text-sm">{step}</span>
@@ -438,28 +553,30 @@ export default function JoinVisualization({
                     <div className="border rounded-lg p-3 bg-muted/30">
                       <p className="text-sm font-medium mb-2">Generated SQL:</p>
                       <pre className="text-xs bg-black text-green-400 p-2 rounded overflow-x-auto">
-                        {previewData.joinExplanation.sql}
+                        {(filteredPreviewData || previewData).joinExplanation.sql}
                       </pre>
                     </div>
 
                     <div className="grid grid-cols-3 gap-4 text-center">
                       <div>
                         <div className="text-lg font-bold text-green-600">
-                          {previewData.joinExplanation.matchingSummary.matched}
+                          {(filteredPreviewData || previewData).joinExplanation.matchingSummary.matched}
                         </div>
                         <p className="text-xs text-muted-foreground">Matched Records</p>
                       </div>
                       <div>
                         <div className="text-lg font-bold text-yellow-600">
-                          {previewData.joinExplanation.matchingSummary.unmatched}
+                          {(filteredPreviewData || previewData).joinExplanation.matchingSummary.unmatched}
                         </div>
                         <p className="text-xs text-muted-foreground">Unmatched Records</p>
                       </div>
                       <div>
                         <div className="text-lg font-bold">
-                          {previewData.joinExplanation.matchingSummary.total}
+                          {(filteredPreviewData || previewData).joinResult.totalCount}
                         </div>
-                        <p className="text-xs text-muted-foreground">Total Result Records</p>
+                        <p className="text-xs text-muted-foreground">
+                          {searchTerm ? 'Filtered' : 'Total'} Result Records
+                        </p>
                       </div>
                     </div>
                   </CardContent>
@@ -470,7 +587,7 @@ export default function JoinVisualization({
                   <CardHeader>
                     <CardTitle className="text-base">Join Result Preview</CardTitle>
                     <CardDescription>
-                      Sample data from the joined table ({previewData.joinResult.totalCount} records)
+                      Sample data from the joined table ({(filteredPreviewData || previewData).joinResult.totalCount} records{searchTerm ? ' filtered' : ''})
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="p-0">
@@ -479,7 +596,7 @@ export default function JoinVisualization({
                         <Table>
                           <TableHeader>
                             <TableRow>
-                              {previewData.joinResult.columns.map((column, index) => (
+                              {(filteredPreviewData || previewData).joinResult.columns.map((column, index) => (
                                 <TableHead key={index} className="text-xs whitespace-nowrap px-3" style={{ minWidth: '120px' }}>
                                   <div className="truncate" title={column}>
                                     {column}
@@ -489,7 +606,7 @@ export default function JoinVisualization({
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {previewData.joinResult.rows.map((row, index) => (
+                            {(filteredPreviewData || previewData).joinResult.rows.map((row, index) => (
                               <TableRow key={index}>
                                 {row.map((cell, cellIndex) => (
                                   <TableCell key={cellIndex} className="text-xs px-3" style={{ minWidth: '120px' }}>
