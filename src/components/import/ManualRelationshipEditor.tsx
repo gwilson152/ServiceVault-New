@@ -400,7 +400,7 @@ export default function ManualRelationshipEditor({
 
       {/* Joined Table Editor Dialog */}
       <Dialog open={isEditingJoinedTable} onOpenChange={setIsEditingJoinedTable}>
-        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-6xl max-h-[90vh] w-[95vw] overflow-hidden">
           <DialogHeader>
             <DialogTitle>Configure Joined Table</DialogTitle>
             <DialogDescription>
@@ -408,15 +408,17 @@ export default function ManualRelationshipEditor({
             </DialogDescription>
           </DialogHeader>
           
-          {selectedJoinedTable && (
-            <JoinedTableConfigForm
-              joinedTable={selectedJoinedTable}
-              sourceSchema={sourceSchema}
-              connectionConfig={connectionConfig}
-              onSave={saveJoinedTable}
-              onCancel={() => setIsEditingJoinedTable(false)}
-            />
-          )}
+          <div className="overflow-y-auto max-h-[calc(90vh-120px)]">
+            {selectedJoinedTable && (
+              <JoinedTableConfigForm
+                joinedTable={selectedJoinedTable}
+                sourceSchema={sourceSchema}
+                connectionConfig={connectionConfig}
+                onSave={saveJoinedTable}
+                onCancel={() => setIsEditingJoinedTable(false)}
+              />
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>
@@ -701,13 +703,14 @@ function JoinedTableConfigForm({
   const [loadingSamples, setLoadingSamples] = useState(false);
   const [showJoinExplanation, setShowJoinExplanation] = useState(false);
   const [joinPreview, setJoinPreview] = useState<any>(null);
+  const [previewRecordCount, setPreviewRecordCount] = useState(5);
 
   const updateConfig = (updates: Partial<JoinedTableConfig>) => {
     setConfig(prev => ({ ...prev, ...updates }));
   };
 
-  const loadSampleData = async (tableName: string) => {
-    if (tableSamples[tableName] || !tableName) return;
+  const loadSampleData = async (tableName: string, limit: number = previewRecordCount) => {
+    if (!tableName) return;
     
     try {
       const response = await fetch("/api/import/table-preview", {
@@ -716,7 +719,7 @@ function JoinedTableConfigForm({
         body: JSON.stringify({
           connectionConfig,
           tableName,
-          limit: 5
+          limit
         })
       });
       
@@ -734,18 +737,20 @@ function JoinedTableConfigForm({
     
     setLoadingSamples(true);
     try {
-      // Load sample data for all tables
+      // Load sample data for all tables with current record count
       await Promise.all([
-        loadSampleData(config.primaryTable),
-        ...config.joinedTables.map(jt => loadSampleData(jt.tableName))
+        loadSampleData(config.primaryTable, previewRecordCount),
+        ...config.joinedTables.map(jt => loadSampleData(jt.tableName, previewRecordCount))
       ]);
       
-      // Generate mock join result
-      const primaryData = tableSamples[config.primaryTable];
-      if (primaryData) {
-        const mockResult = generateMockJoinResult(primaryData, config);
-        setJoinPreview(mockResult);
-      }
+      // Wait a bit for state to update
+      setTimeout(() => {
+        const primaryData = tableSamples[config.primaryTable];
+        if (primaryData) {
+          const mockResult = generateMockJoinResult(primaryData, config);
+          setJoinPreview(mockResult);
+        }
+      }, 100);
     } finally {
       setLoadingSamples(false);
     }
@@ -767,7 +772,7 @@ function JoinedTableConfigForm({
     });
     
     // Generate sample joined rows (simplified simulation)
-    const resultRows = primaryData.rows.slice(0, 3).map((primaryRow: any[]) => {
+    const resultRows = primaryData.rows.slice(0, previewRecordCount).map((primaryRow: any[]) => {
       let resultRow = [...primaryRow];
       
       joinConfig.joinedTables.forEach((jt, index) => {
@@ -1044,17 +1049,41 @@ function JoinedTableConfigForm({
                 See how your join will work with real data from the datasource
               </p>
             </div>
-            <Button 
-              onClick={generateJoinPreview}
-              disabled={loadingSamples}
-              size="sm"
-            >
-              {loadingSamples ? (
-                <><Loader2 className="h-4 w-4 animate-spin mr-2" />Loading...</>
-              ) : (
-                <><Eye className="h-4 w-4 mr-2" />Preview Join</>
-              )}
-            </Button>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2">
+                <Label className="text-sm whitespace-nowrap">Preview records:</Label>
+                <Select 
+                  value={String(previewRecordCount)} 
+                  onValueChange={(value) => {
+                    setPreviewRecordCount(Number(value));
+                    // Clear existing data to force reload
+                    setTableSamples({});
+                    setJoinPreview(null);
+                  }}
+                >
+                  <SelectTrigger className="w-20">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="3">3</SelectItem>
+                    <SelectItem value="5">5</SelectItem>
+                    <SelectItem value="10">10</SelectItem>
+                    <SelectItem value="20">20</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button 
+                onClick={generateJoinPreview}
+                disabled={loadingSamples}
+                size="sm"
+              >
+                {loadingSamples ? (
+                  <><Loader2 className="h-4 w-4 animate-spin mr-2" />Loading...</>
+                ) : (
+                  <><Eye className="h-4 w-4 mr-2" />Preview Join</>
+                )}
+              </Button>
+            </div>
           </div>
 
           {/* Join Explanation Card */}
@@ -1092,9 +1121,9 @@ function JoinedTableConfigForm({
 
           {/* Sample Data Preview */}
           {Object.keys(tableSamples).length > 0 && (
-            <div className="space-y-4">
+            <div className="space-y-4" style={{ maxWidth: '100%', overflow: 'hidden' }}>
               <h4 className="font-medium">Sample Data from Source Tables</h4>
-              <div className="grid grid-cols-1 gap-4">
+              <div className="grid grid-cols-1 gap-4" style={{ maxWidth: '100%' }}>
                 {/* Primary Table Sample */}
                 {tableSamples[config.primaryTable] && (
                   <Card>
@@ -1105,28 +1134,34 @@ function JoinedTableConfigForm({
                         <Badge variant="default" className="text-xs">Primary Table</Badge>
                       </CardTitle>
                     </CardHeader>
-                    <CardContent>
-                      <div className="overflow-x-auto">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              {tableSamples[config.primaryTable].columns.map((col: string, index: number) => (
-                                <TableHead key={index} className="text-xs">{col}</TableHead>
-                              ))}
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {tableSamples[config.primaryTable].rows.slice(0, 3).map((row: any[], rowIndex: number) => (
-                              <TableRow key={rowIndex}>
-                                {row.map((cell: any, cellIndex: number) => (
-                                  <TableCell key={cellIndex} className="text-xs">
-                                    {cell === null ? <span className="text-muted-foreground italic">null</span> : String(cell)}
-                                  </TableCell>
+                    <CardContent className="p-0">
+                      <div className="overflow-x-auto" style={{ maxWidth: '100%', width: '100%' }}>
+                        <div style={{ minWidth: 'max-content', width: 'max-content' }}>
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                {tableSamples[config.primaryTable].columns.map((col: string, index: number) => (
+                                  <TableHead key={index} className="text-xs whitespace-nowrap px-3" style={{ minWidth: '100px' }}>
+                                    {col}
+                                  </TableHead>
                                 ))}
                               </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
+                            </TableHeader>
+                            <TableBody>
+                              {tableSamples[config.primaryTable].rows.slice(0, previewRecordCount).map((row: any[], rowIndex: number) => (
+                                <TableRow key={rowIndex}>
+                                  {row.map((cell: any, cellIndex: number) => (
+                                    <TableCell key={cellIndex} className="text-xs px-3" style={{ minWidth: '100px' }}>
+                                      <div className="max-w-[200px] truncate" title={String(cell || '')}>
+                                        {cell === null ? <span className="text-muted-foreground italic">null</span> : String(cell)}
+                                      </div>
+                                    </TableCell>
+                                  ))}
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
@@ -1143,33 +1178,39 @@ function JoinedTableConfigForm({
                           <Badge variant="outline" className="text-xs">{jt.joinType.toUpperCase()} JOIN</Badge>
                         </CardTitle>
                       </CardHeader>
-                      <CardContent>
-                        <div className="overflow-x-auto">
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                {tableSamples[jt.tableName].columns.map((col: string, colIndex: number) => (
-                                  <TableHead key={colIndex} className="text-xs">
-                                    {col}
-                                    {jt.joinConditions.some(cond => cond.targetField === col) && (
-                                      <Badge variant="secondary" className="ml-1 text-xs">JOIN KEY</Badge>
-                                    )}
-                                  </TableHead>
-                                ))}
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {tableSamples[jt.tableName].rows.slice(0, 3).map((row: any[], rowIndex: number) => (
-                                <TableRow key={rowIndex}>
-                                  {row.map((cell: any, cellIndex: number) => (
-                                    <TableCell key={cellIndex} className="text-xs">
-                                      {cell === null ? <span className="text-muted-foreground italic">null</span> : String(cell)}
-                                    </TableCell>
+                      <CardContent className="p-0">
+                        <div className="overflow-x-auto" style={{ maxWidth: '100%', width: '100%' }}>
+                          <div style={{ minWidth: 'max-content', width: 'max-content' }}>
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  {tableSamples[jt.tableName].columns.map((col: string, colIndex: number) => (
+                                    <TableHead key={colIndex} className="text-xs whitespace-nowrap px-3" style={{ minWidth: '120px' }}>
+                                      <div className="flex items-center gap-1">
+                                        <span>{col}</span>
+                                        {jt.joinConditions.some(cond => cond.targetField === col) && (
+                                          <Badge variant="secondary" className="text-xs shrink-0">JOIN KEY</Badge>
+                                        )}
+                                      </div>
+                                    </TableHead>
                                   ))}
                                 </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
+                              </TableHeader>
+                              <TableBody>
+                                {tableSamples[jt.tableName].rows.slice(0, previewRecordCount).map((row: any[], rowIndex: number) => (
+                                  <TableRow key={rowIndex}>
+                                    {row.map((cell: any, cellIndex: number) => (
+                                      <TableCell key={cellIndex} className="text-xs px-3" style={{ minWidth: '120px' }}>
+                                        <div className="max-w-[200px] truncate" title={String(cell || '')}>
+                                          {cell === null ? <span className="text-muted-foreground italic">null</span> : String(cell)}
+                                        </div>
+                                      </TableCell>
+                                    ))}
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
                         </div>
                       </CardContent>
                     </Card>
@@ -1192,28 +1233,36 @@ function JoinedTableConfigForm({
                   This shows how the joined data will look with your current configuration
                 </CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        {joinPreview.columns.map((col: string, index: number) => (
-                          <TableHead key={index} className="text-xs">{col}</TableHead>
-                        ))}
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {joinPreview.rows.map((row: any[], rowIndex: number) => (
-                        <TableRow key={rowIndex}>
-                          {row.map((cell: any, cellIndex: number) => (
-                            <TableCell key={cellIndex} className="text-xs">
-                              {cell === null ? <span className="text-muted-foreground italic">null</span> : String(cell)}
-                            </TableCell>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto" style={{ maxWidth: '100%', width: '100%' }}>
+                  <div style={{ minWidth: 'max-content', width: 'max-content' }}>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          {joinPreview.columns.map((col: string, index: number) => (
+                            <TableHead key={index} className="text-xs whitespace-nowrap px-3" style={{ minWidth: '120px' }}>
+                              <div className="truncate" title={col}>
+                                {col}
+                              </div>
+                            </TableHead>
                           ))}
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {joinPreview.rows.map((row: any[], rowIndex: number) => (
+                          <TableRow key={rowIndex}>
+                            {row.map((cell: any, cellIndex: number) => (
+                              <TableCell key={cellIndex} className="text-xs px-3" style={{ minWidth: '120px' }}>
+                                <div className="max-w-[200px] truncate" title={String(cell || '')}>
+                                  {cell === null ? <span className="text-muted-foreground italic">null</span> : String(cell)}
+                                </div>
+                              </TableCell>
+                            ))}
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 </div>
               </CardContent>
             </Card>
