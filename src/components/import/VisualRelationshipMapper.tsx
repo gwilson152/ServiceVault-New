@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { ImportStageData, SourceSchema } from "@/lib/import/types";
 import { StageRelationship } from "./RelationshipMapper";
+import ManualRelationshipEditor from "./ManualRelationshipEditor";
 
 interface VisualRelationshipMapperProps {
   stages: ImportStageData[];
@@ -300,24 +301,14 @@ export default function VisualRelationshipMapper({
       </Card>
 
       {/* Manual Relationship Configuration */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Custom Relationships</CardTitle>
-          <CardDescription>
-            Create custom relationships between your stages
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Alert>
-            <AlertTriangle className="h-4 w-4" />
-            <AlertTitle>Advanced Feature</AlertTitle>
-            <AlertDescription>
-              Manual relationship configuration will be available in the next version. 
-              Use the suggested relationships above for now.
-            </AlertDescription>
-          </Alert>
-        </CardContent>
-      </Card>
+      <ManualRelationshipEditor
+        stages={stages}
+        relationships={relationships}
+        sourceSchema={sourceSchema}
+        joinedTables={[]}
+        onChange={onChange}
+        onJoinedTablesChange={() => {}}
+      />
     </div>
   );
 }

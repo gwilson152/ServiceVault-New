@@ -52,6 +52,8 @@ import {
 import { SourceSchema, SourceTable, ImportStageData, ConnectionConfig } from "@/lib/import/types";
 import { StageRelationship } from "./RelationshipMapper";
 import VisualRelationshipMapper from "./VisualRelationshipMapper";
+import DragDropFieldMapper from "./DragDropFieldMapper";
+import StagePreview from "./StagePreview";
 
 const TARGET_ENTITIES = [
   { 
@@ -111,6 +113,7 @@ export default function MultiStageWizard({
   const [selectedStageIndex, setSelectedStageIndex] = useState<number | null>(null);
   const [tableSamples, setTableSamples] = useState<Record<string, TableSample>>({});
   const [expandedExamples, setExpandedExamples] = useState<Set<string>>(new Set());
+  const [previewStage, setPreviewStage] = useState<ImportStageData | null>(null);
 
   const steps = [
     { id: 'overview', title: 'Pipeline Overview', description: 'Understand multi-stage imports' },
@@ -585,7 +588,11 @@ export default function MultiStageWizard({
                       </div>
                       
                       <div className="flex gap-2 ml-4">
-                        <Button variant="outline" size="sm">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => setPreviewStage(stage)}
+                        >
                           <Eye className="h-4 w-4 mr-1" />
                           Preview
                         </Button>
@@ -773,6 +780,17 @@ export default function MultiStageWizard({
           <ArrowRight className="h-4 w-4 ml-2" />
         </Button>
       </div>
+
+      {/* Stage Preview Modal */}
+      {previewStage && (
+        <StagePreview
+          stage={previewStage}
+          sourceSchema={sourceSchema}
+          connectionConfig={connectionConfig}
+          isOpen={!!previewStage}
+          onClose={() => setPreviewStage(null)}
+        />
+      )}
     </div>
   );
 }
