@@ -513,17 +513,17 @@ export class ConnectionManager {
 
       // Build search condition if provided
       let whereClause = '';
-      let paramIndex = 2; // Start from $2 since $1 is used for tableName in columns query
+      let paramIndex = 1;
       const queryParams: any[] = [];
       
       if (search && search.trim()) {
         const searchTerm = `%${search.trim()}%`;
-        const searchConditions = columns.map((col: any, index: number) => {
+        const searchConditions = columnsResult.rows.map((col: any, index: number) => {
           return `"${col.column_name}"::text LIKE $${paramIndex + index}`;
         }).join(' OR ');
         whereClause = ` WHERE ${searchConditions}`;
-        queryParams.push(...columns.map(() => searchTerm));
-        paramIndex += columns.length;
+        queryParams.push(...columnsResult.rows.map(() => searchTerm));
+        paramIndex += columnsResult.rows.length;
       }
 
       // Get total count with search
@@ -578,14 +578,6 @@ export class ConnectionManager {
       if (!columns || columns.length === 0) {
         throw new Error(`Table '${tableName}' not found in SQLite database`);
       }
-
-      // Get total count
-      const totalCount = await new Promise<number>((resolve, reject) => {
-        db.get(`SELECT COUNT(*) as total FROM "${tableName}"`, [], (err, row: any) => {
-          if (err) reject(err);
-          else resolve(row?.total || 0);
-        });
-      });
 
       // Build search condition if provided
       let whereClause = '';

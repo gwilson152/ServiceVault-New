@@ -446,6 +446,7 @@ export default function MultiStageWizard({
         relationships={[]}
         sourceSchema={sourceSchema}
         joinedTables={joinedTables}
+        connectionConfig={connectionConfig}
         onChange={() => {}} // Hide relationship section
         onJoinedTablesChange={onJoinedTablesChange || (() => {})}
         hideRelationships={true}

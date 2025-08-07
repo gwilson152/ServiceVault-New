@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,9 +42,10 @@ import {
   AlertCircle,
   Info,
   Zap,
-  GitMerge
+  GitMerge,
+  Loader2
 } from "lucide-react";
-import { ImportStageData, SourceSchema, SourceField } from "@/lib/import/types";
+import { ImportStageData, SourceSchema, SourceField, ConnectionConfig } from "@/lib/import/types";
 import { StageRelationship } from "./RelationshipMapper";
 
 interface ExtendedStageRelationship extends StageRelationship {
@@ -86,16 +87,41 @@ interface ManualRelationshipEditorProps {
   relationships: ExtendedStageRelationship[];
   sourceSchema: SourceSchema;
   joinedTables: JoinedTableConfig[];
+  connectionConfig: ConnectionConfig;
   onChange: (relationships: ExtendedStageRelationship[]) => void;
   onJoinedTablesChange: (joinedTables: JoinedTableConfig[]) => void;
   hideRelationships?: boolean;
 }
 
 const JOIN_TYPES = [
-  { value: 'inner', label: 'Inner Join', description: 'Only matching records from both tables' },
-  { value: 'left', label: 'Left Join', description: 'All records from left table, matching from right' },
-  { value: 'right', label: 'Right Join', description: 'All records from right table, matching from left' },
-  { value: 'full', label: 'Full Join', description: 'All records from both tables' }
+  { 
+    value: 'inner', 
+    label: 'Inner Join', 
+    description: 'Only matching records from both tables',
+    explanation: 'Returns only rows where the join condition is met in both tables. Non-matching rows are excluded.',
+    useCase: 'Use when you only want records that exist in both tables (e.g., users who have orders)'
+  },
+  { 
+    value: 'left', 
+    label: 'Left Join', 
+    description: 'All records from left table, matching from right',
+    explanation: 'Returns all rows from the left (primary) table, and matching rows from the right table. Non-matching right table values become NULL.',
+    useCase: 'Use when you want all records from the primary table, even if they don\'t have matches (e.g., all users, even those without orders)'
+  },
+  { 
+    value: 'right', 
+    label: 'Right Join', 
+    description: 'All records from right table, matching from left',
+    explanation: 'Returns all rows from the right (joined) table, and matching rows from the left table. Non-matching left table values become NULL.',
+    useCase: 'Use when you want all records from the joined table, even if they don\'t have matches (rarely used in practice)'
+  },
+  { 
+    value: 'full', 
+    label: 'Full Outer Join', 
+    description: 'All records from both tables',
+    explanation: 'Returns all rows from both tables. When no match is found, NULL values are used for missing data from either side.',
+    useCase: 'Use when you need a complete picture of data from both tables (e.g., all users and all orders, showing which don\'t match)'
+  }
 ];
 
 const OPERATORS = [
@@ -114,6 +140,7 @@ export default function ManualRelationshipEditor({
   relationships,
   sourceSchema,
   joinedTables,
+  connectionConfig,
   onChange,
   onJoinedTablesChange,
   hideRelationships = false
@@ -385,6 +412,7 @@ export default function ManualRelationshipEditor({
             <JoinedTableConfigForm
               joinedTable={selectedJoinedTable}
               sourceSchema={sourceSchema}
+              connectionConfig={connectionConfig}
               onSave={saveJoinedTable}
               onCancel={() => setIsEditingJoinedTable(false)}
             />
@@ -656,6 +684,7 @@ function RelationshipConfigForm({
 interface JoinedTableConfigFormProps {
   joinedTable: JoinedTableConfig;
   sourceSchema: SourceSchema;
+  connectionConfig: ConnectionConfig;
   onSave: (joinedTable: JoinedTableConfig) => void;
   onCancel: () => void;
 }
@@ -663,14 +692,121 @@ interface JoinedTableConfigFormProps {
 function JoinedTableConfigForm({
   joinedTable,
   sourceSchema,
+  connectionConfig,
   onSave,
   onCancel
 }: JoinedTableConfigFormProps) {
   const [config, setConfig] = useState<JoinedTableConfig>(joinedTable);
+  const [tableSamples, setTableSamples] = useState<Record<string, any>>({});
+  const [loadingSamples, setLoadingSamples] = useState(false);
+  const [showJoinExplanation, setShowJoinExplanation] = useState(false);
+  const [joinPreview, setJoinPreview] = useState<any>(null);
 
   const updateConfig = (updates: Partial<JoinedTableConfig>) => {
     setConfig(prev => ({ ...prev, ...updates }));
   };
+
+  const loadSampleData = async (tableName: string) => {
+    if (tableSamples[tableName] || !tableName) return;
+    
+    try {
+      const response = await fetch("/api/import/table-preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          connectionConfig,
+          tableName,
+          limit: 5
+        })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setTableSamples(prev => ({ ...prev, [tableName]: data }));
+      }
+    } catch (error) {
+      console.error('Failed to load sample data:', error);
+    }
+  };
+
+  const generateJoinPreview = async () => {
+    if (!config.primaryTable || config.joinedTables.length === 0) return;
+    
+    setLoadingSamples(true);
+    try {
+      // Load sample data for all tables
+      await Promise.all([
+        loadSampleData(config.primaryTable),
+        ...config.joinedTables.map(jt => loadSampleData(jt.tableName))
+      ]);
+      
+      // Generate mock join result
+      const primaryData = tableSamples[config.primaryTable];
+      if (primaryData) {
+        const mockResult = generateMockJoinResult(primaryData, config);
+        setJoinPreview(mockResult);
+      }
+    } finally {
+      setLoadingSamples(false);
+    }
+  };
+
+  const generateMockJoinResult = (primaryData: any, joinConfig: JoinedTableConfig) => {
+    const resultColumns = [...primaryData.columns];
+    const joinedData = joinConfig.joinedTables.map(jt => tableSamples[jt.tableName]).filter(Boolean);
+    
+    // Add columns from joined tables
+    joinConfig.joinedTables.forEach((jt, index) => {
+      const jtData = joinedData[index];
+      if (jtData) {
+        jtData.columns.forEach((col: string) => {
+          const alias = jt.alias ? `${jt.alias}.${col}` : `${jt.tableName}.${col}`;
+          resultColumns.push(alias);
+        });
+      }
+    });
+    
+    // Generate sample joined rows (simplified simulation)
+    const resultRows = primaryData.rows.slice(0, 3).map((primaryRow: any[]) => {
+      let resultRow = [...primaryRow];
+      
+      joinConfig.joinedTables.forEach((jt, index) => {
+        const jtData = joinedData[index];
+        if (jtData && jtData.rows.length > 0) {
+          // Simulate join - either match or null based on join type
+          const shouldMatch = Math.random() > 0.3 || jt.joinType === 'inner';
+          if (shouldMatch) {
+            const randomRow = jtData.rows[Math.floor(Math.random() * jtData.rows.length)];
+            resultRow = [...resultRow, ...randomRow];
+          } else {
+            // Add nulls for unmatched rows in outer joins
+            const nullRow = new Array(jtData.columns.length).fill(null);
+            resultRow = [...resultRow, ...nullRow];
+          }
+        }
+      });
+      
+      return resultRow;
+    });
+    
+    return {
+      columns: resultColumns,
+      rows: resultRows,
+      totalCount: resultRows.length
+    };
+  };
+
+  // Load sample data when tables change
+  useEffect(() => {
+    if (config.primaryTable) {
+      loadSampleData(config.primaryTable);
+    }
+    config.joinedTables.forEach(jt => {
+      if (jt.tableName) {
+        loadSampleData(jt.tableName);
+      }
+    });
+  }, [config.primaryTable, config.joinedTables]);
 
   const availableTables = sourceSchema.tables?.map(t => t.name) || [];
   const getTableFields = (tableName: string) => 
@@ -784,11 +920,29 @@ function JoinedTableConfigForm({
                     <SelectContent>
                       {JOIN_TYPES.map((type) => (
                         <SelectItem key={type.value} value={type.value}>
-                          {type.label}
+                          <div className="space-y-1">
+                            <div className="font-medium">{type.label}</div>
+                            <div className="text-xs text-muted-foreground">{type.description}</div>
+                          </div>
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  
+                  {/* Join Type Explanation */}
+                  {joinTable.joinType && (
+                    <div className="mt-2 p-2 bg-muted/50 rounded text-xs">
+                      <div className="font-medium mb-1">
+                        {JOIN_TYPES.find(t => t.value === joinTable.joinType)?.label}
+                      </div>
+                      <div className="text-muted-foreground mb-1">
+                        {JOIN_TYPES.find(t => t.value === joinTable.joinType)?.explanation}
+                      </div>
+                      <div className="text-blue-600">
+                        <strong>When to use:</strong> {JOIN_TYPES.find(t => t.value === joinTable.joinType)?.useCase}
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <Label className="text-xs">Alias (Optional)</Label>
@@ -879,6 +1033,193 @@ function JoinedTableConfigForm({
           </div>
         ))}
       </div>
+
+      {/* Join Preview and Examples */}
+      {config.primaryTable && config.joinedTables.length > 0 && (
+        <div className="space-y-4 border-t pt-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h4 className="font-medium">Join Preview</h4>
+              <p className="text-sm text-muted-foreground">
+                See how your join will work with real data from the datasource
+              </p>
+            </div>
+            <Button 
+              onClick={generateJoinPreview}
+              disabled={loadingSamples}
+              size="sm"
+            >
+              {loadingSamples ? (
+                <><Loader2 className="h-4 w-4 animate-spin mr-2" />Loading...</>
+              ) : (
+                <><Eye className="h-4 w-4 mr-2" />Preview Join</>
+              )}
+            </Button>
+          </div>
+
+          {/* Join Explanation Card */}
+          <Card className="bg-blue-50 border-blue-200">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Info className="h-4 w-4 text-blue-600" />
+                Understanding Your Join
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="text-sm">
+                <p className="mb-2"><strong>Primary Table:</strong> {config.primaryTable}</p>
+                <p className="mb-2"><strong>Joined Tables:</strong> {config.joinedTables.map(jt => jt.tableName).join(', ')}</p>
+              </div>
+              
+              {config.joinedTables.map((jt, index) => {
+                const joinType = JOIN_TYPES.find(t => t.value === jt.joinType);
+                return (
+                  <div key={index} className="border-l-2 border-blue-300 pl-3 text-sm">
+                    <div className="font-medium">{joinType?.label} with {jt.tableName}</div>
+                    <div className="text-muted-foreground mb-1">{joinType?.explanation}</div>
+                    {jt.joinConditions.length > 0 && (
+                      <div className="text-xs bg-white/50 rounded p-2">
+                        <strong>Join Conditions:</strong> {jt.joinConditions.map(cond => 
+                          `${config.primaryTable}.${cond.sourceField} = ${jt.tableName}.${cond.targetField}`
+                        ).join(' AND ')}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+
+          {/* Sample Data Preview */}
+          {Object.keys(tableSamples).length > 0 && (
+            <div className="space-y-4">
+              <h4 className="font-medium">Sample Data from Source Tables</h4>
+              <div className="grid grid-cols-1 gap-4">
+                {/* Primary Table Sample */}
+                {tableSamples[config.primaryTable] && (
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <Database className="h-4 w-4 text-primary" />
+                        {config.primaryTable} (Primary)
+                        <Badge variant="default" className="text-xs">Primary Table</Badge>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              {tableSamples[config.primaryTable].columns.map((col: string, index: number) => (
+                                <TableHead key={index} className="text-xs">{col}</TableHead>
+                              ))}
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {tableSamples[config.primaryTable].rows.slice(0, 3).map((row: any[], rowIndex: number) => (
+                              <TableRow key={rowIndex}>
+                                {row.map((cell: any, cellIndex: number) => (
+                                  <TableCell key={cellIndex} className="text-xs">
+                                    {cell === null ? <span className="text-muted-foreground italic">null</span> : String(cell)}
+                                  </TableCell>
+                                ))}
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Joined Tables Samples */}
+                {config.joinedTables.map((jt, index) => (
+                  tableSamples[jt.tableName] && (
+                    <Card key={index}>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-sm flex items-center gap-2">
+                          <Database className="h-4 w-4 text-muted-foreground" />
+                          {jt.tableName} {jt.alias && `(${jt.alias})`}
+                          <Badge variant="outline" className="text-xs">{jt.joinType.toUpperCase()} JOIN</Badge>
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="overflow-x-auto">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                {tableSamples[jt.tableName].columns.map((col: string, colIndex: number) => (
+                                  <TableHead key={colIndex} className="text-xs">
+                                    {col}
+                                    {jt.joinConditions.some(cond => cond.targetField === col) && (
+                                      <Badge variant="secondary" className="ml-1 text-xs">JOIN KEY</Badge>
+                                    )}
+                                  </TableHead>
+                                ))}
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {tableSamples[jt.tableName].rows.slice(0, 3).map((row: any[], rowIndex: number) => (
+                                <TableRow key={rowIndex}>
+                                  {row.map((cell: any, cellIndex: number) => (
+                                    <TableCell key={cellIndex} className="text-xs">
+                                      {cell === null ? <span className="text-muted-foreground italic">null</span> : String(cell)}
+                                    </TableCell>
+                                  ))}
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Join Result Preview */}
+          {joinPreview && (
+            <Card className="border-green-200 bg-green-50">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <GitMerge className="h-4 w-4 text-green-600" />
+                  Join Result Preview
+                  <Badge variant="secondary" className="text-xs">{joinPreview.totalCount} sample records</Badge>
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  This shows how the joined data will look with your current configuration
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        {joinPreview.columns.map((col: string, index: number) => (
+                          <TableHead key={index} className="text-xs">{col}</TableHead>
+                        ))}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {joinPreview.rows.map((row: any[], rowIndex: number) => (
+                        <TableRow key={rowIndex}>
+                          {row.map((cell: any, cellIndex: number) => (
+                            <TableCell key={cellIndex} className="text-xs">
+                              {cell === null ? <span className="text-muted-foreground italic">null</span> : String(cell)}
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
 
       {/* Actions */}
       <div className="flex items-center justify-end gap-2 pt-4 border-t">
