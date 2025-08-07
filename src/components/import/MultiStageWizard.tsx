@@ -226,6 +226,18 @@ export default function MultiStageWizard({
     return [...individualTables, ...virtualTables];
   };
 
+  const getInvalidStages = () => {
+    const allAvailableTables = [...selectedTables, ...joinedTables.map(jt => jt.name)];
+    return stages.filter(stage => 
+      stage.sourceTable && !allAvailableTables.includes(stage.sourceTable)
+    );
+  };
+
+  const isStageInvalid = (stage: ImportStageData) => {
+    const allAvailableTables = [...selectedTables, ...joinedTables.map(jt => jt.name)];
+    return stage.sourceTable && !allAvailableTables.includes(stage.sourceTable);
+  };
+
   const handleAddStage = () => {
     const availableTables = getAvailableTables();
     if (availableTables.length === 0) return;
@@ -483,6 +495,25 @@ export default function MultiStageWizard({
         </Button>
       </div>
 
+      {/* Invalid Stages Warning */}
+      {getInvalidStages().length > 0 && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Invalid Stages Detected</AlertTitle>
+          <AlertDescription>
+            {getInvalidStages().length} stage(s) are referencing tables that are no longer in the pipeline. 
+            Please update the source table selection for these stages:
+            <ul className="list-disc list-inside mt-2 ml-2">
+              {getInvalidStages().map(stage => (
+                <li key={stage.id}>
+                  <strong>{stage.name}</strong> - table "{stage.sourceTable}" not found
+                </li>
+              ))}
+            </ul>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {stages.length === 0 ? (
         <Card>
           <CardContent className="text-center py-12">
@@ -508,40 +539,57 @@ export default function MultiStageWizard({
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              {stages.map((stage, index) => (
-                <div
-                  key={stage.id}
-                  className={`border rounded-lg p-3 cursor-pointer transition-colors ${
-                    selectedStageIndex === index
-                      ? 'ring-2 ring-primary bg-primary/5'
-                      : 'hover:bg-muted'
-                  }`}
-                  onClick={() => setSelectedStageIndex(index)}
-                >
-                  <div className="flex items-center gap-3">
-                    <Badge variant="outline">Stage {stage.order}</Badge>
-                    <div className="flex-1">
-                      <p className="font-medium text-sm">{stage.name}</p>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        {stage.sourceTable ? (
-                          <>
-                            <Database className="h-3 w-3" />
-                            <span>{stage.sourceTable}</span>
-                            <ArrowRight className="h-3 w-3" />
-                            <Target className="h-3 w-3" />
-                            <span>{stage.targetEntity}</span>
-                          </>
-                        ) : (
-                          <span className="text-orange-600">Not configured</span>
-                        )}
+              {stages.map((stage, index) => {
+                const invalid = isStageInvalid(stage);
+                return (
+                  <div
+                    key={stage.id}
+                    className={`border rounded-lg p-3 cursor-pointer transition-colors ${
+                      invalid 
+                        ? 'border-destructive bg-destructive/5' 
+                        : selectedStageIndex === index
+                        ? 'ring-2 ring-primary bg-primary/5'
+                        : 'hover:bg-muted'
+                    }`}
+                    onClick={() => setSelectedStageIndex(index)}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Badge variant={invalid ? "destructive" : "outline"}>
+                        Stage {stage.order}
+                      </Badge>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-sm">{stage.name}</p>
+                          {invalid && (
+                            <AlertTriangle className="h-4 w-4 text-destructive" />
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          {stage.sourceTable ? (
+                            <>
+                              <Database className="h-3 w-3" />
+                              <span className={invalid ? "text-destructive font-medium" : ""}>
+                                {stage.sourceTable}
+                              </span>
+                              {invalid && (
+                                <span className="text-destructive">(not found)</span>
+                              )}
+                              <ArrowRight className="h-3 w-3" />
+                              <Target className="h-3 w-3" />
+                              <span>{stage.targetEntity}</span>
+                            </>
+                          ) : (
+                            <span className="text-orange-600">Not configured</span>
+                          )}
+                        </div>
                       </div>
+                      {!stage.isEnabled && (
+                        <Badge variant="secondary" className="text-xs">Disabled</Badge>
+                      )}
                     </div>
-                    {!stage.isEnabled && (
-                      <Badge variant="secondary" className="text-xs">Disabled</Badge>
-                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </CardContent>
           </Card>
 
@@ -993,9 +1041,25 @@ function StageEditor({
   const tableInfo = sourceSchema.tables?.find(t => t.name === stage.sourceTable);
   const tableSample = tableSamples[stage.sourceTable];
   const targetEntity = TARGET_ENTITIES.find(e => e.value === stage.targetEntity);
+  
+  // Check if the stage's source table is still available
+  const allAvailableTables = [...availableTables, ...(stage.sourceTable ? [stage.sourceTable] : [])];
+  const isInvalid = stage.sourceTable && !allAvailableTables.includes(stage.sourceTable);
 
   return (
     <div className="space-y-6">
+      {/* Invalid Stage Warning */}
+      {isInvalid && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Invalid Source Table</AlertTitle>
+          <AlertDescription>
+            The source table "{stage.sourceTable}" is no longer available in the import pipeline. 
+            Please select a different source table to fix this stage.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Basic Settings */}
       <div className="space-y-4">
         <div>
