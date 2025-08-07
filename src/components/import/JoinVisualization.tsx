@@ -397,7 +397,7 @@ export default function JoinVisualization({
 
       {/* Join Preview Dialog */}
       <Dialog open={showPreview} onOpenChange={setShowPreview}>
-        <DialogContent className="max-w-7xl max-h-[90vh] w-[90vw]">
+        <DialogContent className="max-w-7xl max-h-[90vh] w-[95vw] overflow-hidden">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <GitMerge className="h-5 w-5" />
@@ -408,7 +408,7 @@ export default function JoinVisualization({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
+          <div className="overflow-y-auto max-h-[calc(90vh-120px)] space-y-4">
             {loading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin mr-2" />
@@ -421,7 +421,7 @@ export default function JoinVisualization({
             ) : previewData ? (
               <>
                 {/* Join Explanation */}
-                <Card>
+                <Card style={{ maxWidth: '100%', overflow: 'hidden' }}>
                   <CardHeader>
                     <CardTitle className="text-base">Join Execution Plan</CardTitle>
                   </CardHeader>
@@ -466,38 +466,44 @@ export default function JoinVisualization({
                 </Card>
 
                 {/* Join Result Table */}
-                <Card>
+                <Card style={{ maxWidth: '100%', overflow: 'hidden' }}>
                   <CardHeader>
                     <CardTitle className="text-base">Join Result Preview</CardTitle>
                     <CardDescription>
                       Sample data from the joined table ({previewData.joinResult.totalCount} records)
                     </CardDescription>
                   </CardHeader>
-                  <CardContent>
-                    <ScrollArea className="h-96">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            {previewData.joinResult.columns.map((column, index) => (
-                              <TableHead key={index} className="min-w-32">
-                                {column}
-                              </TableHead>
-                            ))}
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {previewData.joinResult.rows.map((row, index) => (
-                            <TableRow key={index}>
-                              {row.map((cell, cellIndex) => (
-                                <TableCell key={cellIndex}>
-                                  {formatCellValue(cell)}
-                                </TableCell>
+                  <CardContent className="p-0">
+                    <div className="overflow-auto max-h-96" style={{ maxWidth: '100%' }}>
+                      <div style={{ minWidth: 'max-content' }}>
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              {previewData.joinResult.columns.map((column, index) => (
+                                <TableHead key={index} className="text-xs whitespace-nowrap px-3" style={{ minWidth: '120px' }}>
+                                  <div className="truncate" title={column}>
+                                    {column}
+                                  </div>
+                                </TableHead>
                               ))}
                             </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </ScrollArea>
+                          </TableHeader>
+                          <TableBody>
+                            {previewData.joinResult.rows.map((row, index) => (
+                              <TableRow key={index}>
+                                {row.map((cell, cellIndex) => (
+                                  <TableCell key={cellIndex} className="text-xs px-3" style={{ minWidth: '120px' }}>
+                                    <div className="max-w-[200px] truncate" title={String(cell || '')}>
+                                      {formatCellValue(cell)}
+                                    </div>
+                                  </TableCell>
+                                ))}
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </div>
                   </CardContent>
                 </Card>
               </>
