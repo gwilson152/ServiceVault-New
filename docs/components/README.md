@@ -45,6 +45,11 @@ Modular settings components that compose the settings page.
 - **section-components.md** - Individual settings sections (billing, company, etc.)
 - **email-components.md** - Email template and settings management
 
+#### Import System (`/import/`)
+Components for the comprehensive data import system with joined tables and field selection.
+
+- **[import.md](import.md)** - Import system components including ManualRelationshipEditor with field selection UI, collapsible sections, and join configuration
+
 ## Component Architecture Patterns
 
 ### 1. Generic + Specific Pattern

@@ -269,7 +269,7 @@ For detailed implementation guidelines, see `/docs/ui-design-principles.md`.
 ### External Systems
 - **Email Integration**: SMTP configuration for notifications and invitations
 - **License Validation**: External licensing server integration
-- **Import/Export**: CSV and JSON data import/export capabilities
+- **Import/Export**: Comprehensive data import system with joined tables, field selection, and real-time database joins from multiple sources (CSV, JSON, MySQL, PostgreSQL, SQLite)
 - **API Extensibility**: RESTful API for custom integrations
 
 ### Workflow Integration

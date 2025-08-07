@@ -105,7 +105,18 @@ model ImportExecutionLog {
 - Real-time validation feedback
 - Drag-and-drop interface (planned)
 
-#### 4. API Layer
+#### 4. Joined Table Configuration (`/src/components/import/ManualRelationshipEditor.tsx`)
+- **Multi-table join support**: Create virtual tables by joining multiple source tables
+- **Visual join diagram**: Interactive representation of table relationships
+- **Field selection interface**: Choose specific fields from each table with expand/collapse UI
+- **Real-time join preview**: Execute actual database joins with live data preview
+- **Multiple join types**: INNER, LEFT, RIGHT, FULL OUTER joins with explanations
+- **Join condition editor**: Define complex join conditions between tables
+- **Field aliasing**: Custom field names for joined results
+- **Search and filtering**: Filter preview data in real-time
+- **Database-level execution**: Uses ConnectionManager.executeJoinQuery() for accurate joins
+
+#### 5. API Layer
 - RESTful endpoints for all import operations
 - Proper permission checking and validation
 - Real-time execution monitoring
@@ -165,7 +176,63 @@ The execution monitoring system provides:
 - Error analysis
 - Duration tracking
 
-### 3. Permission Integration
+### 3. Joined Table Configuration
+
+The import system supports creating virtual tables by joining multiple source tables together, enabling complex data relationships and consolidated imports.
+
+#### Creating Joined Tables
+
+1. **Multi-Table Selection**
+   - Choose a primary table as the base for the join
+   - Add additional tables to join with the primary table
+   - Support for unlimited number of joined tables
+
+2. **Join Configuration**
+   - **Join Types**: Choose from INNER, LEFT, RIGHT, or FULL OUTER joins
+   - **Visual Explanations**: Each join type includes explanation and use cases
+   - **Join Conditions**: Define how tables relate to each other
+   - **Table Aliases**: Optional aliases for joined tables to avoid naming conflicts
+
+3. **Field Selection Interface**
+   - **Collapsible Sections**: All field sections start collapsed by default for clean UI
+   - **Selection Counters**: Shows "X / Y" selected fields for each table
+   - **Interactive Headers**: Click to expand/collapse field lists
+   - **Primary Table**: Clearly marked with special styling and "Primary" badge
+   - **Join Key Indicators**: Fields used in join conditions are marked with "JOIN KEY" badge
+   - **Bulk Actions**: "Select All" and "Clear All" buttons for quick field management
+
+4. **Real-Time Join Preview**
+   - **Live Data Preview**: Execute actual database joins with real data
+   - **Sample Configuration**: Choose number of preview records (3, 5, 10, 20)
+   - **Search and Filter**: Real-time filtering across all preview data
+   - **Join Explanation**: Shows generated SQL and execution plan
+   - **Matching Summary**: Displays matched vs unmatched records
+   - **Performance Metrics**: Shows join execution details
+
+5. **Database-Level Execution**
+   - Uses `ConnectionManager.executeJoinQuery()` for accurate SQL joins
+   - Supports all database types (MySQL, PostgreSQL, SQLite)
+   - Proper handling of field selection in SQL generation
+   - Fallback to mock joins if database connection fails
+
+#### Join Preview API
+
+New endpoint `/api/import/join-preview` provides:
+- Real database join execution
+- Field selection support
+- Search parameter filtering
+- Configurable result limits
+- Error handling with graceful fallbacks
+
+#### Field Selection Features
+
+- **Granular Control**: Select individual fields from each table
+- **Alias Support**: Automatic aliasing for joined table fields
+- **Performance Optimization**: Only selected fields are included in final query
+- **Visual Feedback**: Clear indication of selected vs available fields
+- **Persistence**: Selected fields are saved with joined table configuration
+
+### 4. Permission Integration
 
 The import system is fully integrated with the ABAC permission system:
 
@@ -301,6 +368,53 @@ GET /api/import/executions/{id}
 GET /api/import/executions/{id}/logs?level=ERROR
 ```
 
+#### Execute Join Preview
+```typescript
+POST /api/import/join-preview
+{
+  "connectionConfig": {
+    "type": "DATABASE_MYSQL",
+    "host": "localhost",
+    "database": "source_db",
+    "username": "user",
+    "password": "pass"
+  },
+  "primaryTable": "users",
+  "joinedTables": [
+    {
+      "tableName": "user_profiles",
+      "joinType": "left",
+      "joinConditions": [
+        {
+          "id": "cond-1",
+          "sourceField": "id",
+          "targetField": "user_id",
+          "operator": "="
+        }
+      ],
+      "alias": "profile"
+    }
+  ],
+  "selectedFields": [
+    {
+      "tableName": "users",
+      "fieldName": "email"
+    },
+    {
+      "tableName": "users", 
+      "fieldName": "name"
+    },
+    {
+      "tableName": "user_profiles",
+      "fieldName": "bio",
+      "alias": "profile.bio"
+    }
+  ],
+  "limit": 20,
+  "search": "john"
+}
+```
+
 ## Data Type Mapping
 
 ### Source to Target Type Inference
@@ -411,6 +525,25 @@ Each error is logged with:
 3. Review validation rule conflicts
 4. Test with dry-run mode first
 
+#### Joined Table Issues
+1. **Join Preview Failures**
+   - Verify database connection is active
+   - Check join conditions match existing data
+   - Validate field names exist in source tables
+   - Test with smaller sample sizes first
+
+2. **No Join Results**
+   - Review join type selection (try LEFT join for testing)
+   - Verify join condition field types match
+   - Check for null values in join key fields
+   - Use search/filter to find matching records
+
+3. **Performance Issues**
+   - Reduce preview record count
+   - Index join key fields in source database
+   - Limit selected fields to essential ones only
+   - Consider simpler join conditions
+
 ### Debug Mode
 
 Enable debug logging for detailed troubleshooting:
@@ -494,6 +627,10 @@ This will provide:
 - `POST /api/import/test-connection` - Test connection
 - `GET /api/import/schema/entities` - Get target entities
 - `GET /api/import/schema/fields?entity=User` - Get entity fields
+
+#### Joined Tables
+- `POST /api/import/join-preview` - Execute real database join preview
+- `POST /api/import/table-preview` - Get sample data from individual tables
 
 ### Data Models
 

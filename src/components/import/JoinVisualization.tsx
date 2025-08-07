@@ -56,6 +56,11 @@ interface JoinedTableConfig {
     joinConditions: JoinCondition[];
     alias?: string;
   }[];
+  selectedFields?: {
+    tableName: string;
+    fieldName: string;
+    alias?: string;
+  }[];
 }
 
 interface JoinVisualizationProps {
@@ -228,6 +233,7 @@ export default function JoinVisualization({
               joinConditions: jt.joinConditions,
               alias: jt.alias
             })),
+            selectedFields: joinedTable.selectedFields,
             limit: 20,
             search: searchTerm
           })

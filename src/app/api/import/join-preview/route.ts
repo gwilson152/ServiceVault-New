@@ -23,6 +23,11 @@ interface JoinPreviewRequest {
   connectionConfig: any;
   primaryTable: string;
   joinedTables: JoinedTableConfig[];
+  selectedFields?: Array<{
+    tableName: string;
+    fieldName: string;
+    alias?: string;
+  }>;
   limit?: number;
   search?: string;
 }
@@ -51,6 +56,7 @@ export async function POST(request: NextRequest) {
       connectionConfig, 
       primaryTable, 
       joinedTables = [], 
+      selectedFields,
       limit = 20,
       search 
     } = body;
@@ -86,7 +92,8 @@ export async function POST(request: NextRequest) {
         primaryTable,
         joinedTables,
         limit,
-        search
+        search,
+        selectedFields
       );
 
       if (!result) {

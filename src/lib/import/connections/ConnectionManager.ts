@@ -1150,20 +1150,25 @@ export class ConnectionManager {
       alias?: string;
     }>,
     limit: number = 20,
-    search?: string
+    search?: string,
+    selectedFields?: Array<{
+      tableName: string;
+      fieldName: string;
+      alias?: string;
+    }>
   ): Promise<TableDataResult | null> {
     try {
       switch (connectionConfig.type) {
         case ImportSourceType.DATABASE_MYSQL:
         case ImportSourceType.DATABASE_POSTGRESQL:
         case ImportSourceType.DATABASE_SQLITE:
-          return await this.executeDatabaseJoin(connectionConfig, primaryTable, joinedTables, limit, search);
+          return await this.executeDatabaseJoin(connectionConfig, primaryTable, joinedTables, limit, search, selectedFields);
         
         case ImportSourceType.FILE_CSV:
         case ImportSourceType.FILE_JSON:
         case ImportSourceType.API_REST:
           // For file and API sources, fall back to client-side join using individual table data
-          return await this.executeClientSideJoin(connectionConfig, primaryTable, joinedTables, limit, search);
+          return await this.executeClientSideJoin(connectionConfig, primaryTable, joinedTables, limit, search, selectedFields);
         
         default:
           throw new Error(`Join queries not supported for source type: ${connectionConfig.type}`);
@@ -1188,7 +1193,12 @@ export class ConnectionManager {
       alias?: string;
     }>,
     limit: number,
-    search?: string
+    search?: string,
+    selectedFields?: Array<{
+      tableName: string;
+      fieldName: string;
+      alias?: string;
+    }>
   ): Promise<TableDataResult> {
     const { default: mysql } = await import('mysql2/promise');
     const { Client } = await import('pg');
@@ -1200,13 +1210,29 @@ export class ConnectionManager {
 
     try {
       // Build the SQL query
-      const selectFields: string[] = [`${primaryTable}.*`];
+      let selectFields: string[] = [];
       
-      // Add fields from joined tables
-      joinedTables.forEach(jt => {
-        const tableAlias = jt.alias || jt.tableName;
-        selectFields.push(`${tableAlias}.*`);
-      });
+      if (selectedFields && selectedFields.length > 0) {
+        // Use specifically selected fields
+        selectedFields.forEach(field => {
+          if (field.tableName === primaryTable) {
+            // Field from primary table
+            selectFields.push(`${primaryTable}.${field.fieldName}${field.alias ? ` AS \`${field.alias}\`` : ''}`);
+          } else {
+            // Field from joined table
+            const joinedTable = joinedTables.find(jt => jt.tableName === field.tableName);
+            const tableAlias = joinedTable?.alias || field.tableName;
+            selectFields.push(`${tableAlias}.${field.fieldName}${field.alias ? ` AS \`${field.alias}\`` : ` AS \`${tableAlias}.${field.fieldName}\``}`);
+          }
+        });
+      } else {
+        // Default behavior: select all fields
+        selectFields = [`${primaryTable}.*`];
+        joinedTables.forEach(jt => {
+          const tableAlias = jt.alias || jt.tableName;
+          selectFields.push(`${tableAlias}.*`);
+        });
+      }
 
       // Start building the query
       query = `SELECT ${selectFields.join(', ')} FROM ${primaryTable}`;
@@ -1351,7 +1377,12 @@ export class ConnectionManager {
       alias?: string;
     }>,
     limit: number,
-    search?: string
+    search?: string,
+    selectedFields?: Array<{
+      tableName: string;
+      fieldName: string;
+      alias?: string;
+    }>
   ): Promise<TableDataResult> {
     // For non-database sources, fetch data from each table and join client-side
     // This is a fallback for file and API sources
@@ -1371,16 +1402,34 @@ export class ConnectionManager {
       }
     }
 
-    // Perform client-side join logic (similar to the existing generateMockJoinResult but with real data)
-    const resultColumns = [...primaryData.columns];
+    // Perform client-side join logic with field selection support
+    let resultColumns: string[] = [];
     
-    // Add columns from joined tables
-    joinedData.forEach(({ data, config }) => {
-      data.columns.forEach(col => {
-        const alias = config.alias ? `${config.alias}.${col}` : `${config.tableName}.${col}`;
-        resultColumns.push(alias);
+    if (selectedFields && selectedFields.length > 0) {
+      // Use specifically selected fields
+      selectedFields.forEach(field => {
+        if (field.alias) {
+          resultColumns.push(field.alias);
+        } else if (field.tableName === primaryTable) {
+          resultColumns.push(field.fieldName);
+        } else {
+          const joinConfig = joinedTables.find(jt => jt.tableName === field.tableName);
+          const tableAlias = joinConfig?.alias || field.tableName;
+          resultColumns.push(`${tableAlias}.${field.fieldName}`);
+        }
       });
-    });
+    } else {
+      // Default behavior: include all columns
+      resultColumns = [...primaryData.columns];
+      
+      // Add columns from joined tables
+      joinedData.forEach(({ data, config }) => {
+        data.columns.forEach(col => {
+          const alias = config.alias ? `${config.alias}.${col}` : `${config.tableName}.${col}`;
+          resultColumns.push(alias);
+        });
+      });
+    }
 
     const resultRows: any[][] = [];
 
@@ -1436,10 +1485,40 @@ export class ConnectionManager {
 
       // Build result row
       if (hasMatches || joinedTables.some(jt => jt.joinType !== 'inner')) {
-        let resultRow = [...primaryRow];
-        joinResults.forEach(joinRow => {
-          resultRow = [...resultRow, ...joinRow];
-        });
+        let resultRow: any[] = [];
+        
+        if (selectedFields && selectedFields.length > 0) {
+          // Build row with only selected fields
+          selectedFields.forEach(field => {
+            if (field.tableName === primaryTable) {
+              // Get field from primary table
+              const fieldIndex = primaryData.columns.indexOf(field.fieldName);
+              resultRow.push(fieldIndex >= 0 ? primaryRow[fieldIndex] : null);
+            } else {
+              // Get field from joined table
+              const joinedDataEntry = joinedData.find(jd => jd.config.tableName === field.tableName);
+              if (joinedDataEntry) {
+                const fieldIndex = joinedDataEntry.data.columns.indexOf(field.fieldName);
+                // Find the first matching row for this table (simplified)
+                const matchingRow = joinResults.find(jr => jr.length === joinedDataEntry.data.columns.length);
+                if (matchingRow && fieldIndex >= 0) {
+                  resultRow.push(matchingRow[fieldIndex]);
+                } else {
+                  resultRow.push(null);
+                }
+              } else {
+                resultRow.push(null);
+              }
+            }
+          });
+        } else {
+          // Default behavior: include all fields
+          resultRow = [...primaryRow];
+          joinResults.forEach(joinRow => {
+            resultRow = [...resultRow, ...joinRow];
+          });
+        }
+        
         resultRows.push(resultRow);
       }
     });
