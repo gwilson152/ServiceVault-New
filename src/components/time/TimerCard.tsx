@@ -1,15 +1,24 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Label } from "@/components/ui/label";
+import { BillingRateSelector, BillingRate } from "@/components/selectors/billing-rate-selector";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Switch } from "@/components/ui/switch";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogDescription, 
+  DialogFooter, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogTrigger 
+} from "@/components/ui/dialog";
+import { LogTimeEntryDialog, TimeEntryData } from "./LogTimeEntryDialog";
 import { 
   Clock, 
   Play, 
@@ -17,7 +26,13 @@ import {
   Square, 
   ChevronUp,
   ChevronDown,
-  Plus
+  DollarSign,
+  Settings,
+  FileText,
+  Trash2,
+  Edit3,
+  Check,
+  X
 } from "lucide-react";
 
 interface Timer {
@@ -65,17 +80,26 @@ export function TimerCard({
   pendingStopResult,
   onStopResultConsumed
 }: TimerCardProps) {
+  const router = useRouter();
   const [timerSeconds, setTimerSeconds] = useState(timer.totalSeconds || 0);
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
   const [isLoggingTime, setIsLoggingTime] = useState(false);
-  
-  // Time entry form state
-  const [description, setDescription] = useState("");
-  const [noCharge, setNoCharge] = useState(false);
-  const [selectedBillingRate, setSelectedBillingRate] = useState<string>("none");
-  const [billingRates, setBillingRates] = useState<Array<{id: string; name: string; rate: number; description?: string}>>([]);
   const [timerData, setTimerData] = useState<{ minutes: number; ticketId: string; timerId: string } | null>(null);
-  const [editableMinutes, setEditableMinutes] = useState<string>("");
+  
+  // Billing rate state
+  const [selectedBillingRateId, setSelectedBillingRateId] = useState<string>("");
+  const [billingRateData, setBillingRateData] = useState<BillingRate | null>(null);
+  const [showBillingSettings, setShowBillingSettings] = useState(false);
+  
+  // Description pre-entry state
+  const [preEnteredDescription, setPreEnteredDescription] = useState<string>("");
+  
+  // Delete confirmation dialog state
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  
+  // Manual time adjustment state
+  const [isEditingTime, setIsEditingTime] = useState(false);
+  const [editTimeValue, setEditTimeValue] = useState("");
 
   // Update timer seconds when timer data changes
   useEffect(() => {
@@ -87,7 +111,6 @@ export function TimerCard({
     if (pendingStopResult) {
       console.log("🔴 [TimerCard] Received pending stop result, showing modal:", pendingStopResult);
       setTimerData(pendingStopResult);
-      setEditableMinutes(pendingStopResult.minutes.toString());
       setIsLogModalOpen(true);
       // Consume the pending result
       onStopResultConsumed?.();
@@ -105,22 +128,172 @@ export function TimerCard({
     return () => clearInterval(interval);
   }, [timer.isRunning]);
 
-  // Fetch billing rates when component mounts
+  // Load persisted billing rate and description for this timer
   useEffect(() => {
-    const fetchBillingRates = async () => {
-      try {
-        const response = await fetch('/api/billing/rates');
-        if (response.ok) {
-          const data = await response.json();
-          setBillingRates(data || []);
+    if (timer.ticketId) {
+      const persistedRate = localStorage.getItem(`timer-billing-rate-${timer.ticketId}`);
+      if (persistedRate) {
+        setSelectedBillingRateId(persistedRate);
+      }
+      
+      const persistedDescription = localStorage.getItem(`timer-description-${timer.ticketId}`);
+      if (persistedDescription) {
+        setPreEnteredDescription(persistedDescription);
+      } else {
+        setPreEnteredDescription("");
+      }
+    }
+  }, [timer.ticketId]);
+
+  // Fetch billing rate data when rate is selected
+  useEffect(() => {
+    const fetchBillingRateData = async () => {
+      if (selectedBillingRateId && timer.ticket.account.id) {
+        try {
+          const response = await fetch(`/api/accounts/${timer.ticket.account.id}/billing-rates`);
+          if (response.ok) {
+            const data = await response.json();
+            const rates = data.billingRates || [];
+            const selectedRate = rates.find((rate: BillingRate) => rate.id === selectedBillingRateId);
+            setBillingRateData(selectedRate || null);
+          }
+        } catch (error) {
+          console.error('Error fetching billing rate data:', error);
         }
-      } catch (error) {
-        console.error('Error fetching billing rates:', error);
+      } else {
+        setBillingRateData(null);
       }
     };
+    
+    fetchBillingRateData();
+  }, [selectedBillingRateId, timer.ticket.account.id]);
 
-    fetchBillingRates();
-  }, []);
+  // Persist billing rate selection
+  const handleBillingRateChange = (rateId: string) => {
+    setSelectedBillingRateId(rateId);
+    if (timer.ticketId) {
+      if (rateId) {
+        localStorage.setItem(`timer-billing-rate-${timer.ticketId}`, rateId);
+      } else {
+        localStorage.removeItem(`timer-billing-rate-${timer.ticketId}`);
+      }
+    }
+  };
+
+  // Persist description changes
+  const handleDescriptionChange = (description: string) => {
+    setPreEnteredDescription(description);
+    if (timer.ticketId) {
+      if (description.trim()) {
+        localStorage.setItem(`timer-description-${timer.ticketId}`, description);
+      } else {
+        localStorage.removeItem(`timer-description-${timer.ticketId}`);
+      }
+    }
+  };
+
+  // Calculate running dollar amount
+  const calculateRunningAmount = () => {
+    if (!billingRateData || !timerSeconds) return 0;
+    const hours = timerSeconds / 3600; // Convert seconds to hours
+    return hours * billingRateData.effectiveRate;
+  };
+
+  // Convert seconds to HH:MM:SS format for editing
+  const formatTimeForEdit = (seconds: number) => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Parse HH:MM:SS format to seconds
+  const parseTimeToSeconds = (timeString: string) => {
+    const parts = timeString.split(':');
+    if (parts.length !== 3) return null;
+    
+    const hours = parseInt(parts[0]);
+    const minutes = parseInt(parts[1]);
+    const seconds = parseInt(parts[2]);
+    
+    if (isNaN(hours) || isNaN(minutes) || isNaN(seconds) || 
+        hours < 0 || minutes < 0 || minutes >= 60 || 
+        seconds < 0 || seconds >= 60) {
+      return null;
+    }
+    
+    return hours * 3600 + minutes * 60 + seconds;
+  };
+
+  const handleStartTimeEdit = () => {
+    setEditTimeValue(formatTimeForEdit(timerSeconds));
+    setIsEditingTime(true);
+  };
+
+  const handleSaveTimeEdit = async () => {
+    const newSeconds = parseTimeToSeconds(editTimeValue);
+    if (newSeconds === null) {
+      alert("Invalid time format. Please use HH:MM:SS format.");
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/timers/${timer.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          pausedTime: newSeconds
+        }),
+      });
+
+      if (response.ok) {
+        // Refresh the timer data
+        onTimeLogged?.();
+        setIsEditingTime(false);
+      } else {
+        const errorData = await response.json();
+        alert("Failed to update timer: " + errorData.error);
+      }
+    } catch (error) {
+      console.error("Error updating timer:", error);
+      alert("Failed to update timer");
+    }
+  };
+
+  const handleCancelTimeEdit = () => {
+    setIsEditingTime(false);
+    setEditTimeValue("");
+  };
+
+  const handleDeleteTimer = async () => {
+    try {
+      const response = await fetch(`/api/timers/${timer.id}`, {
+        method: 'DELETE',
+      });
+      
+      if (response.ok) {
+        // Clear persisted data for this timer
+        if (timer.ticketId) {
+          localStorage.removeItem(`timer-billing-rate-${timer.ticketId}`);
+          localStorage.removeItem(`timer-description-${timer.ticketId}`);
+        }
+        // Close the dialog and refresh the timer list
+        setShowDeleteDialog(false);
+        onTimeLogged?.(); // This triggers a refresh of the timer list
+      } else {
+        const errorData = await response.json();
+        console.error("Failed to delete timer:", errorData.error);
+        alert("Failed to delete timer: " + errorData.error);
+        setShowDeleteDialog(false);
+      }
+    } catch (error) {
+      console.error("Error deleting timer:", error);
+      alert("Failed to delete timer");
+      setShowDeleteDialog(false);
+    }
+  };
 
   const handlePauseResume = () => {
     if (timer.isRunning) {
@@ -135,7 +308,6 @@ export function TimerCard({
       const result = await onStop(timer.id);
       if (result) {
         setTimerData(result);
-        setEditableMinutes(result.minutes.toString());
         setIsLogModalOpen(true);
       }
     } catch (error) {
@@ -144,8 +316,8 @@ export function TimerCard({
     }
   };
 
-  const handleLogTime = async () => {
-    if (!timerData || !description.trim() || !editableMinutes || parseInt(editableMinutes) <= 0) return;
+  const handleLogTime = async (data: TimeEntryData) => {
+    if (!timerData) return;
 
     setIsLoggingTime(true);
     try {
@@ -155,22 +327,20 @@ export function TimerCard({
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          ticketId: timerData.ticketId,
-          minutes: parseInt(editableMinutes),
-          description: description.trim(),
-          date: new Date().toISOString().split('T')[0],
-          noCharge,
-          billingRateId: selectedBillingRate === "none" ? null : selectedBillingRate,
+          ticketId: data.ticketId,
+          minutes: data.minutes,
+          description: data.description,
+          date: data.date,
+          time: data.time,
+          noCharge: data.noCharge,
+          billingRateId: data.billingRateId || null,
           timerId: timerData.timerId // Include timer ID for deletion after logging
         }),
       });
 
       if (response.ok) {
         console.log("🔴 [TimerCard] Time logged successfully - calling onTimeLogged callback");
-        // Reset form and close modal
-        setDescription("");
-        setNoCharge(false);
-        setSelectedBillingRate("none");
+        // Close modal and reset state
         setTimerData(null);
         setIsLogModalOpen(false);
         // Add small delay to ensure database transaction is fully committed
@@ -195,10 +365,6 @@ export function TimerCard({
     console.log("🔴 [TimerCard] Modal closed without logging - refreshing UI state");
     setIsLogModalOpen(false);
     setTimerData(null);
-    setDescription("");
-    setNoCharge(false);
-    setSelectedBillingRate("none");
-    setEditableMinutes("");
     
     // Refresh the timer state when modal is dismissed without logging
     // This ensures the UI reflects that the timer has been stopped
@@ -232,6 +398,12 @@ export function TimerCard({
                   <div className="text-sm font-mono font-semibold">
                     {formatTime(timerSeconds)}
                   </div>
+                  {billingRateData && (
+                    <div className="text-xs font-semibold text-green-600 flex items-center gap-1">
+                      <DollarSign className="h-3 w-3" />
+                      {calculateRunningAmount().toFixed(2)}
+                    </div>
+                  )}
                   <div className="text-xs text-muted-foreground truncate max-w-[120px]">
                     {timer.ticket.title}
                   </div>
@@ -248,109 +420,25 @@ export function TimerCard({
         </Card>
 
         {/* Time Entry Modal */}
-        <Dialog open={isLogModalOpen} onOpenChange={handleCloseModal}>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>Log Time Entry</DialogTitle>
-            </DialogHeader>
-            
-            <div className="space-y-4">
-              <div className="p-4 bg-blue-50 dark:bg-blue-950/50 rounded-lg space-y-3">
-                <div className="text-center">
-                  <div className="text-sm text-muted-foreground">
-                    Time tracked for {timer.ticket.title}
-                  </div>
-                  <Badge variant="outline" className="text-xs mt-1">
-                    {timer.ticket.ticketNumber}
-                  </Badge>
-                  {timerData && (
-                    <div className="text-xs text-muted-foreground mt-2">
-                      Original tracked: {timerData.minutes}m
-                    </div>
-                  )}
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="editable-minutes">Minutes to Log *</Label>
-                  <Input
-                    id="editable-minutes"
-                    type="number"
-                    step="15"
-                    min="1"
-                    max="1440"
-                    value={editableMinutes}
-                    onChange={(e) => setEditableMinutes(e.target.value)}
-                    placeholder="120"
-                    className="text-center font-mono text-lg"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="time-description">Description *</Label>
-                <Textarea
-                  id="time-description"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Describe the work performed..."
-                  rows={3}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="billing-rate">Billing Rate</Label>
-                <Select value={selectedBillingRate} onValueChange={setSelectedBillingRate}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select billing rate (optional)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">No billing rate</SelectItem>
-                    {billingRates.map(rate => (
-                      <SelectItem key={rate.id} value={rate.id}>
-                        {rate.name} - ${rate.rate}/hr
-                        {rate.description && (
-                          <span className="text-muted-foreground ml-1">
-                            ({rate.description})
-                          </span>
-                        )}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="no-charge"
-                  checked={noCharge}
-                  onCheckedChange={setNoCharge}
-                />
-                <Label htmlFor="no-charge">No Charge</Label>
-              </div>
-
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  onClick={handleCloseModal}
-                  className="flex-1"
-                  disabled={isLoggingTime}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleLogTime}
-                  disabled={!description.trim() || !editableMinutes || parseInt(editableMinutes) <= 0 || isLoggingTime}
-                  className="flex-1"
-                >
-                  <Plus className="h-4 w-4 mr-1" />
-                  {isLoggingTime ? "Logging..." : "Log Time"}
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
+        {timerData && (
+          <LogTimeEntryDialog
+            open={isLogModalOpen}
+            onOpenChange={setIsLogModalOpen}
+            ticketId={timerData.ticketId}
+            ticketTitle={timer.ticket.title}
+            ticketNumber={timer.ticket.ticketNumber}
+            accountId={timer.ticket.account.id}
+            initialMinutes={timerData.minutes}
+            initialDescription={preEnteredDescription}
+            initialBillingRateId={selectedBillingRateId}
+            mode="timer"
+            showDateTimePicker={true}
+            allowMinuteEdit={true}
+            onSubmit={handleLogTime}
+            onCancel={handleCloseModal}
+            isLoading={isLoggingTime}
+          />
+        )}
       </>
     );
   }
@@ -381,19 +469,129 @@ export function TimerCard({
 
             {/* Timer Display */}
             <div className="text-center">
-              <div className={`text-2xl font-mono font-bold ${timer.isRunning ? 'text-green-600' : 'text-yellow-600'}`}>
-                {formatTime(timerSeconds)}
+              <div className="flex items-center justify-center gap-3">
+                <div className={`text-2xl font-mono font-bold ${timer.isRunning ? 'text-green-600' : 'text-yellow-600'}`}>
+                  {formatTime(timerSeconds)}
+                </div>
+                {/* Running Dollar Amount */}
+                {billingRateData && (
+                  <div className="text-2xl font-semibold text-green-600 flex items-center gap-1">
+                    <DollarSign className="h-5 w-5" />
+                    {calculateRunningAmount().toFixed(2)}
+                  </div>
+                )}
               </div>
               <div className="text-sm text-muted-foreground truncate">
                 {timer.ticket.title}
               </div>
-              <Badge variant="outline" className="text-xs mt-1">
+              <Badge 
+                variant="outline" 
+                className="text-xs mt-1 cursor-pointer hover:bg-blue-50 hover:border-blue-300 transition-colors"
+                onClick={() => {
+                  router.push(`/tickets?search=${encodeURIComponent(timer.ticket.ticketNumber)}`);
+                }}
+                title="Click to view ticket"
+              >
                 {timer.ticket.ticketNumber}
               </Badge>
+              {billingRateData && (
+                <div className="text-xs text-muted-foreground mt-1">
+                  @ ${billingRateData.effectiveRate}/hr ({billingRateData.name})
+                </div>
+              )}
             </div>
+
+            {/* Timer Settings */}
+            {showBillingSettings && (
+              <div className="space-y-3 p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
+                <div className="space-y-2">
+                  <BillingRateSelector
+                    accountId={timer.ticket.account.id}
+                    value={selectedBillingRateId}
+                    onValueChange={handleBillingRateChange}
+                    showNoChargeOption={true}
+                    autoSelectDefault={!selectedBillingRateId}
+                    placeholder="Select billing rate"
+                    label="Billing Rate"
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">
+                    Timer Duration
+                  </Label>
+                  {isEditingTime ? (
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={editTimeValue}
+                        onChange={(e) => setEditTimeValue(e.target.value)}
+                        placeholder="HH:MM:SS"
+                        className="text-sm font-mono"
+                      />
+                      <Button size="sm" onClick={handleSaveTimeEdit} title="Save">
+                        <Check className="h-4 w-4" />
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={handleCancelTimeEdit} title="Cancel">
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 p-2 border rounded text-sm font-mono bg-background">
+                        {formatTime(timerSeconds)}
+                      </div>
+                      <Button size="sm" variant="outline" onClick={handleStartTimeEdit} title="Edit time">
+                        <Edit3 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
+                  <div className="text-xs text-muted-foreground">
+                    Click edit to manually adjust the timer duration
+                  </div>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor={`timer-description-${timer.id}`} className="text-sm font-medium">
+                    Description (Optional)
+                  </Label>
+                  <Textarea
+                    id={`timer-description-${timer.id}`}
+                    value={preEnteredDescription}
+                    onChange={(e) => handleDescriptionChange(e.target.value)}
+                    placeholder="Pre-enter work description..."
+                    className="text-sm"
+                    rows={2}
+                  />
+                  <div className="text-xs text-muted-foreground">
+                    This will pre-fill when you stop and log time
+                  </div>
+                </div>
+                
+                <div className="pt-2 border-t">
+                  <Button 
+                    variant="destructive" 
+                    size="sm" 
+                    className="w-full"
+                    onClick={() => setShowDeleteDialog(true)}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete Timer
+                  </Button>
+                </div>
+              </div>
+            )}
 
             {/* Timer Controls */}
             <div className="flex gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowBillingSettings(!showBillingSettings)}
+                className="flex-shrink-0"
+                title="Billing settings"
+              >
+                <Settings className="h-4 w-4" />
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
@@ -427,107 +625,43 @@ export function TimerCard({
       </Card>
 
       {/* Time Entry Modal */}
-      <Dialog open={isLogModalOpen} onOpenChange={handleCloseModal}>
+      {timerData && (
+        <LogTimeEntryDialog
+          open={isLogModalOpen}
+          onOpenChange={setIsLogModalOpen}
+          ticketId={timerData.ticketId}
+          ticketTitle={timer.ticket.title}
+          ticketNumber={timer.ticket.ticketNumber}
+          accountId={timer.ticket.account.id}
+          initialMinutes={timerData.minutes}
+          initialDescription={preEnteredDescription}
+          initialBillingRateId={selectedBillingRateId}
+          mode="timer"
+          showDateTimePicker={true}
+          allowMinuteEdit={true}
+          onSubmit={handleLogTime}
+          onCancel={handleCloseModal}
+          isLoading={isLoggingTime}
+        />
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Log Time Entry</DialogTitle>
+            <DialogTitle>Delete Timer?</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this timer? All tracked time will be lost. This action cannot be undone.
+            </DialogDescription>
           </DialogHeader>
-          
-          <div className="space-y-4">
-            <div className="p-4 bg-blue-50 dark:bg-blue-950/50 rounded-lg space-y-3">
-              <div className="text-center">
-                <div className="text-sm text-muted-foreground">
-                  Time tracked for {timer.ticket.title}
-                </div>
-                <Badge variant="outline" className="text-xs mt-1">
-                  {timer.ticket.ticketNumber}
-                </Badge>
-                {timerData && (
-                  <div className="text-xs text-muted-foreground mt-2">
-                    Original tracked: {timerData.minutes}m
-                  </div>
-                )}
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="editable-minutes">Minutes to Log *</Label>
-                <Input
-                  id="editable-minutes"
-                  type="number"
-                  step="15"
-                  min="1"
-                  max="1440"
-                  value={editableMinutes}
-                  onChange={(e) => setEditableMinutes(e.target.value)}
-                  placeholder="120"
-                  className="text-center font-mono text-lg"
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="time-description">Description *</Label>
-              <Textarea
-                id="time-description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Describe the work performed..."
-                rows={3}
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="billing-rate">Billing Rate</Label>
-              <Select value={selectedBillingRate} onValueChange={setSelectedBillingRate}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select billing rate (optional)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No billing rate</SelectItem>
-                  {billingRates.map(rate => (
-                    <SelectItem key={rate.id} value={rate.id}>
-                      {rate.name} - ${rate.rate}/hr
-                      {rate.description && (
-                        <span className="text-muted-foreground ml-1">
-                          ({rate.description})
-                        </span>
-                      )}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="no-charge"
-                checked={noCharge}
-                onCheckedChange={setNoCharge}
-              />
-              <Label htmlFor="no-charge">No Charge</Label>
-            </div>
-
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                onClick={handleCloseModal}
-                className="flex-1"
-                disabled={isLoggingTime}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleLogTime}
-                disabled={!description.trim() || !editableMinutes || parseInt(editableMinutes) <= 0 || isLoggingTime}
-                className="flex-1"
-              >
-                <Plus className="h-4 w-4 mr-1" />
-                {isLoggingTime ? "Logging..." : "Log Time"}
-              </Button>
-            </div>
-          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteTimer}>
+              Delete Timer
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>

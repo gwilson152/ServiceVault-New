@@ -423,6 +423,540 @@ If you have any questions, please contact your administrator or reply to this em
       { name: 'createdByName', description: 'Name of the administrator who created the account', example: 'Admin User', required: true },
       { name: 'createdByEmail', description: 'Email of the administrator', example: 'admin@example.com', required: true }
     ]
+  },
+  {
+    name: 'Email Ticket Created',
+    type: 'EMAIL_TICKET_CREATED',
+    subject: 'Ticket #{{ticketNumber}} created from your email',
+    htmlBody: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="text-align: center; margin-bottom: 30px;">
+          <h1 style="color: #333; margin-bottom: 10px;">{{systemName}}</h1>
+          <p style="color: #666; font-size: 16px;">Ticket Created Notification</p>
+        </div>
+        
+        <div style="background: #f8f9fa; padding: 30px; border-radius: 8px; margin-bottom: 30px;">
+          <h2 style="color: #333; margin-top: 0;">✅ Ticket Created Successfully</h2>
+          <p style="font-size: 16px; line-height: 1.6; color: #555;">
+            Hi {{senderName}},
+          </p>
+          <p style="font-size: 16px; line-height: 1.6; color: #555;">
+            Thank you for contacting us! We've automatically created a support ticket from your email.
+          </p>
+          
+          <div style="background: white; padding: 20px; border-radius: 5px; margin: 20px 0;">
+            <h3 style="margin-top: 0; color: #333;">{{ticketSubject}}</h3>
+            <p style="margin: 10px 0;"><strong>Ticket Number:</strong> {{ticketNumber}}</p>
+            <p style="margin: 10px 0;"><strong>Status:</strong> <span style="color: #28a745;">{{ticketStatus}}</span></p>
+            <p style="margin: 10px 0;"><strong>Priority:</strong> {{ticketPriority}}</p>
+            <p style="margin: 10px 0;"><strong>Account:</strong> {{accountName}}</p>
+            <p style="margin: 10px 0;"><strong>Created:</strong> {{createdAt}}</p>
+            {{#if assignedTo}}
+            <p style="margin: 10px 0;"><strong>Assigned to:</strong> {{assignedTo}}</p>
+            {{/if}}
+          </div>
+          
+          <div style="background: #e7f3ff; padding: 15px; border-radius: 5px; border-left: 4px solid #007bff;">
+            <p style="margin: 0; font-size: 14px; color: #333;">
+              <strong>What happens next?</strong><br>
+              Our support team will review your ticket and respond as soon as possible. 
+              You can reply to this email to add more information to your ticket.
+            </p>
+          </div>
+        </div>
+        
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="{{ticketLink}}" 
+             style="background: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
+            View Ticket Online
+          </a>
+        </div>
+        
+        <div style="border-top: 1px solid #e9ecef; padding-top: 20px; margin-top: 30px;">
+          <p style="font-size: 12px; color: #999; text-align: center;">
+            This is an automated confirmation. Please do not reply to this email unless you want to add information to your ticket.
+          </p>
+        </div>
+      </div>
+    `,
+    textBody: `
+Ticket Created from Email - {{systemName}}
+
+Hi {{senderName}},
+
+Thank you for contacting us! We've automatically created a support ticket from your email.
+
+Ticket Details:
+- Subject: {{ticketSubject}}
+- Ticket Number: {{ticketNumber}}
+- Status: {{ticketStatus}}
+- Priority: {{ticketPriority}}
+- Account: {{accountName}}
+- Created: {{createdAt}}
+{{#if assignedTo}}
+- Assigned to: {{assignedTo}}
+{{/if}}
+
+What happens next?
+Our support team will review your ticket and respond as soon as possible. 
+You can reply to this email to add more information to your ticket.
+
+View ticket online: {{ticketLink}}
+
+This is an automated confirmation. Please do not reply to this email unless you want to add information to your ticket.
+    `,
+    variables: [
+      { name: 'systemName', description: 'Name of the system', example: 'ServiceVault', required: true },
+      { name: 'senderName', description: 'Name of the email sender', example: 'John Doe', required: true },
+      { name: 'senderEmail', description: 'Email address of the sender', example: 'john@example.com', required: true },
+      { name: 'ticketNumber', description: 'Generated ticket number', example: 'T-2024-001', required: true },
+      { name: 'ticketSubject', description: 'Subject of the created ticket', example: 'Login Issue', required: true },
+      { name: 'ticketStatus', description: 'Current ticket status', example: 'Open', required: true },
+      { name: 'ticketPriority', description: 'Ticket priority level', example: 'Medium', required: true },
+      { name: 'accountName', description: 'Name of the associated account', example: 'Acme Corp', required: true },
+      { name: 'createdAt', description: 'When the ticket was created', example: 'January 15, 2024 at 10:30 AM', required: true },
+      { name: 'ticketLink', description: 'Link to view the ticket', example: 'https://app.example.com/tickets/123', required: true },
+      { name: 'assignedTo', description: 'Who the ticket is assigned to (optional)', example: 'Jane Smith', required: false }
+    ]
+  },
+  {
+    name: 'Email Ticket Reply',
+    type: 'EMAIL_TICKET_REPLY',
+    subject: 'Re: Ticket #{{ticketNumber}} - {{ticketSubject}}',
+    htmlBody: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="text-align: center; margin-bottom: 30px;">
+          <h1 style="color: #333; margin-bottom: 10px;">{{systemName}}</h1>
+          <p style="color: #666; font-size: 16px;">Ticket Update</p>
+        </div>
+        
+        <div style="background: #f8f9fa; padding: 30px; border-radius: 8px; margin-bottom: 30px;">
+          <h2 style="color: #333; margin-top: 0;">📧 New Reply Added to Your Ticket</h2>
+          <p style="font-size: 16px; line-height: 1.6; color: #555;">
+            Hi {{recipientName}},
+          </p>
+          <p style="font-size: 16px; line-height: 1.6; color: #555;">
+            A new reply has been added to your support ticket.
+          </p>
+          
+          <div style="background: white; padding: 20px; border-radius: 5px; margin: 20px 0;">
+            <h3 style="margin-top: 0; color: #333;">Ticket #{{ticketNumber}}: {{ticketSubject}}</h3>
+            <p style="margin: 10px 0;"><strong>Status:</strong> {{ticketStatus}}</p>
+            <p style="margin: 10px 0;"><strong>Priority:</strong> {{ticketPriority}}</p>
+            <p style="margin: 10px 0;"><strong>Replied by:</strong> {{replierName}}</p>
+            <p style="margin: 10px 0;"><strong>Reply time:</strong> {{replyTime}}</p>
+          </div>
+          
+          <div style="background: #f8f9fa; padding: 20px; border-radius: 5px; border-left: 4px solid #28a745;">
+            <h4 style="margin-top: 0; color: #333;">Latest Reply:</h4>
+            <div style="white-space: pre-wrap; color: #555; line-height: 1.6;">{{replyContent}}</div>
+          </div>
+        </div>
+        
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="{{ticketLink}}" 
+             style="background: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block; margin-right: 10px;">
+            View Full Conversation
+          </a>
+          <a href="mailto:{{replyToEmail}}?subject=Re: Ticket {{ticketNumber}}&In-Reply-To={{messageId}}" 
+             style="background: #28a745; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
+            Reply via Email
+          </a>
+        </div>
+        
+        <div style="border-top: 1px solid #e9ecef; padding-top: 20px; margin-top: 30px;">
+          <p style="font-size: 12px; color: #999; text-align: center;">
+            You can reply to this email to add your response to the ticket conversation.
+          </p>
+        </div>
+      </div>
+    `,
+    textBody: `
+Ticket Reply - {{systemName}}
+
+Hi {{recipientName}},
+
+A new reply has been added to your support ticket.
+
+Ticket #{{ticketNumber}}: {{ticketSubject}}
+Status: {{ticketStatus}}
+Priority: {{ticketPriority}}
+Replied by: {{replierName}}
+Reply time: {{replyTime}}
+
+Latest Reply:
+{{replyContent}}
+
+View full conversation: {{ticketLink}}
+
+You can reply to this email to add your response to the ticket conversation.
+    `,
+    variables: [
+      { name: 'systemName', description: 'Name of the system', example: 'ServiceVault', required: true },
+      { name: 'recipientName', description: 'Name of the recipient', example: 'John Doe', required: true },
+      { name: 'ticketNumber', description: 'Ticket number', example: 'T-2024-001', required: true },
+      { name: 'ticketSubject', description: 'Subject of the ticket', example: 'Login Issue', required: true },
+      { name: 'ticketStatus', description: 'Current ticket status', example: 'In Progress', required: true },
+      { name: 'ticketPriority', description: 'Ticket priority level', example: 'Medium', required: true },
+      { name: 'replierName', description: 'Name of person who replied', example: 'Jane Smith', required: true },
+      { name: 'replyTime', description: 'When the reply was sent', example: 'January 15, 2024 at 2:30 PM', required: true },
+      { name: 'replyContent', description: 'Content of the reply', example: 'We are working on reproducing this issue...', required: true },
+      { name: 'ticketLink', description: 'Link to view the ticket', example: 'https://app.example.com/tickets/123', required: true },
+      { name: 'replyToEmail', description: 'Email address for replies', example: 'support+T-2024-001@example.com', required: true },
+      { name: 'messageId', description: 'Email message ID for threading', example: 'msg-123@example.com', required: true }
+    ]
+  },
+  {
+    name: 'Email Security Alert',
+    type: 'EMAIL_SECURITY_ALERT',
+    subject: '🚨 Security Alert: {{alertType}} detected',
+    htmlBody: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="text-align: center; margin-bottom: 30px;">
+          <h1 style="color: #333; margin-bottom: 10px;">{{systemName}}</h1>
+          <p style="color: #dc3545; font-size: 16px; font-weight: bold;">🚨 Security Alert</p>
+        </div>
+        
+        <div style="background: #fff5f5; border: 1px solid #fed7d7; padding: 30px; border-radius: 8px; margin-bottom: 30px;">
+          <h2 style="color: #dc3545; margin-top: 0;">Security Threat Detected</h2>
+          <p style="font-size: 16px; line-height: 1.6; color: #555;">
+            Hi {{adminName}},
+          </p>
+          <p style="font-size: 16px; line-height: 1.6; color: #555;">
+            Our email security system has detected and blocked a potential security threat.
+          </p>
+          
+          <div style="background: white; padding: 20px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #dc3545;">
+            <h3 style="margin-top: 0; color: #dc3545;">Threat Details</h3>
+            <p style="margin: 10px 0;"><strong>Alert Type:</strong> {{alertType}}</p>
+            <p style="margin: 10px 0;"><strong>Risk Level:</strong> <span style="color: #dc3545; font-weight: bold;">{{riskLevel}}</span></p>
+            <p style="margin: 10px 0;"><strong>Security Score:</strong> {{securityScore}}/100</p>
+            <p style="margin: 10px 0;"><strong>From Email:</strong> {{senderEmail}}</p>
+            <p style="margin: 10px 0;"><strong>Subject:</strong> {{emailSubject}}</p>
+            <p style="margin: 10px 0;"><strong>Detected at:</strong> {{detectedAt}}</p>
+            <p style="margin: 10px 0;"><strong>Integration:</strong> {{integrationName}}</p>
+            <p style="margin: 10px 0;"><strong>Action Taken:</strong> {{actionTaken}}</p>
+          </div>
+          
+          {{#if threats}}
+          <div style="background: #fff0f0; padding: 15px; border-radius: 5px; margin: 15px 0;">
+            <h4 style="margin-top: 0; color: #dc3545;">Identified Threats:</h4>
+            <ul style="margin: 0; padding-left: 20px;">
+              {{#each threats}}
+              <li style="color: #555; margin: 5px 0;">{{this}}</li>
+              {{/each}}
+            </ul>
+          </div>
+          {{/if}}
+          
+          {{#if attachments}}
+          <div style="background: #fff8f0; padding: 15px; border-radius: 5px; margin: 15px 0;">
+            <h4 style="margin-top: 0; color: #f56500;">Suspicious Attachments:</h4>
+            <ul style="margin: 0; padding-left: 20px;">
+              {{#each attachments}}
+              <li style="color: #555; margin: 5px 0;">{{this.filename}} ({{this.threat}})</li>
+              {{/each}}
+            </ul>
+          </div>
+          {{/if}}
+        </div>
+        
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="{{quarantineLink}}" 
+             style="background: #dc3545; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block; margin-right: 10px;">
+            Review in Quarantine
+          </a>
+          <a href="{{securitySettingsLink}}" 
+             style="background: #6c757d; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
+            Security Settings
+          </a>
+        </div>
+        
+        <div style="border-top: 1px solid #e9ecef; padding-top: 20px; margin-top: 30px;">
+          <p style="font-size: 12px; color: #999; text-align: center;">
+            This is an automated security alert. Review the threat and update your security settings if necessary.
+          </p>
+        </div>
+      </div>
+    `,
+    textBody: `
+🚨 SECURITY ALERT - {{systemName}}
+
+Hi {{adminName}},
+
+Our email security system has detected and blocked a potential security threat.
+
+THREAT DETAILS:
+- Alert Type: {{alertType}}
+- Risk Level: {{riskLevel}}
+- Security Score: {{securityScore}}/100
+- From Email: {{senderEmail}}
+- Subject: {{emailSubject}}
+- Detected at: {{detectedAt}}
+- Integration: {{integrationName}}
+- Action Taken: {{actionTaken}}
+
+{{#if threats}}
+IDENTIFIED THREATS:
+{{#each threats}}
+- {{this}}
+{{/each}}
+{{/if}}
+
+{{#if attachments}}
+SUSPICIOUS ATTACHMENTS:
+{{#each attachments}}
+- {{this.filename}} ({{this.threat}})
+{{/each}}
+{{/if}}
+
+Review in quarantine: {{quarantineLink}}
+Update security settings: {{securitySettingsLink}}
+
+This is an automated security alert. Review the threat and update your security settings if necessary.
+    `,
+    variables: [
+      { name: 'systemName', description: 'Name of the system', example: 'ServiceVault', required: true },
+      { name: 'adminName', description: 'Name of the administrator', example: 'Admin User', required: true },
+      { name: 'alertType', description: 'Type of security alert', example: 'Malware Detected', required: true },
+      { name: 'riskLevel', description: 'Risk level of the threat', example: 'HIGH', required: true },
+      { name: 'securityScore', description: 'Security risk score', example: '85', required: true },
+      { name: 'senderEmail', description: 'Email address of sender', example: 'suspicious@badomain.com', required: true },
+      { name: 'emailSubject', description: 'Subject of the suspicious email', example: 'Urgent: Update your account', required: true },
+      { name: 'detectedAt', description: 'When the threat was detected', example: 'January 15, 2024 at 3:45 PM', required: true },
+      { name: 'integrationName', description: 'Name of the email integration', example: 'Support Email', required: true },
+      { name: 'actionTaken', description: 'Action taken by the system', example: 'Quarantined', required: true },
+      { name: 'threats', description: 'List of identified threats', example: '["Suspicious URLs", "Phishing attempt"]', required: false },
+      { name: 'attachments', description: 'List of suspicious attachments', example: '[{"filename": "invoice.exe", "threat": "Malware"}]', required: false },
+      { name: 'quarantineLink', description: 'Link to quarantine management', example: 'https://app.example.com/email/quarantine', required: true },
+      { name: 'securitySettingsLink', description: 'Link to security settings', example: 'https://app.example.com/email/security', required: true }
+    ]
+  },
+  {
+    name: 'Email Integration Error',
+    type: 'EMAIL_INTEGRATION_ERROR',
+    subject: '⚠️ Email Integration Error - {{integrationName}}',
+    htmlBody: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="text-align: center; margin-bottom: 30px;">
+          <h1 style="color: #333; margin-bottom: 10px;">{{systemName}}</h1>
+          <p style="color: #f56500; font-size: 16px; font-weight: bold;">⚠️ Integration Error</p>
+        </div>
+        
+        <div style="background: #fffaf0; border: 1px solid #fed7aa; padding: 30px; border-radius: 8px; margin-bottom: 30px;">
+          <h2 style="color: #f56500; margin-top: 0;">Email Integration Issue</h2>
+          <p style="font-size: 16px; line-height: 1.6; color: #555;">
+            Hi {{adminName}},
+          </p>
+          <p style="font-size: 16px; line-height: 1.6; color: #555;">
+            We've encountered an issue with your email integration that requires your attention.
+          </p>
+          
+          <div style="background: white; padding: 20px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #f56500;">
+            <h3 style="margin-top: 0; color: #f56500;">Error Details</h3>
+            <p style="margin: 10px 0;"><strong>Integration:</strong> {{integrationName}}</p>
+            <p style="margin: 10px 0;"><strong>Provider:</strong> {{providerType}}</p>
+            <p style="margin: 10px 0;"><strong>Account:</strong> {{accountName}}</p>
+            <p style="margin: 10px 0;"><strong>Error Type:</strong> {{errorType}}</p>
+            <p style="margin: 10px 0;"><strong>Occurred at:</strong> {{errorTime}}</p>
+            <p style="margin: 10px 0;"><strong>Status:</strong> <span style="color: #dc3545;">{{integrationStatus}}</span></p>
+          </div>
+          
+          <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
+            <h4 style="margin-top: 0; color: #333;">Error Message:</h4>
+            <code style="background: #e9ecef; padding: 10px; border-radius: 3px; display: block; color: #495057; font-size: 14px; white-space: pre-wrap;">{{errorMessage}}</code>
+          </div>
+          
+          {{#if suggestedActions}}
+          <div style="background: #e7f3ff; padding: 15px; border-radius: 5px; margin: 15px 0;">
+            <h4 style="margin-top: 0; color: #007bff;">Suggested Actions:</h4>
+            <ul style="margin: 0; padding-left: 20px;">
+              {{#each suggestedActions}}
+              <li style="color: #555; margin: 5px 0;">{{this}}</li>
+              {{/each}}
+            </ul>
+          </div>
+          {{/if}}
+          
+          <div style="background: #fff3cd; padding: 15px; border-radius: 5px; margin: 15px 0; border-left: 4px solid #ffc107;">
+            <p style="margin: 0; color: #856404;">
+              <strong>Impact:</strong> This integration is currently {{integrationStatus}}. 
+              {{#if affectedFeatures}}
+              The following features may be affected: {{affectedFeatures}}.
+              {{/if}}
+            </p>
+          </div>
+        </div>
+        
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="{{integrationLink}}" 
+             style="background: #f56500; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block; margin-right: 10px;">
+            Fix Integration
+          </a>
+          <a href="{{supportLink}}" 
+             style="background: #6c757d; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
+            Contact Support
+          </a>
+        </div>
+      </div>
+    `,
+    textBody: `
+⚠️ EMAIL INTEGRATION ERROR - {{systemName}}
+
+Hi {{adminName}},
+
+We've encountered an issue with your email integration that requires your attention.
+
+ERROR DETAILS:
+- Integration: {{integrationName}}
+- Provider: {{providerType}}
+- Account: {{accountName}}
+- Error Type: {{errorType}}
+- Occurred at: {{errorTime}}
+- Status: {{integrationStatus}}
+
+Error Message:
+{{errorMessage}}
+
+{{#if suggestedActions}}
+SUGGESTED ACTIONS:
+{{#each suggestedActions}}
+- {{this}}
+{{/each}}
+{{/if}}
+
+IMPACT:
+This integration is currently {{integrationStatus}}. 
+{{#if affectedFeatures}}
+The following features may be affected: {{affectedFeatures}}.
+{{/if}}
+
+Fix integration: {{integrationLink}}
+Contact support: {{supportLink}}
+    `,
+    variables: [
+      { name: 'systemName', description: 'Name of the system', example: 'ServiceVault', required: true },
+      { name: 'adminName', description: 'Name of the administrator', example: 'Admin User', required: true },
+      { name: 'integrationName', description: 'Name of the email integration', example: 'Support Email', required: true },
+      { name: 'providerType', description: 'Type of email provider', example: 'Microsoft Graph', required: true },
+      { name: 'accountName', description: 'Name of the account', example: 'Acme Corp', required: true },
+      { name: 'errorType', description: 'Type of error', example: 'Authentication Failed', required: true },
+      { name: 'errorTime', description: 'When the error occurred', example: 'January 15, 2024 at 4:15 PM', required: true },
+      { name: 'integrationStatus', description: 'Current status of integration', example: 'Disconnected', required: true },
+      { name: 'errorMessage', description: 'Detailed error message', example: 'Token has expired. Please re-authenticate.', required: true },
+      { name: 'suggestedActions', description: 'List of suggested actions', example: '["Re-authenticate", "Check permissions"]', required: false },
+      { name: 'affectedFeatures', description: 'Features that are affected', example: 'Email to ticket creation, Auto-replies', required: false },
+      { name: 'integrationLink', description: 'Link to fix the integration', example: 'https://app.example.com/email/integrations/123', required: true },
+      { name: 'supportLink', description: 'Link to contact support', example: 'https://app.example.com/support', required: true }
+    ]
+  },
+  {
+    name: 'Email Auto Response',
+    type: 'EMAIL_AUTO_RESPONSE',
+    subject: 'Re: {{originalSubject}}',
+    htmlBody: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="text-align: center; margin-bottom: 30px;">
+          <h1 style="color: #333; margin-bottom: 10px;">{{systemName}}</h1>
+          <p style="color: #666; font-size: 16px;">Automated Response</p>
+        </div>
+        
+        <div style="background: #f8f9fa; padding: 30px; border-radius: 8px; margin-bottom: 30px;">
+          <h2 style="color: #333; margin-top: 0;">Thank You for Your Email</h2>
+          <p style="font-size: 16px; line-height: 1.6; color: #555;">
+            Hi {{senderName}},
+          </p>
+          <p style="font-size: 16px; line-height: 1.6; color: #555;">
+            Thank you for contacting {{companyName}}. We have received your email and {{responseAction}}.
+          </p>
+          
+          {{#if ticketCreated}}
+          <div style="background: white; padding: 20px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #28a745;">
+            <h3 style="margin-top: 0; color: #28a745;">✅ Support Ticket Created</h3>
+            <p style="margin: 10px 0;"><strong>Ticket Number:</strong> {{ticketNumber}}</p>
+            <p style="margin: 10px 0;"><strong>Status:</strong> {{ticketStatus}}</p>
+            <p style="margin: 10px 0;"><strong>Priority:</strong> {{ticketPriority}}</p>
+          </div>
+          {{/if}}
+          
+          <div style="background: #e7f3ff; padding: 15px; border-radius: 5px; border-left: 4px solid #007bff;">
+            <p style="margin: 0; font-size: 14px; color: #333;">
+              <strong>Expected Response Time:</strong> {{expectedResponseTime}}<br>
+              <strong>Business Hours:</strong> {{businessHours}}
+              {{#if customMessage}}
+              <br><br>{{customMessage}}
+              {{/if}}
+            </p>
+          </div>
+        </div>
+        
+        {{#if ticketCreated}}
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="{{ticketLink}}" 
+             style="background: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
+            Track Your Ticket
+          </a>
+        </div>
+        {{/if}}
+        
+        <div style="border-top: 1px solid #e9ecef; padding-top: 20px; margin-top: 30px;">
+          <p style="font-size: 12px; color: #999; text-align: center;">
+            This is an automated response. Please do not reply to this email unless you have additional information to provide.
+          </p>
+          {{#if emergencyContact}}
+          <p style="font-size: 12px; color: #999; text-align: center;">
+            For urgent matters, please contact: {{emergencyContact}}
+          </p>
+          {{/if}}
+        </div>
+      </div>
+    `,
+    textBody: `
+Automated Response - {{systemName}}
+
+Hi {{senderName}},
+
+Thank you for contacting {{companyName}}. We have received your email and {{responseAction}}.
+
+{{#if ticketCreated}}
+✅ SUPPORT TICKET CREATED
+- Ticket Number: {{ticketNumber}}
+- Status: {{ticketStatus}}
+- Priority: {{ticketPriority}}
+{{/if}}
+
+Expected Response Time: {{expectedResponseTime}}
+Business Hours: {{businessHours}}
+{{#if customMessage}}
+
+{{customMessage}}
+{{/if}}
+
+{{#if ticketCreated}}
+Track your ticket: {{ticketLink}}
+{{/if}}
+
+This is an automated response. Please do not reply to this email unless you have additional information to provide.
+{{#if emergencyContact}}
+For urgent matters, please contact: {{emergencyContact}}
+{{/if}}
+    `,
+    variables: [
+      { name: 'systemName', description: 'Name of the system', example: 'ServiceVault', required: true },
+      { name: 'senderName', description: 'Name of the email sender', example: 'John Doe', required: true },
+      { name: 'companyName', description: 'Name of the company', example: 'Acme Corp', required: true },
+      { name: 'originalSubject', description: 'Subject of the original email', example: 'Login Issue', required: true },
+      { name: 'responseAction', description: 'What action was taken', example: 'created a support ticket', required: true },
+      { name: 'expectedResponseTime', description: 'Expected response timeframe', example: 'Within 24 hours', required: true },
+      { name: 'businessHours', description: 'Business hours for support', example: 'Monday-Friday, 9 AM - 5 PM EST', required: true },
+      { name: 'ticketCreated', description: 'Whether a ticket was created', example: 'true', required: false },
+      { name: 'ticketNumber', description: 'Ticket number if created', example: 'T-2024-001', required: false },
+      { name: 'ticketStatus', description: 'Status of created ticket', example: 'Open', required: false },
+      { name: 'ticketPriority', description: 'Priority of created ticket', example: 'Medium', required: false },
+      { name: 'ticketLink', description: 'Link to view the ticket', example: 'https://app.example.com/tickets/123', required: false },
+      { name: 'customMessage', description: 'Custom message from admin', example: 'We are currently experiencing high volume...', required: false },
+      { name: 'emergencyContact', description: 'Emergency contact information', example: 'Call 555-0123 for urgent issues', required: false }
+    ]
   }
 ];
 

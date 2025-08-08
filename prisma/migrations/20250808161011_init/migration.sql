@@ -2,13 +2,34 @@
 CREATE TYPE "public"."AccountType" AS ENUM ('INDIVIDUAL', 'ORGANIZATION', 'SUBSIDIARY');
 
 -- CreateEnum
-CREATE TYPE "public"."EmailTemplateType" AS ENUM ('USER_INVITATION', 'TICKET_UPDATE', 'TICKET_STATUS_CHANGE', 'TIME_ENTRY_APPROVAL', 'INVOICE_GENERATED', 'PASSWORD_RESET', 'ACCOUNT_WELCOME', 'SYSTEM_NOTIFICATION');
+CREATE TYPE "public"."EmailTemplateType" AS ENUM ('USER_INVITATION', 'TICKET_UPDATE', 'TICKET_STATUS_CHANGE', 'TIME_ENTRY_APPROVAL', 'INVOICE_GENERATED', 'PASSWORD_RESET', 'ACCOUNT_WELCOME', 'SYSTEM_NOTIFICATION', 'EMAIL_TICKET_CREATED', 'EMAIL_TICKET_REPLY', 'EMAIL_SECURITY_ALERT', 'EMAIL_QUARANTINE_NOTIFICATION', 'EMAIL_INTEGRATION_ERROR', 'EMAIL_INTEGRATION_SUCCESS', 'EMAIL_AUTO_RESPONSE', 'EMAIL_DELIVERY_CONFIRMATION');
 
 -- CreateEnum
 CREATE TYPE "public"."EmailTemplateStatus" AS ENUM ('ACTIVE', 'INACTIVE', 'DRAFT');
 
 -- CreateEnum
 CREATE TYPE "public"."EmailQueueStatus" AS ENUM ('PENDING', 'SENDING', 'SENT', 'FAILED', 'CANCELLED');
+
+-- CreateEnum
+CREATE TYPE "public"."ImportSourceType" AS ENUM ('DATABASE_MYSQL', 'DATABASE_POSTGRESQL', 'DATABASE_SQLITE', 'DATABASE_MONGODB', 'FILE_CSV', 'FILE_EXCEL', 'FILE_JSON', 'API_REST', 'API_GRAPHQL');
+
+-- CreateEnum
+CREATE TYPE "public"."ImportStatus" AS ENUM ('PENDING', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED', 'PAUSED');
+
+-- CreateEnum
+CREATE TYPE "public"."LogLevel" AS ENUM ('INFO', 'WARNING', 'ERROR', 'DEBUG');
+
+-- CreateEnum
+CREATE TYPE "public"."EmailProvider" AS ENUM ('MICROSOFT_GRAPH', 'GMAIL', 'GENERIC_IMAP', 'GENERIC_POP3');
+
+-- CreateEnum
+CREATE TYPE "public"."EmailMessageStatus" AS ENUM ('PENDING', 'PROCESSING', 'PROCESSED', 'FAILED', 'QUARANTINED', 'IGNORED');
+
+-- CreateEnum
+CREATE TYPE "public"."AttachmentSecurityStatus" AS ENUM ('PENDING', 'SAFE', 'SUSPICIOUS', 'BLOCKED');
+
+-- CreateEnum
+CREATE TYPE "public"."EmailAuditEventType" AS ENUM ('INTEGRATION_CREATED', 'INTEGRATION_UPDATED', 'INTEGRATION_DELETED', 'INTEGRATION_ACTIVATED', 'INTEGRATION_DEACTIVATED', 'OAUTH_TOKEN_REFRESHED', 'OAUTH_TOKEN_EXPIRED', 'SYNC_STARTED', 'SYNC_COMPLETED', 'SYNC_FAILED', 'MESSAGE_RECEIVED', 'MESSAGE_PROCESSED', 'MESSAGE_QUARANTINED', 'MESSAGE_RELEASED', 'MESSAGE_DELETED', 'TICKET_CREATED', 'TICKET_UPDATED', 'ATTACHMENT_SCANNED', 'ATTACHMENT_BLOCKED', 'SECURITY_ALERT_GENERATED', 'CONFIGURATION_CHANGED', 'PERMISSION_GRANTED', 'PERMISSION_REVOKED', 'BULK_ACTION_PERFORMED', 'EXPORT_PERFORMED', 'BACKUP_CREATED', 'SYSTEM_ERROR');
 
 -- CreateTable
 CREATE TABLE "public"."AuthAccount" (
@@ -182,6 +203,9 @@ CREATE TABLE "public"."Invoice" (
     "invoiceNumber" TEXT NOT NULL,
     "status" TEXT NOT NULL DEFAULT 'DRAFT',
     "total" DOUBLE PRECISION NOT NULL,
+    "issueDate" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "dueDate" TIMESTAMP(3),
+    "notes" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
     "accountId" TEXT NOT NULL,
@@ -325,6 +349,266 @@ CREATE TABLE "public"."UserPreferences" (
     CONSTRAINT "UserPreferences_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "public"."import_configurations" (
+    "id" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "description" TEXT,
+    "sourceType" "public"."ImportSourceType" NOT NULL,
+    "connectionConfig" JSONB NOT NULL,
+    "sourceTableConfig" JSONB NOT NULL,
+    "isMultiStage" BOOLEAN NOT NULL DEFAULT false,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "createdBy" TEXT NOT NULL,
+
+    CONSTRAINT "import_configurations_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "public"."import_stages" (
+    "id" TEXT NOT NULL,
+    "configurationId" TEXT NOT NULL,
+    "order" INTEGER NOT NULL,
+    "name" TEXT NOT NULL,
+    "description" TEXT,
+    "sourceTable" TEXT NOT NULL,
+    "targetEntity" TEXT NOT NULL,
+    "fieldMappings" JSONB NOT NULL,
+    "fieldOverrides" JSONB NOT NULL,
+    "dependsOnStages" TEXT[],
+    "crossStageMapping" JSONB NOT NULL,
+    "validationRules" JSONB NOT NULL,
+    "transformRules" JSONB NOT NULL,
+    "isEnabled" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "import_stages_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "public"."import_executions" (
+    "id" TEXT NOT NULL,
+    "configurationId" TEXT NOT NULL,
+    "status" "public"."ImportStatus" NOT NULL DEFAULT 'PENDING',
+    "currentStage" INTEGER NOT NULL DEFAULT 1,
+    "totalStages" INTEGER NOT NULL DEFAULT 1,
+    "totalRecords" INTEGER NOT NULL DEFAULT 0,
+    "processedRecords" INTEGER NOT NULL DEFAULT 0,
+    "successfulRecords" INTEGER NOT NULL DEFAULT 0,
+    "failedRecords" INTEGER NOT NULL DEFAULT 0,
+    "errors" JSONB NOT NULL,
+    "warnings" JSONB NOT NULL,
+    "resultSummary" JSONB NOT NULL,
+    "startedAt" TIMESTAMP(3),
+    "completedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "executedBy" TEXT NOT NULL,
+
+    CONSTRAINT "import_executions_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "public"."import_stage_executions" (
+    "id" TEXT NOT NULL,
+    "executionId" TEXT NOT NULL,
+    "stageId" TEXT NOT NULL,
+    "order" INTEGER NOT NULL,
+    "status" "public"."ImportStatus" NOT NULL DEFAULT 'PENDING',
+    "sourceTable" TEXT NOT NULL,
+    "targetEntity" TEXT NOT NULL,
+    "totalRecords" INTEGER NOT NULL DEFAULT 0,
+    "processedRecords" INTEGER NOT NULL DEFAULT 0,
+    "successfulRecords" INTEGER NOT NULL DEFAULT 0,
+    "failedRecords" INTEGER NOT NULL DEFAULT 0,
+    "skippedRecords" INTEGER NOT NULL DEFAULT 0,
+    "createdEntityIds" JSONB NOT NULL,
+    "errors" JSONB NOT NULL,
+    "warnings" JSONB NOT NULL,
+    "startedAt" TIMESTAMP(3),
+    "completedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "import_stage_executions_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "public"."import_execution_logs" (
+    "id" TEXT NOT NULL,
+    "executionId" TEXT NOT NULL,
+    "level" "public"."LogLevel" NOT NULL,
+    "message" TEXT NOT NULL,
+    "details" JSONB,
+    "recordIndex" INTEGER,
+    "timestamp" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "import_execution_logs_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "public"."EmailIntegration" (
+    "id" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "provider" "public"."EmailProvider" NOT NULL,
+    "providerConfig" JSONB NOT NULL,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "lastSyncAt" TIMESTAMP(3),
+    "syncInterval" INTEGER NOT NULL DEFAULT 300,
+    "processingRules" JSONB,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "EmailIntegration_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "public"."domain_mappings" (
+    "id" TEXT NOT NULL,
+    "domain" TEXT NOT NULL,
+    "accountId" TEXT NOT NULL,
+    "priority" INTEGER NOT NULL DEFAULT 0,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "domain_mappings_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "public"."EmailMessage" (
+    "id" TEXT NOT NULL,
+    "integrationId" TEXT NOT NULL,
+    "messageId" TEXT NOT NULL,
+    "threadId" TEXT,
+    "inReplyTo" TEXT,
+    "ticketId" TEXT,
+    "fromEmail" TEXT NOT NULL,
+    "fromName" TEXT,
+    "toEmail" TEXT NOT NULL,
+    "toName" TEXT,
+    "ccEmails" TEXT,
+    "bccEmails" TEXT,
+    "subject" TEXT NOT NULL,
+    "textBody" TEXT,
+    "htmlBody" TEXT,
+    "headers" JSONB,
+    "status" "public"."EmailMessageStatus" NOT NULL DEFAULT 'PENDING',
+    "priority" INTEGER NOT NULL DEFAULT 5,
+    "securityScore" DOUBLE PRECISION,
+    "processedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "EmailMessage_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "public"."EmailAttachment" (
+    "id" TEXT NOT NULL,
+    "emailId" TEXT NOT NULL,
+    "filename" TEXT NOT NULL,
+    "contentType" TEXT NOT NULL,
+    "size" INTEGER NOT NULL,
+    "contentId" TEXT,
+    "content" BYTEA,
+    "storagePath" TEXT,
+    "securityStatus" "public"."AttachmentSecurityStatus" NOT NULL DEFAULT 'PENDING',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "EmailAttachment_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "public"."EmailProcessingLog" (
+    "id" TEXT NOT NULL,
+    "integrationId" TEXT NOT NULL,
+    "messageId" TEXT,
+    "action" TEXT NOT NULL,
+    "status" TEXT NOT NULL,
+    "details" JSONB,
+    "errorMessage" TEXT,
+    "processingTime" INTEGER,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "EmailProcessingLog_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "public"."email_audit_logs" (
+    "id" TEXT NOT NULL,
+    "eventType" "public"."EmailAuditEventType" NOT NULL,
+    "entityType" TEXT NOT NULL,
+    "entityId" TEXT NOT NULL,
+    "userId" TEXT,
+    "sessionId" TEXT,
+    "action" TEXT NOT NULL,
+    "description" TEXT,
+    "previousValues" JSONB,
+    "newValues" JSONB,
+    "metadata" JSONB,
+    "ipAddress" TEXT,
+    "userAgent" TEXT,
+    "accountId" TEXT,
+    "integrationId" TEXT,
+    "messageId" TEXT,
+    "success" BOOLEAN NOT NULL DEFAULT true,
+    "errorMessage" TEXT,
+    "processingTime" INTEGER,
+    "timestamp" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "email_audit_logs_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "public"."email_access_logs" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "action" TEXT NOT NULL,
+    "resourceType" TEXT NOT NULL,
+    "resourceId" TEXT,
+    "accountId" TEXT,
+    "integrationId" TEXT,
+    "searchQuery" TEXT,
+    "resultCount" INTEGER,
+    "filters" JSONB,
+    "ipAddress" TEXT,
+    "userAgent" TEXT,
+    "sessionId" TEXT,
+    "success" BOOLEAN NOT NULL DEFAULT true,
+    "errorMessage" TEXT,
+    "responseTime" INTEGER,
+    "timestamp" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "email_access_logs_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "public"."email_security_logs" (
+    "id" TEXT NOT NULL,
+    "integrationId" TEXT,
+    "messageId" TEXT,
+    "attachmentId" TEXT,
+    "threatType" TEXT NOT NULL,
+    "riskLevel" TEXT NOT NULL,
+    "securityScore" DOUBLE PRECISION,
+    "action" TEXT NOT NULL,
+    "reason" TEXT,
+    "scanEngine" TEXT,
+    "scanResults" JSONB,
+    "falsePositive" BOOLEAN NOT NULL DEFAULT false,
+    "reviewedBy" TEXT,
+    "reviewedAt" TIMESTAMP(3),
+    "reviewNotes" TEXT,
+    "notificationsSent" JSONB,
+    "timestamp" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "email_security_logs_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "AuthAccount_provider_providerAccountId_key" ON "public"."AuthAccount"("provider", "providerAccountId");
 
@@ -451,6 +735,192 @@ CREATE UNIQUE INDEX "UserPreferences_userId_key" ON "public"."UserPreferences"("
 -- CreateIndex
 CREATE INDEX "UserPreferences_userId_idx" ON "public"."UserPreferences"("userId");
 
+-- CreateIndex
+CREATE INDEX "import_configurations_createdBy_idx" ON "public"."import_configurations"("createdBy");
+
+-- CreateIndex
+CREATE INDEX "import_configurations_isMultiStage_idx" ON "public"."import_configurations"("isMultiStage");
+
+-- CreateIndex
+CREATE INDEX "import_stages_configurationId_idx" ON "public"."import_stages"("configurationId");
+
+-- CreateIndex
+CREATE INDEX "import_stages_order_idx" ON "public"."import_stages"("order");
+
+-- CreateIndex
+CREATE INDEX "import_stages_targetEntity_idx" ON "public"."import_stages"("targetEntity");
+
+-- CreateIndex
+CREATE INDEX "import_executions_configurationId_idx" ON "public"."import_executions"("configurationId");
+
+-- CreateIndex
+CREATE INDEX "import_executions_executedBy_idx" ON "public"."import_executions"("executedBy");
+
+-- CreateIndex
+CREATE INDEX "import_executions_status_idx" ON "public"."import_executions"("status");
+
+-- CreateIndex
+CREATE INDEX "import_stage_executions_executionId_idx" ON "public"."import_stage_executions"("executionId");
+
+-- CreateIndex
+CREATE INDEX "import_stage_executions_stageId_idx" ON "public"."import_stage_executions"("stageId");
+
+-- CreateIndex
+CREATE INDEX "import_stage_executions_status_idx" ON "public"."import_stage_executions"("status");
+
+-- CreateIndex
+CREATE INDEX "import_stage_executions_order_idx" ON "public"."import_stage_executions"("order");
+
+-- CreateIndex
+CREATE INDEX "import_execution_logs_executionId_idx" ON "public"."import_execution_logs"("executionId");
+
+-- CreateIndex
+CREATE INDEX "import_execution_logs_level_idx" ON "public"."import_execution_logs"("level");
+
+-- CreateIndex
+CREATE INDEX "EmailIntegration_provider_idx" ON "public"."EmailIntegration"("provider");
+
+-- CreateIndex
+CREATE INDEX "EmailIntegration_isActive_idx" ON "public"."EmailIntegration"("isActive");
+
+-- CreateIndex
+CREATE INDEX "EmailIntegration_name_idx" ON "public"."EmailIntegration"("name");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "domain_mappings_domain_key" ON "public"."domain_mappings"("domain");
+
+-- CreateIndex
+CREATE INDEX "domain_mappings_domain_idx" ON "public"."domain_mappings"("domain");
+
+-- CreateIndex
+CREATE INDEX "domain_mappings_accountId_idx" ON "public"."domain_mappings"("accountId");
+
+-- CreateIndex
+CREATE INDEX "domain_mappings_priority_idx" ON "public"."domain_mappings"("priority");
+
+-- CreateIndex
+CREATE INDEX "domain_mappings_isActive_idx" ON "public"."domain_mappings"("isActive");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "EmailMessage_messageId_key" ON "public"."EmailMessage"("messageId");
+
+-- CreateIndex
+CREATE INDEX "EmailMessage_messageId_idx" ON "public"."EmailMessage"("messageId");
+
+-- CreateIndex
+CREATE INDEX "EmailMessage_threadId_idx" ON "public"."EmailMessage"("threadId");
+
+-- CreateIndex
+CREATE INDEX "EmailMessage_ticketId_idx" ON "public"."EmailMessage"("ticketId");
+
+-- CreateIndex
+CREATE INDEX "EmailMessage_integrationId_idx" ON "public"."EmailMessage"("integrationId");
+
+-- CreateIndex
+CREATE INDEX "EmailMessage_fromEmail_idx" ON "public"."EmailMessage"("fromEmail");
+
+-- CreateIndex
+CREATE INDEX "EmailMessage_status_idx" ON "public"."EmailMessage"("status");
+
+-- CreateIndex
+CREATE INDEX "EmailMessage_createdAt_idx" ON "public"."EmailMessage"("createdAt");
+
+-- CreateIndex
+CREATE INDEX "EmailAttachment_emailId_idx" ON "public"."EmailAttachment"("emailId");
+
+-- CreateIndex
+CREATE INDEX "EmailAttachment_securityStatus_idx" ON "public"."EmailAttachment"("securityStatus");
+
+-- CreateIndex
+CREATE INDEX "EmailProcessingLog_integrationId_idx" ON "public"."EmailProcessingLog"("integrationId");
+
+-- CreateIndex
+CREATE INDEX "EmailProcessingLog_messageId_idx" ON "public"."EmailProcessingLog"("messageId");
+
+-- CreateIndex
+CREATE INDEX "EmailProcessingLog_action_idx" ON "public"."EmailProcessingLog"("action");
+
+-- CreateIndex
+CREATE INDEX "EmailProcessingLog_status_idx" ON "public"."EmailProcessingLog"("status");
+
+-- CreateIndex
+CREATE INDEX "EmailProcessingLog_createdAt_idx" ON "public"."EmailProcessingLog"("createdAt");
+
+-- CreateIndex
+CREATE INDEX "email_audit_logs_eventType_idx" ON "public"."email_audit_logs"("eventType");
+
+-- CreateIndex
+CREATE INDEX "email_audit_logs_entityType_idx" ON "public"."email_audit_logs"("entityType");
+
+-- CreateIndex
+CREATE INDEX "email_audit_logs_entityId_idx" ON "public"."email_audit_logs"("entityId");
+
+-- CreateIndex
+CREATE INDEX "email_audit_logs_userId_idx" ON "public"."email_audit_logs"("userId");
+
+-- CreateIndex
+CREATE INDEX "email_audit_logs_accountId_idx" ON "public"."email_audit_logs"("accountId");
+
+-- CreateIndex
+CREATE INDEX "email_audit_logs_integrationId_idx" ON "public"."email_audit_logs"("integrationId");
+
+-- CreateIndex
+CREATE INDEX "email_audit_logs_messageId_idx" ON "public"."email_audit_logs"("messageId");
+
+-- CreateIndex
+CREATE INDEX "email_audit_logs_timestamp_idx" ON "public"."email_audit_logs"("timestamp");
+
+-- CreateIndex
+CREATE INDEX "email_audit_logs_success_idx" ON "public"."email_audit_logs"("success");
+
+-- CreateIndex
+CREATE INDEX "email_access_logs_userId_idx" ON "public"."email_access_logs"("userId");
+
+-- CreateIndex
+CREATE INDEX "email_access_logs_action_idx" ON "public"."email_access_logs"("action");
+
+-- CreateIndex
+CREATE INDEX "email_access_logs_resourceType_idx" ON "public"."email_access_logs"("resourceType");
+
+-- CreateIndex
+CREATE INDEX "email_access_logs_resourceId_idx" ON "public"."email_access_logs"("resourceId");
+
+-- CreateIndex
+CREATE INDEX "email_access_logs_accountId_idx" ON "public"."email_access_logs"("accountId");
+
+-- CreateIndex
+CREATE INDEX "email_access_logs_integrationId_idx" ON "public"."email_access_logs"("integrationId");
+
+-- CreateIndex
+CREATE INDEX "email_access_logs_timestamp_idx" ON "public"."email_access_logs"("timestamp");
+
+-- CreateIndex
+CREATE INDEX "email_access_logs_success_idx" ON "public"."email_access_logs"("success");
+
+-- CreateIndex
+CREATE INDEX "email_security_logs_integrationId_idx" ON "public"."email_security_logs"("integrationId");
+
+-- CreateIndex
+CREATE INDEX "email_security_logs_messageId_idx" ON "public"."email_security_logs"("messageId");
+
+-- CreateIndex
+CREATE INDEX "email_security_logs_attachmentId_idx" ON "public"."email_security_logs"("attachmentId");
+
+-- CreateIndex
+CREATE INDEX "email_security_logs_threatType_idx" ON "public"."email_security_logs"("threatType");
+
+-- CreateIndex
+CREATE INDEX "email_security_logs_riskLevel_idx" ON "public"."email_security_logs"("riskLevel");
+
+-- CreateIndex
+CREATE INDEX "email_security_logs_action_idx" ON "public"."email_security_logs"("action");
+
+-- CreateIndex
+CREATE INDEX "email_security_logs_timestamp_idx" ON "public"."email_security_logs"("timestamp");
+
+-- CreateIndex
+CREATE INDEX "email_security_logs_falsePositive_idx" ON "public"."email_security_logs"("falsePositive");
+
 -- AddForeignKey
 ALTER TABLE "public"."AuthAccount" ADD CONSTRAINT "AuthAccount_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
@@ -549,3 +1019,33 @@ ALTER TABLE "public"."EmailQueue" ADD CONSTRAINT "EmailQueue_createdBy_fkey" FOR
 
 -- AddForeignKey
 ALTER TABLE "public"."EmailQueue" ADD CONSTRAINT "EmailQueue_templateId_fkey" FOREIGN KEY ("templateId") REFERENCES "public"."EmailTemplate"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."import_stages" ADD CONSTRAINT "import_stages_configurationId_fkey" FOREIGN KEY ("configurationId") REFERENCES "public"."import_configurations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."import_executions" ADD CONSTRAINT "import_executions_configurationId_fkey" FOREIGN KEY ("configurationId") REFERENCES "public"."import_configurations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."import_stage_executions" ADD CONSTRAINT "import_stage_executions_executionId_fkey" FOREIGN KEY ("executionId") REFERENCES "public"."import_executions"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."import_stage_executions" ADD CONSTRAINT "import_stage_executions_stageId_fkey" FOREIGN KEY ("stageId") REFERENCES "public"."import_stages"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."import_execution_logs" ADD CONSTRAINT "import_execution_logs_executionId_fkey" FOREIGN KEY ("executionId") REFERENCES "public"."import_executions"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."domain_mappings" ADD CONSTRAINT "domain_mappings_accountId_fkey" FOREIGN KEY ("accountId") REFERENCES "public"."Account"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."EmailMessage" ADD CONSTRAINT "EmailMessage_integrationId_fkey" FOREIGN KEY ("integrationId") REFERENCES "public"."EmailIntegration"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."EmailMessage" ADD CONSTRAINT "EmailMessage_ticketId_fkey" FOREIGN KEY ("ticketId") REFERENCES "public"."Ticket"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."EmailMessage" ADD CONSTRAINT "EmailMessage_threadId_fkey" FOREIGN KEY ("threadId") REFERENCES "public"."EmailMessage"("messageId") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."EmailAttachment" ADD CONSTRAINT "EmailAttachment_emailId_fkey" FOREIGN KEY ("emailId") REFERENCES "public"."EmailMessage"("id") ON DELETE CASCADE ON UPDATE CASCADE;

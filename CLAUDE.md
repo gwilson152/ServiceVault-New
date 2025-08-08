@@ -164,8 +164,8 @@ Unified SystemSettings with permission controls and type safety
 Database-backed with 500ms debounced auto-save
 📖 [`/docs/system/user-preferences.md`](./docs/system/user-preferences.md)
 
-### Timer System  
-Cross-device synchronization with persistent state
+### Enhanced Timer System  
+Advanced time tracking with billing integration, manual adjustments, and cross-device synchronization
 📖 [`/docs/system/timer-system.md`](./docs/system/timer-system.md)
 
 ### Billing System

@@ -1,881 +1,501 @@
-"use client";
+'use client';
 
-import { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import React, { useState, useEffect } from 'react';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
-  Save, 
-  AlertCircle, 
-  CheckCircle, 
   Mail, 
-  Send, 
-  Eye,
-  Edit3,
-  Plus,
+  Settings, 
+  Shield, 
+  Activity, 
+  Plus, 
+  Edit,
   Trash2,
-  TestTube,
-  Settings,
-  List
-} from "lucide-react";
-import { usePermissions } from "@/hooks/usePermissions";
-import { CreateEmailTemplateDialog } from "./CreateEmailTemplateDialog";
-import { EmailTemplatePreviewDialog } from "./EmailTemplatePreviewDialog";
-import { EditEmailTemplateDialog } from "./EditEmailTemplateDialog";
+  Play,
+  Pause,
+  AlertTriangle,
+  CheckCircle,
+  Clock,
+  Zap,
+  Globe,
+  Server,
+  Map,
+  Archive,
+  BarChart3
+} from 'lucide-react';
+import { usePermissions } from '@/hooks/usePermissions';
+import { DomainMappingManager } from '@/components/email/DomainMappingManager';
 
-interface EmailSettingsSectionProps {
-  // No props needed - each section manages its own state
-}
-
-interface SMTPSettings {
-  id?: string;
-  smtpHost: string;
-  smtpPort: number;
-  smtpUsername: string;
-  smtpPassword: string;
-  smtpSecure: boolean;
-  fromEmail: string;
-  fromName: string;
-  replyToEmail: string;
-  testMode: boolean;
-}
-
-interface EmailTemplate {
+interface EmailIntegration {
   id: string;
   name: string;
-  type: string;
-  subject: string;
-  htmlBody: string;
-  textBody?: string;
-  status: string;
-  isDefault: boolean;
-  variables: Record<string, any>;
-  createdAt: string;
-  updatedAt: string;
-  creator: { name: string; email: string };
+  provider: 'MICROSOFT_GRAPH' | 'GMAIL' | 'GENERIC_IMAP' | 'GENERIC_POP3';
+  isActive: boolean;
+  status: 'CONNECTED' | 'ERROR' | 'CONFIGURING' | 'DISABLED';
+  lastSync: string | null;
+  messageCount: number;
+  ticketCount: number;
+  errorCount: number;
+  processingRules: any;
 }
 
-interface QueueStats {
-  pending: number;
-  sending: number;
-  sent: number;
-  failed: number;
+interface EmailStats {
+  totalIntegrations: number;
+  activeIntegrations: number;
+  totalMessages: number;
+  processedToday: number;
+  ticketsCreated: number;
+  threatsBlocked: number;
+  averageProcessingTime: number;
 }
 
-export function EmailSettingsSection({}: EmailSettingsSectionProps) {
-  const [activeTab, setActiveTab] = useState("smtp");
-  const [smtpSettings, setSMTPSettings] = useState<SMTPSettings>({
-    smtpHost: "",
-    smtpPort: 587,
-    smtpUsername: "",
-    smtpPassword: "",
-    smtpSecure: false,
-    fromEmail: "",
-    fromName: "",
-    replyToEmail: "",
-    testMode: false,
+export function EmailSettingsSection() {
+  const [integrations, setIntegrations] = useState<EmailIntegration[]>([]);
+  const [stats, setStats] = useState<EmailStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('subtab') || 'overview';
+    }
+    return 'overview';
   });
-  const [templates, setTemplates] = useState<EmailTemplate[]>([]);
-  const [queueStats, setQueueStats] = useState<QueueStats>({
-    pending: 0,
-    sending: 0,
-    sent: 0,
-    failed: 0
-  });
-  const [testEmail, setTestEmail] = useState("");
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("__basic_test__");
-  const [testVariables, setTestVariables] = useState<Record<string, string>>({});
-  const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const [showPreviewDialog, setShowPreviewDialog] = useState(false);
-  const [showEditDialog, setShowEditDialog] = useState(false);
-  const [selectedTemplate, setSelectedTemplate] = useState<EmailTemplate | null>(null);
   
-  const [isSaving, setIsSaving] = useState(false);
-  const [isTesting, setIsTesting] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
-  const [testStatus, setTestStatus] = useState<'idle' | 'success' | 'error'>('idle');
-
-  const { canEditSettings } = usePermissions();
+  const { canAdminEmailGlobal, canViewSettings } = usePermissions();
 
   useEffect(() => {
-    loadEmailSettings();
-    loadTemplates();
-    loadQueueStats();
-  }, []);
+    if (canAdminEmailGlobal) {
+      loadEmailData();
+    }
+  }, [canAdminEmailGlobal]);
 
-  const loadEmailSettings = async () => {
+  const loadEmailData = async () => {
     try {
-      const response = await fetch('/api/email/settings');
-      if (response.ok) {
-        const data = await response.json();
-        if (data.settings) {
-          setSMTPSettings({
-            smtpHost: data.settings['email.smtpHost'] || "",
-            smtpPort: data.settings['email.smtpPort'] || 587,
-            smtpUsername: data.settings['email.smtpUser'] || "",
-            smtpPassword: "", // Never pre-fill password for security
-            smtpSecure: data.settings['email.smtpSecure'] || false,
-            fromEmail: data.settings['email.fromAddress'] || "",
-            fromName: data.settings['email.fromName'] || "",
-            replyToEmail: data.settings['email.replyToEmail'] || "",
-            testMode: data.settings['email.testMode'] ?? false,
-          });
-        }
+      setLoading(true);
+      setError(null);
+
+      const [integrationsResponse, statsResponse] = await Promise.all([
+        fetch('/api/admin/email/integrations'),
+        fetch('/api/admin/email/stats')
+      ]);
+
+      if (!integrationsResponse.ok || !statsResponse.ok) {
+        throw new Error('Failed to load email data');
       }
-    } catch (error) {
-      console.error('Failed to load email settings:', error);
+
+      const integrationsData = await integrationsResponse.json();
+      const statsData = await statsResponse.json();
+
+      setIntegrations(integrationsData.integrations || []);
+      setStats(statsData.stats);
+
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load data');
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
-  const loadTemplates = async () => {
+  const toggleIntegration = async (integrationId: string, isActive: boolean) => {
     try {
-      const response = await fetch('/api/email/templates');
-      if (response.ok) {
-        const data = await response.json();
-        setTemplates(data.templates || []);
-      }
-    } catch (error) {
-      console.error('Failed to load email templates:', error);
-    }
-  };
-
-  const loadQueueStats = async () => {
-    try {
-      const response = await fetch('/api/email/queue');
-      if (response.ok) {
-        const data = await response.json();
-        setQueueStats(data.stats || { pending: 0, sending: 0, sent: 0, failed: 0 });
-      }
-    } catch (error) {
-      console.error('Failed to load queue stats:', error);
-    }
-  };
-
-  const handleSMTPSettingChange = (key: keyof SMTPSettings, value: string | number | boolean) => {
-    setSMTPSettings(prev => ({ ...prev, [key]: value }));
-  };
-
-  const handleSaveSMTP = async () => {
-    if (!canEditSettings) return;
-    
-    setIsSaving(true);
-    try {
-      const response = await fetch('/api/email/settings', {
-        method: 'POST',
+      setError(null);
+      const response = await fetch(`/api/admin/email/integrations/${integrationId}`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          settings: {
-            'email.smtpHost': smtpSettings.smtpHost,
-            'email.smtpPort': smtpSettings.smtpPort,
-            'email.smtpUser': smtpSettings.smtpUsername,
-            'email.smtpPassword': smtpSettings.smtpPassword,
-            'email.smtpSecure': smtpSettings.smtpSecure,
-            'email.fromAddress': smtpSettings.fromEmail,
-            'email.fromName': smtpSettings.fromName,
-            'email.replyToEmail': smtpSettings.replyToEmail,
-            'email.testMode': smtpSettings.testMode,
-          }
-        }),
+        body: JSON.stringify({ isActive: !isActive })
       });
 
-      if (response.ok) {
-        setSaveStatus('success');
-        await loadEmailSettings(); // Reload to get the ID
-        setTimeout(() => setSaveStatus('idle'), 3000);
-      } else {
-        setSaveStatus('error');
-        setTimeout(() => setSaveStatus('idle'), 3000);
+      if (!response.ok) {
+        throw new Error('Failed to update integration');
       }
-    } catch (error) {
-      console.error('Failed to save SMTP settings:', error);
-      setSaveStatus('error');
-      setTimeout(() => setSaveStatus('idle'), 3000);
-    } finally {
-      setIsSaving(false);
+
+      setSuccess(`Integration ${!isActive ? 'enabled' : 'disabled'} successfully`);
+      await loadEmailData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update integration');
     }
   };
 
-  const getTemplateVariables = (templateId: string) => {
-    const template = templates.find(t => t.id === templateId);
-    if (!template) return {};
-    
+  const syncIntegration = async (integrationId: string) => {
     try {
-      const variables = JSON.parse(template.variables);
-      return variables;
-    } catch {
-      return {};
-    }
-  };
-
-  const getDefaultTestVariables = (templateType: string) => {
-    const defaults: Record<string, Record<string, string>> = {
-      'USER_INVITATION': {
-        systemName: 'Service Vault',
-        userName: 'John Test',
-        accountName: 'Test Company',
-        inviterName: 'Admin User',
-        inviterEmail: 'admin@example.com',
-        invitationLink: 'https://app.example.com/accept-invitation?token=test123',
-        expirationDate: 'January 15, 2024'
-      },
-      'ACCOUNT_WELCOME': {
-        systemName: 'Service Vault',
-        userName: 'John Test',
-        accountName: 'Test Company',
-        loginEmail: testEmail || 'test@example.com',
-        temporaryPassword: 'TempPass123!',
-        loginUrl: 'https://app.example.com/portal/login',
-        createdByName: 'Admin User',
-        createdByEmail: 'admin@example.com'
-      },
-      'TICKET_STATUS_CHANGE': {
-        systemName: 'Service Vault',
-        userName: 'John Test',
-        ticketNumber: 'T-001',
-        ticketTitle: 'Test Ticket',
-        oldStatus: 'Open',
-        newStatus: 'In Progress',
-        updatedBy: 'Admin User',
-        updatedAt: 'January 15, 2024 at 10:30 AM',
-        ticketLink: 'https://app.example.com/tickets/123',
-        statusMessage: 'Starting work on this ticket now.'
-      },
-      'INVOICE_GENERATED': {
-        systemName: 'Service Vault',
-        userName: 'John Test',
-        invoiceNumber: 'INV-2024-001',
-        accountName: 'Test Company',
-        invoiceDate: 'January 15, 2024',
-        dueDate: 'February 15, 2024',
-        periodStart: 'January 1, 2024',
-        periodEnd: 'January 31, 2024',
-        totalAmount: '2,450.00',
-        totalHours: '40.5',
-        billableHours: '35.0',
-        timeEntryCount: '12',
-        addonCount: '3',
-        invoiceLink: 'https://app.example.com/invoices/123',
-        downloadLink: 'https://app.example.com/invoices/123/pdf'
-      }
-    };
-    
-    return defaults[templateType] || {};
-  };
-
-  const handleTemplateChange = (templateId: string) => {
-    setSelectedTemplateId(templateId);
-    if (templateId === "__basic_test__") {
-      setTestVariables({});
-    } else {
-      const template = templates.find(t => t.id === templateId);
-      if (template) {
-        const defaultVars = getDefaultTestVariables(template.type);
-        setTestVariables(defaultVars);
-      }
-    }
-  };
-
-  const handleTestEmail = async () => {
-    if (!testEmail || !canEditSettings) return;
-    
-    setIsTesting(true);
-    try {
-      const payload: any = { testEmail };
-      
-      if (selectedTemplateId && selectedTemplateId !== "__basic_test__") {
-        payload.templateId = selectedTemplateId;
-        payload.variables = testVariables;
-      }
-
-      const response = await fetch('/api/email/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+      setError(null);
+      const response = await fetch(`/api/admin/email/integrations/${integrationId}/sync`, {
+        method: 'POST'
       });
 
-      const data = await response.json();
-      if (data.success) {
-        setTestStatus('success');
-        setTimeout(() => setTestStatus('idle'), 5000);
-      } else {
-        setTestStatus('error');
-        setTimeout(() => setTestStatus('idle'), 5000);
+      if (!response.ok) {
+        throw new Error('Failed to start sync');
       }
-    } catch (error) {
-      console.error('Failed to send test email:', error);
-      setTestStatus('error');
-      setTimeout(() => setTestStatus('idle'), 5000);
-    } finally {
-      setIsTesting(false);
+
+      setSuccess('Email sync started successfully');
+      await loadEmailData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to start sync');
     }
   };
 
-  const handleTemplateCreated = () => {
-    loadTemplates(); // Refresh the templates list
-  };
-
-  const handlePreviewTemplate = (template: EmailTemplate) => {
-    setSelectedTemplate(template);
-    setShowPreviewDialog(true);
-  };
-
-  const handleEditTemplate = (template: EmailTemplate) => {
-    setSelectedTemplate(template);
-    setShowEditDialog(true);
-  };
-
-  const handleDeleteTemplate = async (template: EmailTemplate) => {
-    if (!canEditSettings) return;
-    
-    const confirmed = window.confirm(
-      `Are you sure you want to delete the template "${template.name}"? This action cannot be undone.`
-    );
-    
-    if (!confirmed) return;
-
-    try {
-      const response = await fetch(`/api/email/templates/${template.id}`, {
-        method: 'DELETE'
-      });
-
-      if (response.ok) {
-        loadTemplates(); // Refresh the templates list
-      } else {
-        alert('Failed to delete template. Please try again.');
-      }
-    } catch (error) {
-      console.error('Failed to delete template:', error);
-      alert('Failed to delete template. Please try again.');
+  const getProviderIcon = (provider: string) => {
+    switch (provider) {
+      case 'MICROSOFT_GRAPH': return '🔷';
+      case 'GMAIL': return '📧';
+      case 'GENERIC_IMAP': return '📬';
+      case 'GENERIC_POP3': return '📪';
+      default: return '✉️';
     }
   };
 
-  const handleTemplateUpdated = () => {
-    loadTemplates(); // Refresh the templates list
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'CONNECTED': return 'bg-green-100 text-green-800';
+      case 'ERROR': return 'bg-red-100 text-red-800';
+      case 'CONFIGURING': return 'bg-yellow-100 text-yellow-800';
+      case 'DISABLED': return 'bg-gray-100 text-gray-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
   };
 
-  if (isLoading) {
+  if (!canViewSettings) {
     return (
-      <div className="flex items-center justify-center py-8">
-        <div className="text-muted-foreground">Loading email settings...</div>
-      </div>
+      <Alert>
+        <AlertTriangle className="h-4 w-4" />
+        <AlertDescription>
+          You don't have permission to view system settings.
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  if (!canAdminEmailGlobal) {
+    return (
+      <Alert>
+        <AlertTriangle className="h-4 w-4" />
+        <AlertDescription>
+          You don't have permission to manage email integrations. Contact your system administrator to configure email settings.
+        </AlertDescription>
+      </Alert>
     );
   }
 
   return (
     <div className="space-y-6">
+      {error && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      {success && (
+        <Alert>
+          <CheckCircle className="h-4 w-4" />
+          <AlertDescription>{success}</AlertDescription>
+        </Alert>
+      )}
+
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="smtp">
-            <Settings className="mr-2 h-4 w-4" />
-            SMTP Settings
-          </TabsTrigger>
-          <TabsTrigger value="templates">
-            <Mail className="mr-2 h-4 w-4" />
-            Templates
-          </TabsTrigger>
-          <TabsTrigger value="queue">
-            <List className="mr-2 h-4 w-4" />
-            Email Queue
-          </TabsTrigger>
-          <TabsTrigger value="test">
-            <TestTube className="mr-2 h-4 w-4" />
-            Test Email
-          </TabsTrigger>
+        <TabsList className="grid w-full grid-cols-5">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="integrations">Integrations</TabsTrigger>
+          <TabsTrigger value="domains">Domain Mapping</TabsTrigger>
+          <TabsTrigger value="security">Security</TabsTrigger>
+          <TabsTrigger value="audit">Audit</TabsTrigger>
         </TabsList>
 
-        {/* SMTP Settings Tab */}
-        <TabsContent value="smtp" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">SMTP Configuration</CardTitle>
-              <CardDescription>
-                Configure your SMTP settings for sending emails.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="smtpHost">SMTP Host</Label>
-                  <Input
-                    id="smtpHost"
-                    value={smtpSettings.smtpHost}
-                    onChange={(e) => handleSMTPSettingChange('smtpHost', e.target.value)}
-                    placeholder="smtp.example.com"
-                    disabled={!canEditSettings}
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="smtpPort">SMTP Port</Label>
-                  <Input
-                    id="smtpPort"
-                    type="number"
-                    value={smtpSettings.smtpPort}
-                    onChange={(e) => handleSMTPSettingChange('smtpPort', parseInt(e.target.value) || 587)}
-                    placeholder="587"
-                    disabled={!canEditSettings}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="smtpUsername">Username (Optional)</Label>
-                  <Input
-                    id="smtpUsername"
-                    value={smtpSettings.smtpUsername}
-                    onChange={(e) => handleSMTPSettingChange('smtpUsername', e.target.value)}
-                    placeholder="username@example.com (leave blank if no auth required)"
-                    disabled={!canEditSettings}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Leave empty if your SMTP server doesn't require authentication
-                  </p>
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="smtpPassword">Password (Optional)</Label>
-                  <Input
-                    id="smtpPassword"
-                    type="password"
-                    value={smtpSettings.smtpPassword}
-                    onChange={(e) => handleSMTPSettingChange('smtpPassword', e.target.value)}
-                    placeholder="Enter password (leave blank if no auth required)"
-                    disabled={!canEditSettings}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Leave empty if your SMTP server doesn't require authentication
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="fromEmail">From Email</Label>
-                  <Input
-                    id="fromEmail"
-                    type="email"
-                    value={smtpSettings.fromEmail}
-                    onChange={(e) => handleSMTPSettingChange('fromEmail', e.target.value)}
-                    placeholder="noreply@example.com"
-                    disabled={!canEditSettings}
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="fromName">From Name</Label>
-                  <Input
-                    id="fromName"
-                    value={smtpSettings.fromName}
-                    onChange={(e) => handleSMTPSettingChange('fromName', e.target.value)}
-                    placeholder="Service Vault"
-                    disabled={!canEditSettings}
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="replyToEmail">Reply-To Email (Optional)</Label>
-                <Input
-                  id="replyToEmail"
-                  type="email"
-                  value={smtpSettings.replyToEmail}
-                  onChange={(e) => handleSMTPSettingChange('replyToEmail', e.target.value)}
-                  placeholder="support@example.com"
-                  disabled={!canEditSettings}
-                />
-              </div>
-
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="smtpSecure">Use SSL/TLS</Label>
-                    <div className="text-sm text-muted-foreground">
-                      Enable secure connection to SMTP server
-                    </div>
-                  </div>
-                  <Switch
-                    id="smtpSecure"
-                    checked={smtpSettings.smtpSecure}
-                    onCheckedChange={(checked) => handleSMTPSettingChange('smtpSecure', checked)}
-                    disabled={!canEditSettings}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="testMode">Test Mode</Label>
-                    <div className="text-sm text-muted-foreground">
-                      In test mode, emails are logged but not actually sent
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    {smtpSettings.testMode && (
-                      <Badge variant="secondary">Test Mode</Badge>
-                    )}
-                    <Switch
-                      id="testMode"
-                      checked={smtpSettings.testMode}
-                      onCheckedChange={(checked) => handleSMTPSettingChange('testMode', checked)}
-                      disabled={!canEditSettings}
-                    />
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Save Section */}
-          <div className="flex items-center justify-between pt-4 border-t">
-            <div className="flex items-center space-x-2">
-              {saveStatus === 'success' && (
-                <>
-                  <CheckCircle className="h-4 w-4 text-green-600" />
-                  <span className="text-sm text-green-600">SMTP settings saved successfully</span>
-                </>
-              )}
-              {saveStatus === 'error' && (
-                <>
-                  <AlertCircle className="h-4 w-4 text-red-600" />
-                  <span className="text-sm text-red-600">Failed to save SMTP settings</span>
-                </>
-              )}
-            </div>
-            
-            <Button 
-              onClick={handleSaveSMTP}
-              disabled={isSaving || !canEditSettings}
-            >
-              {isSaving && <Save className="mr-2 h-4 w-4 animate-spin" />}
-              {!isSaving && <Save className="mr-2 h-4 w-4" />}
-              {isSaving ? 'Saving...' : 'Save SMTP Settings'}
-            </Button>
-          </div>
-        </TabsContent>
-
-        {/* Templates Tab */}
-        <TabsContent value="templates" className="space-y-4">
+        <TabsContent value="overview" className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-lg font-medium">Email Templates</h3>
+              <h3 className="text-lg font-semibold flex items-center">
+                <Globe className="h-5 w-5 mr-2" />
+                Email System Overview
+              </h3>
               <p className="text-sm text-muted-foreground">
-                Manage email templates for system notifications and user management
+                Global email integration status and processing statistics
               </p>
             </div>
-            {canEditSettings && (
-              <Button onClick={() => setShowCreateDialog(true)}>
-                <Plus className="mr-2 h-4 w-4" />
-                New Template
-              </Button>
-            )}
+            <Button onClick={loadEmailData} size="sm" variant="outline">
+              <Activity className="h-4 w-4 mr-2" />
+              Refresh
+            </Button>
           </div>
 
-          {/* Template Types Info */}
-          <Card className="border-blue-200 bg-blue-50">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base text-blue-900">Available Template Types</CardTitle>
+          {/* Statistics Cards */}
+          {stats && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Integrations</CardTitle>
+                  <Server className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{stats.totalIntegrations}</div>
+                  <p className="text-xs text-muted-foreground">
+                    {stats.activeIntegrations} active
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Messages Today</CardTitle>
+                  <Mail className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{stats.processedToday}</div>
+                  <p className="text-xs text-muted-foreground">
+                    {stats.totalMessages} total
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Tickets Created</CardTitle>
+                  <Activity className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{stats.ticketsCreated}</div>
+                  <p className="text-xs text-muted-foreground">
+                    From email processing
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Threats Blocked</CardTitle>
+                  <Shield className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{stats.threatsBlocked}</div>
+                  <p className="text-xs text-muted-foreground">
+                    Security filtering
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">System Status</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-3 text-sm">
-                <div className="flex justify-between">
-                  <span className="font-medium text-blue-800">USER_INVITATION</span>
-                  <span className="text-blue-700">Used when inviting users to create their own accounts</span>
+              {loading ? (
+                <div className="flex items-center justify-center py-4">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
                 </div>
-                <div className="flex justify-between">
-                  <span className="font-medium text-blue-800">ACCOUNT_WELCOME</span>
-                  <span className="text-blue-700">Used when admins create user accounts manually</span>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">Email Processing</span>
+                    <Badge className={stats && stats.activeIntegrations > 0 ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
+                      {stats && stats.activeIntegrations > 0 ? 'Active' : 'Inactive'}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">Security Monitoring</span>
+                    <Badge className="bg-green-100 text-green-800">Active</Badge>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">Domain Resolution</span>
+                    <Badge className="bg-green-100 text-green-800">Active</Badge>
+                  </div>
+                  {stats && stats.averageProcessingTime > 0 && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm">Average Processing Time</span>
+                      <span className="text-sm font-medium">{stats.averageProcessingTime}ms</span>
+                    </div>
+                  )}
                 </div>
-                <div className="flex justify-between">
-                  <span className="font-medium text-blue-800">PASSWORD_RESET</span>
-                  <span className="text-blue-700">Used for password reset requests</span>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="integrations" className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-semibold">Email Integrations</h3>
+              <p className="text-sm text-muted-foreground">
+                Manage email providers and their configurations
+              </p>
+            </div>
+            <Button onClick={() => window.location.href = '/settings/email/integrations/new'}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Integration
+            </Button>
+          </div>
+
+          <Card>
+            <CardContent className="p-6">
+              {loading ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
                 </div>
-                <div className="flex justify-between">
-                  <span className="font-medium text-blue-800">TICKET_UPDATE</span>
-                  <span className="text-blue-700">Used for ticket status and update notifications</span>
+              ) : integrations.length === 0 ? (
+                <div className="text-center py-8">
+                  <Mail className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">No Email Integrations</h3>
+                  <p className="text-gray-600 mb-4">Get started by adding your first email integration.</p>
+                  <Button onClick={() => window.location.href = '/settings/email/integrations/new'}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Integration
+                  </Button>
                 </div>
-                <div className="flex justify-between">
-                  <span className="font-medium text-blue-800">INVOICE_GENERATED</span>
-                  <span className="text-blue-700">Used when new invoices are generated</span>
+              ) : (
+                <div className="space-y-4">
+                  {integrations.map((integration) => (
+                    <div key={integration.id} className="border rounded-lg p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-4">
+                          <div className="text-xl">{getProviderIcon(integration.provider)}</div>
+                          <div>
+                            <h4 className="font-semibold">{integration.name}</h4>
+                            <p className="text-sm text-gray-600">{integration.provider.replace('_', ' ')}</p>
+                            <div className="flex items-center space-x-2 mt-1">
+                              <Badge className={getStatusColor(integration.status)} size="sm">
+                                {integration.status}
+                              </Badge>
+                              <Badge variant="outline" size="sm">
+                                {integration.isActive ? 'Active' : 'Inactive'}
+                              </Badge>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center space-x-4">
+                          <div className="text-right text-sm">
+                            <div className="font-medium">{integration.messageCount} messages</div>
+                            <div className="text-gray-500">{integration.ticketCount} tickets</div>
+                            {integration.errorCount > 0 && (
+                              <div className="text-red-600">{integration.errorCount} errors</div>
+                            )}
+                          </div>
+
+                          <div className="flex space-x-1">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => syncIntegration(integration.id)}
+                              disabled={!integration.isActive}
+                              title="Sync now"
+                            >
+                              <Zap className="h-3 w-3" />
+                            </Button>
+
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => toggleIntegration(integration.id, integration.isActive)}
+                              title={integration.isActive ? 'Disable' : 'Enable'}
+                            >
+                              {integration.isActive ? (
+                                <Pause className="h-3 w-3" />
+                              ) : (
+                                <Play className="h-3 w-3" />
+                              )}
+                            </Button>
+
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => window.location.href = `/settings/email/integrations/${integration.id}/edit`}
+                              title="Edit"
+                            >
+                              <Edit className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="domains" className="space-y-4">
+          <div>
+            <h3 className="text-lg font-semibold">Domain Mapping</h3>
+            <p className="text-sm text-muted-foreground">
+              Configure how email domains route to accounts
+            </p>
+          </div>
+          <DomainMappingManager />
+        </TabsContent>
+
+        <TabsContent value="security" className="space-y-4">
+          <div>
+            <h3 className="text-lg font-semibold">Security Settings</h3>
+            <p className="text-sm text-muted-foreground">
+              Configure email security policies and monitoring
+            </p>
+          </div>
+          
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Security Policies</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <Alert>
+                  <Shield className="h-4 w-4" />
+                  <AlertDescription>
+                    Security configuration is managed through the global email system settings. 
+                    Advanced security policies and quarantine management are available in the full admin interface.
+                  </AlertDescription>
+                </Alert>
+                <Button 
+                  variant="outline"
+                  onClick={() => window.location.href = '/admin/email?tab=security'}
+                >
+                  <Shield className="h-4 w-4 mr-2" />
+                  Advanced Security Settings
+                </Button>
               </div>
             </CardContent>
           </Card>
-
-          <div className="grid gap-4">
-            {templates.map((template) => (
-              <Card key={template.id}>
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle className="text-base">{template.name}</CardTitle>
-                      <CardDescription>
-                        Type: {template.type} • {template.isDefault && 'Default • '}
-                        Status: {template.status}
-                        {template.type === 'ACCOUNT_WELCOME' && ' • Used for manual user creation'}
-                      </CardDescription>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      {template.isDefault && (
-                        <Badge variant="default">Default</Badge>
-                      )}
-                      {template.type === 'ACCOUNT_WELCOME' && (
-                        <Badge variant="outline">Manual User Creation</Badge>
-                      )}
-                      {template.type === 'USER_INVITATION' && (
-                        <Badge variant="outline">User Invitations</Badge>
-                      )}
-                      <Badge variant={template.status === 'ACTIVE' ? 'default' : 'secondary'}>
-                        {template.status}
-                      </Badge>
-                      {canEditSettings && (
-                        <>
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            title="Preview Template"
-                            onClick={() => handlePreviewTemplate(template)}
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            title="Edit Template"
-                            onClick={() => handleEditTemplate(template)}
-                          >
-                            <Edit3 className="h-4 w-4" />
-                          </Button>
-                          {!template.isDefault && (
-                            <Button 
-                              variant="outline" 
-                              size="sm" 
-                              title="Delete Template"
-                              onClick={() => handleDeleteTemplate(template)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground mb-2">
-                    <strong>Subject:</strong> {template.subject}
-                  </p>
-                  {template.variables && Object.keys(template.variables).length > 0 && (
-                    <p className="text-sm text-muted-foreground mb-2">
-                      <strong>Variables:</strong> {Object.keys(template.variables).join(', ')}
-                    </p>
-                  )}
-                  <p className="text-sm text-muted-foreground">
-                    Created by {template.creator.name} on {new Date(template.createdAt).toLocaleDateString()}
-                    {template.updatedAt !== template.createdAt && (
-                      <span> • Updated {new Date(template.updatedAt).toLocaleDateString()}</span>
-                    )}
-                  </p>
-                  {template.type === 'ACCOUNT_WELCOME' && (
-                    <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-800">
-                      This template is used when administrators create user accounts manually. 
-                      It includes login credentials and welcome information.
-                    </div>
-                  )}
-                  {template.type === 'USER_INVITATION' && (
-                    <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded text-xs text-green-800">
-                      This template is used for invitation-based user creation. 
-                      It includes invitation links and setup instructions.
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
-
-            {templates.length === 0 && (
-              <div className="text-center py-8 text-muted-foreground">
-                No email templates configured yet.
-              </div>
-            )}
-          </div>
         </TabsContent>
 
-        {/* Email Queue Tab */}
-        <TabsContent value="queue" className="space-y-4">
+        <TabsContent value="audit" className="space-y-4">
           <div>
-            <h3 className="text-lg font-medium">Email Queue Status</h3>
+            <h3 className="text-lg font-semibold">Audit & Monitoring</h3>
             <p className="text-sm text-muted-foreground">
-              Monitor the status of outbound emails
+              View email processing logs and system activity
             </p>
           </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardDescription>Pending</CardDescription>
-                <CardTitle className="text-2xl">{queueStats.pending}</CardTitle>
-              </CardHeader>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardDescription>Sending</CardDescription>
-                <CardTitle className="text-2xl">{queueStats.sending}</CardTitle>
-              </CardHeader>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardDescription>Sent</CardDescription>
-                <CardTitle className="text-2xl text-green-600">{queueStats.sent}</CardTitle>
-              </CardHeader>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardDescription>Failed</CardDescription>
-                <CardTitle className="text-2xl text-red-600">{queueStats.failed}</CardTitle>
-              </CardHeader>
-            </Card>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">
-              Email queue is processed automatically every few minutes.
-            </p>
-            <Button variant="outline" onClick={loadQueueStats}>
-              Refresh Stats
-            </Button>
-          </div>
-        </TabsContent>
-
-        {/* Test Email Tab */}
-        <TabsContent value="test" className="space-y-4">
+          
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Test Email Configuration</CardTitle>
-              <CardDescription>
-                Send a test email to verify your SMTP settings and email templates are working correctly.
-              </CardDescription>
+              <CardTitle className="text-base">Audit Dashboard</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="testEmail">Test Email Address</Label>
-                  <Input
-                    id="testEmail"
-                    type="email"
-                    value={testEmail}
-                    onChange={(e) => setTestEmail(e.target.value)}
-                    placeholder="test@example.com"
-                    disabled={!canEditSettings}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="templateSelect">Email Template (Optional)</Label>
-                  <Select value={selectedTemplateId} onValueChange={handleTemplateChange} disabled={!canEditSettings}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select template to test" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__basic_test__">Basic SMTP Test (No Template)</SelectItem>
-                      {templates.filter(t => t.status === 'ACTIVE').map((template) => (
-                        <SelectItem key={template.id} value={template.id}>
-                          {template.name} ({template.type})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {selectedTemplateId && selectedTemplateId !== "__basic_test__" && (
-                <div className="space-y-4 p-4 bg-gray-50 rounded-lg border">
-                  <div className="flex items-center space-x-2">
-                    <Mail className="h-4 w-4 text-blue-600" />
-                    <h4 className="font-medium text-sm">Template Variables</h4>
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    These test values will be used to populate the template. You can modify them to test different scenarios.
-                  </p>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-48 overflow-y-auto">
-                    {Object.entries(testVariables).map(([key, value]) => (
-                      <div key={key} className="space-y-1">
-                        <Label htmlFor={`var-${key}`} className="text-xs font-medium text-gray-700">
-                          {key}
-                        </Label>
-                        <Input
-                          id={`var-${key}`}
-                          value={value}
-                          onChange={(e) => setTestVariables(prev => ({ ...prev, [key]: e.target.value }))}
-                          placeholder={`Enter ${key}`}
-                          className="text-sm"
-                          disabled={!canEditSettings}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div className="flex items-center justify-between pt-4 border-t">
-                <div className="flex items-center space-x-2">
-                  {testStatus === 'success' && (
-                    <>
-                      <CheckCircle className="h-4 w-4 text-green-600" />
-                      <span className="text-sm text-green-600">
-                        {selectedTemplateId && selectedTemplateId !== "__basic_test__" ? 'Template test email sent successfully' : 'Basic test email sent successfully'}
-                      </span>
-                    </>
-                  )}
-                  {testStatus === 'error' && (
-                    <>
-                      <AlertCircle className="h-4 w-4 text-red-600" />
-                      <span className="text-sm text-red-600">Failed to send test email</span>
-                    </>
-                  )}
-                </div>
-                
+            <CardContent>
+              <div className="space-y-4">
+                <Alert>
+                  <BarChart3 className="h-4 w-4" />
+                  <AlertDescription>
+                    Comprehensive audit logs and analytics are available in the full email management interface. 
+                    This includes processing logs, security events, and performance metrics.
+                  </AlertDescription>
+                </Alert>
                 <Button 
-                  onClick={handleTestEmail}
-                  disabled={isTesting || !testEmail || !canEditSettings}
+                  variant="outline"
+                  onClick={() => window.location.href = '/admin/email?tab=audit'}
                 >
-                  {isTesting && <Send className="mr-2 h-4 w-4 animate-spin" />}
-                  {!isTesting && <Send className="mr-2 h-4 w-4" />}
-                  {isTesting ? 'Sending...' : (selectedTemplateId && selectedTemplateId !== "__basic_test__") ? 'Send Template Test' : 'Send Basic Test'}
+                  <BarChart3 className="h-4 w-4 mr-2" />
+                  Full Audit Dashboard
                 </Button>
               </div>
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
-
-      <CreateEmailTemplateDialog
-        open={showCreateDialog}
-        onOpenChange={setShowCreateDialog}
-        onTemplateCreated={handleTemplateCreated}
-      />
-      
-      <EmailTemplatePreviewDialog
-        open={showPreviewDialog}
-        onOpenChange={setShowPreviewDialog}
-        template={selectedTemplate}
-      />
-      
-      <EditEmailTemplateDialog
-        open={showEditDialog}
-        onOpenChange={setShowEditDialog}
-        template={selectedTemplate}
-        onTemplateUpdated={handleTemplateUpdated}
-      />
     </div>
   );
 }

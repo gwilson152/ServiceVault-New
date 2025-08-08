@@ -187,6 +187,41 @@ export const PERMISSIONS_REGISTRY = {
       resource: "email",
       action: "queue",
       description: "View and manage email queue"
+    },
+    CONFIGURE: {
+      resource: "email",
+      action: "configure",
+      description: "Configure email integration settings per account"
+    },
+    ACCESS: {
+      resource: "email",
+      action: "access",
+      description: "Access email accounts for ticket processing"
+    },
+    ADMIN: {
+      resource: "email",
+      action: "admin",
+      description: "Administer email system and global settings"
+    },
+    PROCESS: {
+      resource: "email",
+      action: "process",
+      description: "Process incoming emails and create tickets"
+    },
+    VIEW_LOGS: {
+      resource: "email",
+      action: "view-logs",
+      description: "View email processing logs and audit trails"
+    },
+    SYNC: {
+      resource: "email",
+      action: "sync",
+      description: "Manually trigger email synchronization"
+    },
+    TEST: {
+      resource: "email",
+      action: "test",
+      description: "Test email connections and integrations"
     }
   },
   INVOICES: {
@@ -353,6 +388,15 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     PERMISSIONS_REGISTRY.INVOICES.UNMARK_PAID,
     PERMISSIONS_REGISTRY.INVOICES.EXPORT_PDF,
     PERMISSIONS_REGISTRY.INVOICES.UPDATE_DATES,
+    PERMISSIONS_REGISTRY.EMAIL.SEND,
+    PERMISSIONS_REGISTRY.EMAIL.TEMPLATES,
+    PERMISSIONS_REGISTRY.EMAIL.QUEUE,
+    PERMISSIONS_REGISTRY.EMAIL.CONFIGURE,
+    PERMISSIONS_REGISTRY.EMAIL.ACCESS,
+    PERMISSIONS_REGISTRY.EMAIL.PROCESS,
+    PERMISSIONS_REGISTRY.EMAIL.VIEW_LOGS,
+    PERMISSIONS_REGISTRY.EMAIL.SYNC,
+    PERMISSIONS_REGISTRY.EMAIL.TEST,
     PERMISSIONS_REGISTRY.SETTINGS.VIEW,
     PERMISSIONS_REGISTRY.SETTINGS.UPDATE
   ],
@@ -378,7 +422,12 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     PERMISSIONS_REGISTRY.TIME_ENTRIES.VIEW,
     PERMISSIONS_REGISTRY.BILLING.VIEW,
     PERMISSIONS_REGISTRY.INVOICES.VIEW,
-    PERMISSIONS_REGISTRY.INVOICES.EXPORT_PDF
+    PERMISSIONS_REGISTRY.INVOICES.EXPORT_PDF,
+    PERMISSIONS_REGISTRY.EMAIL.CONFIGURE,
+    PERMISSIONS_REGISTRY.EMAIL.ACCESS,
+    PERMISSIONS_REGISTRY.EMAIL.VIEW_LOGS,
+    PERMISSIONS_REGISTRY.EMAIL.SYNC,
+    PERMISSIONS_REGISTRY.EMAIL.TEST
   ],
   SUBSIDIARY_MANAGER: [
     // Account manager permissions plus subsidiary access
@@ -399,7 +448,12 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     PERMISSIONS_REGISTRY.REPORTS.VIEW,
     PERMISSIONS_REGISTRY.INVOICES.VIEW,
     PERMISSIONS_REGISTRY.INVOICES.CREATE,
-    PERMISSIONS_REGISTRY.INVOICES.EXPORT_PDF
+    PERMISSIONS_REGISTRY.INVOICES.EXPORT_PDF,
+    PERMISSIONS_REGISTRY.EMAIL.CONFIGURE,
+    PERMISSIONS_REGISTRY.EMAIL.ACCESS,
+    PERMISSIONS_REGISTRY.EMAIL.VIEW_LOGS,
+    PERMISSIONS_REGISTRY.EMAIL.SYNC,
+    PERMISSIONS_REGISTRY.EMAIL.TEST
   ],
   ACCOUNT_VIEWER: [
     // Read-only access to account information

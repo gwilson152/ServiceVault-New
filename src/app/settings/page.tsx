@@ -1,7 +1,7 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -24,8 +24,9 @@ import { DangerZoneSection } from "@/components/settings/DangerZoneSection";
 export default function SettingsPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("general");
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || "general");
   const { canViewSettings, canEditSettings, loading: permissionsLoading } = usePermissions();
 
   useEffect(() => {

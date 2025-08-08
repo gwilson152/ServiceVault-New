@@ -47,6 +47,7 @@ import { AccountUserRoleManager } from "@/components/accounts/AccountUserRoleMan
 import { AddExistingUserDialog } from "@/components/accounts/AddExistingUserDialog";
 import { usePermissions } from "@/hooks/usePermissions";
 import { AccountUserWithStatus, getAccountUserStatusDisplay } from "@/types/account-user";
+import { AccountDomainSection } from "@/components/accounts/AccountDomainSection";
 
 interface AccountDetails {
   id: string;
@@ -121,8 +122,6 @@ export default function AccountDetailsPage() {
   const [userToDelete, setUserToDelete] = useState<AccountUserWithStatus | null>(null);
   
   // Settings state
-  const [domainsText, setDomainsText] = useState('');
-  const [isSavingDomains, setIsSavingDomains] = useState(false);
   const [accountPreferences, setAccountPreferences] = useState({
     defaultTicketPriority: 'MEDIUM',
     requireTimeEntryApproval: false
@@ -210,57 +209,6 @@ export default function AccountDetailsPage() {
   };
 
   // Settings handlers
-  const handleSaveDomains = async () => {
-    if (!account) return;
-
-    setIsSavingDomains(true);
-    try {
-      const response = await fetch(`/api/accounts/${account.id}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          domains: domainsText.trim()
-        }),
-      });
-
-      if (response.ok) {
-        const updatedAccount = await response.json();
-        setAccount({ ...account, domains: updatedAccount.domains });
-        alert('Domains saved successfully!');
-      } else {
-        const error = await response.json();
-        alert(`Failed to save domains: ${error.error}`);
-      }
-    } catch (error) {
-      console.error('Error saving domains:', error);
-      alert('Failed to save domains. Please try again.');
-    } finally {
-      setIsSavingDomains(false);
-    }
-  };
-
-  const handleTestDomainMatching = () => {
-    if (!domainsText.trim()) {
-      alert('Please enter some domains first');
-      return;
-    }
-
-    const domains = domainsText.split(',').map(d => d.trim()).filter(Boolean);
-    const testEmail = prompt('Enter an email address to test domain matching:');
-    
-    if (testEmail) {
-      const emailDomain = testEmail.split('@')[1]?.toLowerCase();
-      const matches = domains.some(domain => domain.toLowerCase() === emailDomain);
-      
-      if (matches) {
-        alert(`✅ Email "${testEmail}" matches the configured domains and would be automatically assigned to this account.`);
-      } else {
-        alert(`❌ Email "${testEmail}" does not match any configured domains and would not be automatically assigned.`);
-      }
-    }
-  };
 
   const handleSavePreferences = async () => {
     if (!account) return;
@@ -391,7 +339,6 @@ export default function AccountDetailsPage() {
         });
         
         // Initialize settings state
-        setDomainsText(data.domains || '');
         if (data.customFields?.accountPreferences) {
           setAccountPreferences({
             ...accountPreferences,
@@ -1072,45 +1019,11 @@ export default function AccountDetailsPage() {
             {/* Settings Tab */}
             <TabsContent value="settings" className="space-y-6">
               {/* Domain Management */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Domain Management</CardTitle>
-                  <CardDescription>
-                    Configure email domains for automatic user assignment to this account
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="domains">Email Domains (comma-separated)</Label>
-                    <Textarea
-                      id="domains"
-                      placeholder="example.com, subsidiary.org, dept.company.com"
-                      className="min-h-[100px]"
-                      value={domainsText}
-                      onChange={(e) => setDomainsText(e.target.value)}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Users with email addresses from these domains will be automatically assigned to this account when invited or registered.
-                    </p>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <Button 
-                      size="sm" 
-                      onClick={handleSaveDomains}
-                      disabled={isSavingDomains}
-                    >
-                      {isSavingDomains ? 'Saving...' : 'Save Domains'}
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={handleTestDomainMatching}
-                    >
-                      Test Domain Matching
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+              <AccountDomainSection 
+                accountId={accountId}
+                initialDomains={account?.domains}
+                canEdit={canEditAccounts}
+              />
 
               {/* Billing Rate Overrides */}
               <Card>

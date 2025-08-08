@@ -1,17 +1,19 @@
-# Timer System Documentation
+# Advanced Timer System Documentation
 
 ## Overview
 
-The timer system provides real-time time tracking capabilities with persistent cross-device synchronization. Users can start, pause, resume, and stop timers for tickets, with support for multiple concurrent timers and automatic time logging.
+The timer system provides comprehensive real-time time tracking capabilities with persistent cross-device synchronization, integrated billing calculations, and advanced management features. Users can start, pause, resume, and stop timers for tickets with automatic billing rate application, manual time adjustments, and persistent session data.
 
 ## Architecture
 
 ### Core Components
 
-- **TimeTrackingProvider** - Global state management and API coordination
-- **MultiTimerWidget** - Horizontal stack of active timers at bottom of screen
-- **TimerCard** - Individual timer display with expand/collapse functionality
+- **TimeTrackingProvider** - Global state management and API coordination with real-time synchronization
+- **GlobalTimerWidget** - Floating timer widget with minimize/expand functionality and full feature set
+- **TimerCard** - Individual timer display with comprehensive controls and settings panel
+- **LogTimeEntryDialog** - Unified dialog for converting timer data to time entries
 - **QuickTimeEntry** - Timer controls integrated into ticket lists
+- **BillingRateSelector** - Account-specific billing rate selection with override support
 
 ### Database Schema
 
@@ -25,6 +27,90 @@ Timer {
   isRunning: boolean
   createdAt: DateTime
   updatedAt: DateTime
+}
+```
+
+## Enhanced Timer Features
+
+### Integrated Billing System
+
+The timer system includes comprehensive billing integration with real-time calculations:
+
+- **Account-Specific Rates**: Fetches billing rates from `/api/accounts/{id}/billing-rates` with account overrides
+- **Real-time Dollar Display**: Running dollar amount shown alongside timer duration (e.g., "01:23:45 $123.45")
+- **Effective Rate Calculation**: Uses `effectiveRate` field that includes account-specific overrides
+- **Persistent Rate Selection**: Billing rate choices stored per ticket in localStorage
+- **Auto-Selection**: Automatically selects default billing rates when available
+
+### Manual Time Adjustment
+
+Advanced time editing capabilities for precise time management:
+
+- **HH:MM:SS Format**: Precise time entry with hours, minutes, and seconds
+- **In-place Editing**: Edit timer duration directly within the timer interface
+- **Format Validation**: Ensures valid time format with user-friendly error messages
+- **API Integration**: Updates timer via `PUT /api/timers/{id}` endpoint
+- **Real-time Updates**: Dollar amounts recalculate automatically after time changes
+
+#### Usage Example
+
+```typescript
+// Time adjustment interface
+const handleSaveTimeEdit = async () => {
+  const newSeconds = parseTimeToSeconds(editTimeValue); // "01:30:45" -> 5445
+  
+  const response = await fetch(`/api/timers/${timerId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pausedTime: newSeconds }),
+  });
+};
+```
+
+### Session Persistence
+
+Comprehensive data persistence across browser sessions:
+
+- **Billing Rate Storage**: `localStorage.setItem('timer-billing-rate-{ticketId}', rateId)`
+- **Description Storage**: `localStorage.setItem('timer-description-{ticketId}', description)`
+- **Auto-Recovery**: Automatically restores settings when timers are restarted
+- **Data Cleanup**: Removes localStorage data when timers are deleted
+
+### Interactive Navigation
+
+Enhanced user experience with contextual navigation:
+
+- **Clickable Ticket Numbers**: Navigate to `/tickets?search={ticketNumber}` for instant filtering
+- **Hover Effects**: Visual feedback with `hover:bg-blue-50 hover:border-blue-300`
+- **Tooltips**: Helpful guidance with `title="Click to view ticket"`
+- **Deep Linking**: Direct navigation to relevant ticket views
+
+### Advanced Settings Panel
+
+Comprehensive timer management interface:
+
+```typescript
+// Settings panel features
+interface TimerSettings {
+  billingRate: {
+    selection: string;           // Selected billing rate ID
+    effectiveRate: number;       // Calculated rate with overrides
+    inheritance: boolean;        // Whether rate is inherited
+  };
+  description: {
+    value: string;              // Pre-entered description
+    autoSave: boolean;          // Automatic persistence
+    multiline: boolean;         // Supports line breaks
+  };
+  timeAdjustment: {
+    format: 'HH:MM:SS';        // Time input format
+    validation: boolean;        // Format and range validation
+    realTimeUpdate: boolean;    // Immediate UI updates
+  };
+  deletion: {
+    confirmation: boolean;      // Requires user confirmation
+    dataCleanup: boolean;       // Removes associated data
+  };
 }
 ```
 
@@ -106,18 +192,25 @@ function Layout() {
 
 ### TimerCard
 
-Individual timer display within the MultiTimerWidget:
+Individual timer display with comprehensive controls and advanced features:
 
 #### States
 
 1. **Minimized View**
-   - Shows timer duration, ticket title, and status badge
+   - Shows timer duration with dollar amount (when billing rate selected)
+   - Ticket title and clickable ticket number
+   - Color-coded status badge (green=running, yellow=paused)
    - Click to expand for full controls
 
 2. **Expanded View**
    - Full timer controls (pause/resume, stop & log)
-   - Larger time display
-   - Complete ticket information
+   - Side-by-side timer duration and dollar amount display
+   - Complete ticket information with navigation links
+   - Advanced settings panel with:
+     - Billing rate selection with account overrides
+     - Manual time adjustment with HH:MM:SS input
+     - Multiline description pre-entry
+     - Timer deletion with confirmation
 
 #### Props
 
@@ -314,14 +407,24 @@ interface Response extends Timer {}
 ```
 
 ### PUT /api/timers/[id]
-Updates timer state (pause, resume, or stop).
+Updates timer state (pause, resume, stop) or manually adjusts timer duration.
 
 ```typescript
 interface Request {
-  action: 'pause' | 'resume' | 'stop';
+  action?: 'pause' | 'resume' | 'stop';
+  pausedTime?: number; // Manual time adjustment in seconds
 }
 
 interface Response extends Timer {}
+```
+
+**Manual Time Adjustment Usage:**
+```typescript
+// Set timer to 1 hour 30 minutes (5400 seconds)
+PUT /api/timers/abc123
+{
+  "pausedTime": 5400
+}
 ```
 
 ### DELETE /api/timers/[id]
@@ -389,10 +492,37 @@ useEffect(() => {
 
 ### User Experience
 
-1. **Provide clear visual feedback** for timer states
+1. **Provide clear visual feedback** for timer states with color-coded badges
 2. **Auto-expand timer cards** when actions occur from external sources
-3. **Maintain timer state** across page navigation
+3. **Maintain timer state** across page navigation and browser sessions
 4. **Allow time editing** in stop-and-log modals for accuracy
+5. **Display running dollar amounts** alongside timer duration for billing transparency
+6. **Enable billing rate pre-selection** to ensure accurate cost calculations
+7. **Support manual time adjustments** for precise time tracking corrections
+8. **Provide description pre-entry** for better work documentation
+9. **Include clickable navigation** for quick ticket context switching
+
+### Enhanced Features Best Practices
+
+1. **Billing Rate Management**:
+   - Select billing rates before significant time accumulation
+   - Use account-specific rates for accurate override calculations
+   - Verify effective rates include account inheritance
+
+2. **Manual Time Adjustments**:
+   - Use HH:MM:SS format for precise entry
+   - Validate time ranges (minutes/seconds 0-59)
+   - Apply adjustments for breaks, meetings, and offline work
+
+3. **Session Persistence**:
+   - Timer settings automatically persist across sessions
+   - Billing rates and descriptions stored per ticket
+   - Data cleanup occurs when timers are deleted
+
+4. **Navigation Integration**:
+   - Use clickable ticket numbers for instant filtering
+   - Maintain context when switching between tickets
+   - Provide visual feedback for interactive elements
 
 ## Troubleshooting
 
@@ -401,6 +531,36 @@ useEffect(() => {
 **Timer not appearing in widget:**
 - Check that timer was created successfully (API response)
 - Verify `refreshAllActiveTimers()` is called after timer creation
+
+**Dollar amounts not displaying:**
+- Ensure billing rate is selected in timer settings
+- Check account has enabled billing rates configured
+- Verify account-specific overrides are properly set
+- Confirm effectiveRate field is populated in API response
+
+**Manual time adjustment not saving:**
+- Verify time format is exactly HH:MM:SS (e.g., "01:30:45")
+- Check user has timer update permissions
+- Ensure timer hasn't been deleted during edit session
+- Validate time ranges (minutes/seconds must be 0-59)
+
+**Settings not persisting across sessions:**
+- Check localStorage is enabled in browser
+- Verify ticket ID is valid and consistent
+- Clear browser data if localStorage corruption suspected
+- Ensure timer settings are associated with correct ticket ID
+
+**Billing rate calculations incorrect:**
+- Confirm using `/api/accounts/{id}/billing-rates` endpoint (not individual rate endpoint)
+- Verify effectiveRate field includes account-specific overrides
+- Check parent account inheritance in billing rate hierarchy
+- Ensure account membership permissions are correct
+
+**Clickable ticket navigation not working:**
+- Verify ticket number is properly encoded for URL parameters
+- Check user has permissions to view tickets page
+- Ensure search functionality works with ticket numbers
+- Confirm navigation path `/tickets?search={ticketNumber}` is correct
 
 **Stop button not showing modal:**
 - Ensure `pendingStopResult` system is working correctly

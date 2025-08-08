@@ -76,7 +76,7 @@ model Account {
   companyName  String?
   address      String?
   phone        String?
-  domains      String?
+  domains      String?              // Legacy field - now use DomainMapping for email routing
   customFields Json?
   createdAt    DateTime             @default(now())
   updatedAt    DateTime             @updatedAt
@@ -88,6 +88,7 @@ model Account {
   invoices     Invoice[]
   tickets      Ticket[]
   timeEntries  TimeEntry[]
+  domainMappings DomainMapping[]     // Email domains mapped to this account
 
   @@index([parentId])
   @@index([domains])
@@ -178,6 +179,7 @@ model Ticket {
   addons               TicketAddon[]      // Additional charges/items for this ticket
   timeEntries          TimeEntry[]        // Time logged against this ticket
   timers               Timer[]            // Active timers for this ticket
+  emailMessages        EmailMessage[]     // Email messages related to this ticket
 
   @@index([accountId])
   @@index([creatorId])
@@ -402,6 +404,14 @@ enum EmailTemplateType {
   PASSWORD_RESET
   ACCOUNT_WELCOME
   SYSTEM_NOTIFICATION
+  EMAIL_TICKET_CREATED
+  EMAIL_TICKET_REPLY
+  EMAIL_SECURITY_ALERT
+  EMAIL_QUARANTINE_NOTIFICATION
+  EMAIL_INTEGRATION_ERROR
+  EMAIL_INTEGRATION_SUCCESS
+  EMAIL_AUTO_RESPONSE
+  EMAIL_DELIVERY_CONFIRMATION
 }
 
 enum EmailTemplateStatus {
@@ -564,4 +574,266 @@ enum LogLevel {
   WARNING
   ERROR
   DEBUG
+}
+
+// Email Integration Models - Global Configuration
+model EmailIntegration {
+  id              String                @id @default(cuid())
+  name            String                // Human-readable name for the integration
+  provider        EmailProvider
+  providerConfig  Json                  // OAuth credentials, server settings, etc.
+  isActive        Boolean               @default(true)
+  lastSyncAt      DateTime?
+  syncInterval    Int                   @default(300) // Sync interval in seconds (5 minutes default)
+  processingRules Json?                 // Rules for ticket creation, assignment, etc.
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  
+  emailMessages   EmailMessage[]
+  
+  @@index([provider])
+  @@index([isActive])
+  @@index([name])
+}
+
+// Domain to Account mapping for email routing
+model DomainMapping {
+  id        String   @id @default(cuid())
+  domain    String   @unique              // Email domain (e.g., "company.com", "support.company.com")
+  accountId String                        // Target account for this domain
+  priority  Int      @default(0)          // Higher priority = more specific match (subdomain > domain)
+  isActive  Boolean  @default(true)       // Enable/disable domain mapping
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  
+  @@index([domain])
+  @@index([accountId])
+  @@index([priority])
+  @@index([isActive])
+  @@map("domain_mappings")
+}
+
+model EmailMessage {
+  id              String              @id @default(cuid())
+  integrationId   String
+  messageId       String              @unique // RFC Message-ID header
+  threadId        String?             // For threading conversations
+  inReplyTo       String?             // In-Reply-To header for threading
+  ticketId        String?
+  fromEmail       String
+  fromName        String?
+  toEmail         String
+  toName          String?
+  ccEmails        String?             // Comma-separated
+  bccEmails       String?             // Comma-separated
+  subject         String
+  textBody        String?
+  htmlBody        String?
+  headers         Json?               // Full email headers
+  status          EmailMessageStatus  @default(PENDING)
+  priority        Int                 @default(5)
+  securityScore   Float?              // Spam/security scoring (0-100)
+  processedAt     DateTime?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  
+  integration     EmailIntegration    @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  ticket          Ticket?             @relation(fields: [ticketId], references: [id])
+  attachments     EmailAttachment[]
+  thread          EmailMessage?       @relation("EmailThread", fields: [threadId], references: [messageId])
+  replies         EmailMessage[]      @relation("EmailThread")
+  
+  @@index([messageId])
+  @@index([threadId])
+  @@index([ticketId])
+  @@index([integrationId])
+  @@index([fromEmail])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model EmailAttachment {
+  id              String       @id @default(cuid())
+  emailId         String
+  filename        String
+  contentType     String
+  size            Int
+  contentId       String?      // For inline attachments
+  content         Bytes?       // For small attachments (< 1MB)
+  storagePath     String?      // File path for large attachments
+  securityStatus  AttachmentSecurityStatus @default(PENDING)
+  createdAt       DateTime     @default(now())
+  
+  email           EmailMessage @relation(fields: [emailId], references: [id], onDelete: Cascade)
+  
+  @@index([emailId])
+  @@index([securityStatus])
+}
+
+model EmailProcessingLog {
+  id              String       @id @default(cuid())
+  integrationId   String
+  messageId       String?      // Reference to EmailMessage if created
+  action          String       // SYNC, PARSE, CREATE_TICKET, SECURITY_SCAN, etc.
+  status          String       // SUCCESS, FAILED, SKIPPED
+  details         Json?        // Additional processing details
+  errorMessage    String?
+  processingTime  Int?         // Processing time in milliseconds
+  createdAt       DateTime     @default(now())
+  
+  @@index([integrationId])
+  @@index([messageId])
+  @@index([action])
+  @@index([status])
+  @@index([createdAt])
+}
+
+enum EmailProvider {
+  MICROSOFT_GRAPH
+  GMAIL
+  GENERIC_IMAP
+  GENERIC_POP3
+}
+
+enum EmailMessageStatus {
+  PENDING         // Just received, not processed
+  PROCESSING      // Currently being processed
+  PROCESSED       // Successfully processed
+  FAILED          // Processing failed
+  QUARANTINED     // Flagged as spam/malicious
+  IGNORED         // Marked to ignore (auto-replies, etc.)
+}
+
+enum AttachmentSecurityStatus {
+  PENDING         // Not scanned yet
+  SAFE            // Passed security scan
+  SUSPICIOUS      // Flagged as potentially dangerous
+  BLOCKED         // Blocked due to security policy
+}
+
+// Email Audit Models
+model EmailAuditLog {
+  id                String              @id @default(cuid())
+  eventType         EmailAuditEventType
+  entityType        String              // EmailIntegration, EmailMessage, EmailAttachment, etc.
+  entityId          String              // ID of the affected entity
+  userId            String?             // User who performed the action (null for system actions)
+  sessionId         String?             // Session ID for correlation
+  action            String              // Specific action performed
+  description       String?             // Human-readable description
+  previousValues    Json?               // Previous state before change (for updates)
+  newValues         Json?               // New state after change (for updates)
+  metadata          Json?               // Additional context and details
+  ipAddress         String?             // IP address of the request
+  userAgent         String?             // User agent string
+  accountId         String?             // Associated account ID
+  integrationId     String?             // Associated integration ID
+  messageId         String?             // Associated message ID
+  success           Boolean             @default(true)
+  errorMessage      String?             // Error details if action failed
+  processingTime    Int?                // Time taken to process (milliseconds)
+  timestamp         DateTime            @default(now())
+  
+  @@index([eventType])
+  @@index([entityType])
+  @@index([entityId])
+  @@index([userId])
+  @@index([accountId])
+  @@index([integrationId])
+  @@index([messageId])
+  @@index([timestamp])
+  @@index([success])
+  @@map("email_audit_logs")
+}
+
+model EmailAccessLog {
+  id              String   @id @default(cuid())
+  userId          String
+  action          String   // VIEW, DOWNLOAD, EXPORT, SEARCH, etc.
+  resourceType    String   // INTEGRATION, MESSAGE, ATTACHMENT, QUARANTINE, etc.
+  resourceId      String?  // ID of the accessed resource
+  accountId       String?  // Account context
+  integrationId   String?  // Integration context
+  searchQuery     String?  // For search actions
+  resultCount     Int?     // Number of results returned
+  filters         Json?    // Applied filters
+  ipAddress       String?
+  userAgent       String?
+  sessionId       String?
+  success         Boolean  @default(true)
+  errorMessage    String?
+  responseTime    Int?     // Response time in milliseconds
+  timestamp       DateTime @default(now())
+  
+  @@index([userId])
+  @@index([action])
+  @@index([resourceType])
+  @@index([resourceId])
+  @@index([accountId])
+  @@index([integrationId])
+  @@index([timestamp])
+  @@index([success])
+  @@map("email_access_logs")
+}
+
+model EmailSecurityLog {
+  id                String   @id @default(cuid())
+  integrationId     String?
+  messageId         String?
+  attachmentId      String?
+  threatType        String   // SPAM, PHISHING, MALWARE, SUSPICIOUS_ATTACHMENT, etc.
+  riskLevel         String   // LOW, MEDIUM, HIGH, CRITICAL
+  securityScore     Float?   // 0-100 security score
+  action            String   // ALLOW, QUARANTINE, BLOCK, DELETE
+  reason            String?  // Reason for the action
+  scanEngine        String?  // Which scanner detected the threat
+  scanResults       Json?    // Detailed scan results
+  falsePositive     Boolean  @default(false)
+  reviewedBy        String?  // User who reviewed the alert
+  reviewedAt        DateTime?
+  reviewNotes       String?
+  notificationsSent Json?    // Who was notified about this event
+  timestamp         DateTime @default(now())
+  
+  @@index([integrationId])
+  @@index([messageId])
+  @@index([attachmentId])
+  @@index([threatType])
+  @@index([riskLevel])
+  @@index([action])
+  @@index([timestamp])
+  @@index([falsePositive])
+  @@map("email_security_logs")
+}
+
+enum EmailAuditEventType {
+  INTEGRATION_CREATED
+  INTEGRATION_UPDATED
+  INTEGRATION_DELETED
+  INTEGRATION_ACTIVATED
+  INTEGRATION_DEACTIVATED
+  OAUTH_TOKEN_REFRESHED
+  OAUTH_TOKEN_EXPIRED
+  SYNC_STARTED
+  SYNC_COMPLETED
+  SYNC_FAILED
+  MESSAGE_RECEIVED
+  MESSAGE_PROCESSED
+  MESSAGE_QUARANTINED
+  MESSAGE_RELEASED
+  MESSAGE_DELETED
+  TICKET_CREATED
+  TICKET_UPDATED
+  ATTACHMENT_SCANNED
+  ATTACHMENT_BLOCKED
+  SECURITY_ALERT_GENERATED
+  CONFIGURATION_CHANGED
+  PERMISSION_GRANTED
+  PERMISSION_REVOKED
+  BULK_ACTION_PERFORMED
+  EXPORT_PERFORMED
+  BACKUP_CREATED
+  SYSTEM_ERROR
 }

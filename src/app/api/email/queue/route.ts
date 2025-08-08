@@ -1,160 +1,186 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth/next';
+import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
 import { permissionService } from '@/lib/permissions/PermissionService';
-import { EmailQueueStatus } from '@prisma/client';
-import { emailService } from '@/lib/email/EmailService';
+import { emailProcessingQueue, JobPriority } from '@/lib/email/EmailProcessingQueue';
 
+/**
+ * Get queue statistics and status
+ * GET /api/email/queue
+ */
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user) {
+    
+    if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Check email queue permission
-    const canViewEmailQueue = await permissionService.hasPermission({
+    // Check permissions
+    const canView = await permissionService.hasPermission({
       userId: session.user.id,
-      resource: "email",
-      action: "queue"
+      resource: 'email',
+      action: 'admin'
     });
 
-    if (!canViewEmailQueue) {
+    if (!canView) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '25');
-    const status = searchParams.get('status') as EmailQueueStatus | null;
-    const skip = (page - 1) * limit;
-
-    const where: any = {};
-    if (status) where.status = status;
-
-    const [emails, total, stats] = await Promise.all([
-      prisma.emailQueue.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { createdAt: 'desc' },
-        include: {
-          template: {
-            select: { id: true, name: true, type: true }
-          },
-          creator: {
-            select: { id: true, name: true, email: true }
-          }
-        }
-      }),
-      prisma.emailQueue.count({ where }),
-      emailService.getQueueStats()
-    ]);
+    // Get queue statistics
+    const stats = await emailProcessingQueue.getStats();
+    const config = emailProcessingQueue.getConfig();
 
     return NextResponse.json({
-      emails,
       stats,
-      pagination: {
-        page,
-        limit,
-        total,
-        pages: Math.ceil(total / limit)
-      }
+      config: {
+        maxConcurrentJobs: config.maxConcurrentJobs,
+        maxRetries: config.maxRetries,
+        maxQueueSize: config.maxQueueSize,
+        priorityProcessing: config.priorityProcessing
+      },
+      isRunning: true // You could add a method to check if queue is running
     });
+
   } catch (error) {
-    console.error('Error fetching email queue:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch email queue' },
-      { status: 500 }
-    );
+    console.error('Queue stats error:', error);
+    
+    return NextResponse.json({
+      error: 'Failed to get queue statistics',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
   }
 }
 
+/**
+ * Manually add job to queue or manage queue
+ * POST /api/email/queue
+ */
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user) {
+    
+    if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Check email send permission
-    const canSendEmail = await permissionService.hasPermission({
+    // Check permissions
+    const canAdmin = await permissionService.hasPermission({
       userId: session.user.id,
-      resource: "email",
-      action: "send"
+      resource: 'email',
+      action: 'admin'
     });
 
-    if (!canSendEmail) {
+    if (!canAdmin) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const body = await request.json();
-    const {
-      to,
-      toName,
-      cc,
-      bcc,
-      subject,
-      htmlBody,
-      textBody,
-      templateId,
-      variables,
-      priority,
-      scheduledAt
-    } = body;
+    const { action, jobType, data, priority } = body;
 
-    // Validate required fields
-    if (!to || !subject || !htmlBody) {
-      return NextResponse.json(
-        { error: 'Missing required fields: to, subject, htmlBody' },
-        { status: 400 }
-      );
-    }
+    switch (action) {
+      case 'start':
+        await emailProcessingQueue.start();
+        return NextResponse.json({ message: 'Queue started successfully' });
 
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(to)) {
-      return NextResponse.json(
-        { error: 'Invalid email format for recipient' },
-        { status: 400 }
-      );
-    }
+      case 'stop':
+        await emailProcessingQueue.stop();
+        return NextResponse.json({ message: 'Queue stopped successfully' });
 
-    // Queue the email
-    const emailId = await emailService.queueEmail({
-      to,
-      toName,
-      cc,
-      bcc,
-      subject,
-      htmlBody,
-      textBody,
-      templateId,
-      variables,
-      priority,
-      scheduledAt: scheduledAt ? new Date(scheduledAt) : undefined,
-      createdBy: session.user.id
-    });
-
-    const queuedEmail = await prisma.emailQueue.findUnique({
-      where: { id: emailId },
-      include: {
-        template: {
-          select: { id: true, name: true, type: true }
-        },
-        creator: {
-          select: { id: true, name: true, email: true }
+      case 'add_sync_job':
+        if (!data?.integrationId) {
+          return NextResponse.json({ error: 'Integration ID required' }, { status: 400 });
         }
-      }
+        
+        const jobId = await emailProcessingQueue.addSyncJob(
+          data.integrationId,
+          {
+            since: data.since ? new Date(data.since) : undefined,
+            maxMessages: data.maxMessages
+          },
+          priority || JobPriority.NORMAL
+        );
+        
+        return NextResponse.json({ 
+          message: 'Sync job added to queue',
+          jobId
+        });
+
+      default:
+        return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
+    }
+
+  } catch (error) {
+    console.error('Queue management error:', error);
+    
+    return NextResponse.json({
+      error: 'Queue management failed',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
+  }
+}
+
+/**
+ * Update queue configuration
+ * PATCH /api/email/queue
+ */
+export async function PATCH(request: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Check permissions
+    const canAdmin = await permissionService.hasPermission({
+      userId: session.user.id,
+      resource: 'email',
+      action: 'admin'
     });
 
-    return NextResponse.json({ email: queuedEmail }, { status: 201 });
+    if (!canAdmin) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const configUpdate = await request.json();
+    
+    // Validate configuration
+    const allowedFields = [
+      'maxConcurrentJobs',
+      'maxRetries',
+      'retryDelayBase',
+      'retryDelayMax',
+      'jobTimeout',
+      'maxQueueSize',
+      'priorityProcessing',
+      'deadLetterQueue',
+      'errorReportingEnabled',
+      'batchProcessing',
+      'batchSize'
+    ];
+
+    const validConfig: any = {};
+    for (const [key, value] of Object.entries(configUpdate)) {
+      if (allowedFields.includes(key)) {
+        validConfig[key] = value;
+      }
+    }
+
+    // Update queue configuration
+    emailProcessingQueue.updateConfig(validConfig);
+    
+    return NextResponse.json({
+      message: 'Queue configuration updated',
+      config: emailProcessingQueue.getConfig()
+    });
+
   } catch (error) {
-    console.error('Error queueing email:', error);
-    return NextResponse.json(
-      { error: 'Failed to queue email' },
-      { status: 500 }
-    );
+    console.error('Queue config update error:', error);
+    
+    return NextResponse.json({
+      error: 'Failed to update queue configuration',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
   }
 }

@@ -65,7 +65,7 @@ Technical system documentation:
 - **[`user-preferences.md`](./system/user-preferences.md)** - Database-backed user preferences system
 - **[`deployment.md`](./system/deployment.md)** - Production deployment guide with Docker, security, and monitoring
 - **[`setup-wizard.md`](./system/setup-wizard.md)** - Initial system setup and configuration process
-- **[`timer-system.md`](./system/timer-system.md)** - Cross-device timer synchronization architecture
+- **[`timer-system.md`](./system/timer-system.md)** - **Enhanced!** Advanced timer system with billing integration, manual adjustments, and cross-device synchronization
 - **[`toast-system.md`](./system/toast-system.md)** - Notification system implementation and usage patterns
 
 ### Development Documentation

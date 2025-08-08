@@ -42,6 +42,14 @@ interface UsePermissionsReturn {
   canEditImports: boolean;
   canExecuteImports: boolean;
   canDeleteImports: boolean;
+  canConfigureEmail: boolean;
+  canAccessEmail: boolean;
+  canAdminEmail: boolean;
+  canAdminEmailGlobal: boolean;
+  canProcessEmail: boolean;
+  canViewEmailLogs: boolean;
+  canSyncEmail: boolean;
+  canTestEmail: boolean;
 }
 
 /**
@@ -148,6 +156,14 @@ export function usePermissions(): UsePermissionsReturn {
   const canEditImports = hasPermission('imports', 'edit');
   const canExecuteImports = hasPermission('imports', 'execute');
   const canDeleteImports = hasPermission('imports', 'delete');
+  const canConfigureEmail = hasPermission('email', 'configure');
+  const canAccessEmail = hasPermission('email', 'access');
+  const canAdminEmail = hasPermission('email', 'admin');
+  const canAdminEmailGlobal = hasPermission('email', 'admin-global');
+  const canProcessEmail = hasPermission('email', 'process');
+  const canViewEmailLogs = hasPermission('email', 'view-logs');
+  const canSyncEmail = hasPermission('email', 'sync');
+  const canTestEmail = hasPermission('email', 'test');
 
   return {
     hasPermission,
@@ -187,7 +203,15 @@ export function usePermissions(): UsePermissionsReturn {
     canCreateImports,
     canEditImports,
     canExecuteImports,
-    canDeleteImports
+    canDeleteImports,
+    canConfigureEmail,
+    canAccessEmail,
+    canAdminEmail,
+    canAdminEmailGlobal,
+    canProcessEmail,
+    canViewEmailLogs,
+    canSyncEmail,
+    canTestEmail
   };
 }
 
